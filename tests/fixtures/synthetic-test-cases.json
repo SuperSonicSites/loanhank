@@ -1,0 +1,137 @@
+{
+  "currency": "USD",
+  "tolerance_cents": 3,
+  "cases": [
+    {
+      "id": "annual_fixed_4_remaining",
+      "loan": {
+        "principal_cents": 32784000,
+        "annual_rate_bps": 785,
+        "payment_frequency": "annual",
+        "remaining_periods": 4,
+        "rate_type": "fixed"
+      },
+      "expected": {
+        "periodic_payment_cents": 9865144,
+        "annualized_debt_service_cents": 9865144,
+        "projected_remaining_interest_cents": 6676575,
+        "projected_remaining_payments_cents": 39460575
+      },
+      "scenarios": [
+        {
+          "id": "same_term_685bps",
+          "input": {
+            "annual_rate_bps": 685,
+            "remaining_periods": 4,
+            "payment_frequency": "annual",
+            "fees_cents": 0,
+            "fee_treatment": "cash"
+          },
+          "expected": {
+            "periodic_payment_cents": 9646004,
+            "projected_interest_cents": 5800018,
+            "annual_cashflow_improvement_cents": 219139,
+            "interest_improvement_cents": 876557
+          }
+        },
+        {
+          "id": "ten_year_590bps",
+          "input": {
+            "annual_rate_bps": 590,
+            "remaining_periods": 10,
+            "payment_frequency": "annual",
+            "fees_cents": 0,
+            "fee_treatment": "cash"
+          },
+          "expected": {
+            "periodic_payment_cents": 4433216,
+            "projected_interest_cents": 11548158,
+            "annual_cashflow_relief_cents": 5431928,
+            "interest_increase_cents": 4871583
+          },
+          "copy_requirement": "Must say cash-flow relief with higher lifetime interest; must not call the annual difference savings."
+        }
+      ]
+    },
+    {
+      "id": "monthly_fixed_60",
+      "loan": {
+        "principal_cents": 26500000,
+        "annual_rate_bps": 650,
+        "payment_frequency": "monthly",
+        "remaining_periods": 60,
+        "rate_type": "fixed"
+      },
+      "expected": {
+        "periodic_payment_cents": 518503,
+        "annualized_debt_service_cents": 6222035,
+        "projected_remaining_interest_cents": 4610176,
+        "projected_remaining_payments_cents": 31110176
+      }
+    },
+    {
+      "id": "semiannual_fixed_12",
+      "loan": {
+        "principal_cents": 41000000,
+        "annual_rate_bps": 825,
+        "payment_frequency": "semiannual",
+        "remaining_periods": 12,
+        "rate_type": "fixed"
+      },
+      "expected": {
+        "periodic_payment_cents": 4400383,
+        "annualized_debt_service_cents": 8800765,
+        "projected_remaining_interest_cents": 11804592,
+        "projected_remaining_payments_cents": 52804592
+      }
+    },
+    {
+      "id": "interest_only_balloon",
+      "loan": {
+        "principal_cents": 50000000,
+        "annual_rate_bps": 700,
+        "payment_frequency": "annual",
+        "remaining_periods": 4,
+        "rate_type": "fixed",
+        "interest_only": true,
+        "balloon_cents": 50000000
+      },
+      "expected": {
+        "regular_interest_payment_cents": 3500000,
+        "projected_remaining_interest_cents": 14000000,
+        "balloon_cents": 50000000,
+        "final_year_cash_outflow_cents": 53500000
+      }
+    },
+    {
+      "id": "variable_rate_projection",
+      "loan": {
+        "principal_cents": 20000000,
+        "annual_rate_bps": 725,
+        "payment_frequency": "monthly",
+        "remaining_periods": 36,
+        "rate_type": "variable"
+      },
+      "expected_behavior": {
+        "projection_label": "CURRENT_RATE_HELD_CONSTANT",
+        "provenance": "ESTIMATED",
+        "must_not_claim_future_rate_known": true
+      }
+    },
+    {
+      "id": "line_of_credit_limited",
+      "loan": {
+        "principal_cents": 40000000,
+        "annual_rate_bps": 850,
+        "payment_frequency": "irregular",
+        "rate_type": "variable",
+        "loan_type": "line_of_credit"
+      },
+      "expected_behavior": {
+        "analysis_mode": "LIMITED",
+        "show_annualized_interest_at_current_balance": true,
+        "must_not_generate_amortization_schedule": true
+      }
+    }
+  ]
+}

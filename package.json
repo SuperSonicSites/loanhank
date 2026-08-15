@@ -1,0 +1,26 @@
+{
+  "name": "loanhank",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "test": "vitest run",
+    "test:eval": "vitest run tests/extraction-fixtures.test.ts",
+    "typecheck": "tsc --noEmit",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "decimal.js": "10.6.0",
+    "hono": "4.10.7",
+    "openai": "6.49.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260815.1",
+    "@types/node": "24.13.3",
+    "typescript": "5.9.3",
+    "vitest": "4.1.10",
+    "wrangler": "4.123.0"
+  }
+}

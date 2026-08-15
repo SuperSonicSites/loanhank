@@ -1,0 +1,50 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "loanhank-decoder",
+  "main": "src/api/worker.ts",
+  "compatibility_date": "2026-08-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // loanhank.com is still served by the ancestor Worker. This one stays on
+  // workers.dev until the decoder is the product; the cutover is a routes
+  // block added here in the same commit that retires the old Worker.
+  "workers_dev": true,
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "loanhank",
+      // Filled by `wrangler d1 create loanhank`. Deploy fails loudly until then.
+      "database_id": "PLACEHOLDER_RUN_WRANGLER_D1_CREATE",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  // Two buckets on purpose. QUOTES carries a lifecycle rule that deletes every
+  // object shortly after upload (spec.md: photo deleted after extraction), and
+  // that rule must never be anywhere near the backups, which are the company.
+  "r2_buckets": [
+    { "binding": "QUOTES", "bucket_name": "loanhank-quotes" },
+    { "binding": "BACKUPS", "bucket_name": "loanhank-backups" }
+  ],
+
+  // Retention reaper every 15 minutes; D1 export to R2 nightly at 07:00 UTC.
+  "triggers": {
+    "crons": ["*/15 * * * *", "0 7 * * *"]
+  },
+
+  "observability": { "enabled": true },
+
+  // Non-secret configuration only. Every credential is a Worker secret set with
+  // `wrangler secret put` — see .dev.vars.example for the full list.
+  "vars": {
+    "PRIMARY_EXTRACTION_MODEL": "gpt-5.6-terra",
+    "FALLBACK_EXTRACTION_MODEL": "gpt-5.6-sol",
+    "EXTRACTION_TIMEOUT_MS": "75000",
+    "OPENAI_DATA_CONTROLS_VERIFIED": "false",
+    "RAW_FILE_TTL_SECONDS": "3600",
+    // Turnstile site key is public by design; TURNSTILE_SECRET_KEY is a secret.
+    // Empty = upload protection off.
+    "TURNSTILE_SITE_KEY": ""
+  }
+}

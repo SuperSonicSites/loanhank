@@ -19,7 +19,7 @@ type Fixture = {
   scenarios?: Array<{ input: { annual_rate_bps: number; remaining_periods: number; payment_frequency: 'monthly' | 'quarterly' | 'semiannual' | 'annual'; fees_cents: number; fee_treatment: 'cash' | 'financed' }; expected: Record<string, number> }>;
 };
 
-const fixtureData = JSON.parse(await readFile(new URL('../sample_data/SYNTHETIC_TEST_CASES.json', import.meta.url), 'utf8')) as { tolerance_cents: number; cases: Fixture[] };
+const fixtureData = JSON.parse(await readFile(new URL('./fixtures/synthetic-test-cases.json', import.meta.url), 'utf8')) as { tolerance_cents: number; cases: Fixture[] };
 const close = (actual: number | undefined, expected: number) => expect(Math.abs((actual ?? 0) - expected)).toBeLessThanOrEqual(fixtureData.tolerance_cents);
 const loanOf = (fixture: Fixture): ConfirmedLoan => ({
   principalBalanceCents: fixture.loan.principal_cents,

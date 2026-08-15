@@ -1,0 +1,20 @@
+# Copy to .dev.vars for local `pnpm dev`. In production every one of these is a
+# Worker secret set with `wrangler secret put NAME`. Never commit real values.
+
+# Vision extraction provider (spec.md Decision 5). Set a hard monthly spend cap
+# on the provider account itself, not only in code.
+OPENAI_API_KEY=
+
+# Cloudflare Turnstile, invisible mode on submit (spec.md Decision 7).
+# The paired TURNSTILE_SITE_KEY is public and lives in wrangler.jsonc vars.
+TURNSTILE_SECRET_KEY=
+
+# Transactional email for the teardown PDF (spec.md Decision 6 and 10).
+RESEND_API_KEY=
+
+# Meta Conversions API, server-side only, no pixel (spec.md Decision 8).
+META_CAPI_ACCESS_TOKEN=
+META_PIXEL_ID=
+
+# Salt for hashing IPs in the per-extract rate limiter. Any long random string.
+RATE_LIMIT_SALT=
