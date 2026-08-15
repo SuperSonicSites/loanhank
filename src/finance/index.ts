@@ -1173,3 +1173,114 @@ function monthsUntil(date: string, asOfDate: string): number {
     + target.getUTCMonth()
     - asOf.getUTCMonth();
 }
+
+// ---------------------------------------------------------------------------
+// QUICK PATH — spec.md 2.3
+//
+// Four fields off the dealer's paper plus a frequency toggle, and one number
+// back: promo_price_rate, the annual cost of giving up the cash discount. No
+// fees, no trade, no down payment, because the farmer has not been asked for
+// them yet. Those absences are returned as printed assumptions, never as
+// silent zeroes, and this path never earns a stamp.
+//
+// The rate is the IRR of the difference between the two cash flows: paying
+// (quoted price - cash discount) today, against paying the quoted payment for
+// the quoted number of periods. Annualized nominally at the payment frequency,
+// which is the US convention and the engine default. A Canadian quote needs
+// its compounding convention confirmed and therefore belongs on the verdict
+// path, not here.
+// ---------------------------------------------------------------------------
+
+/** Widest annual rate the solver will report, in bps. Outside it, abstain. */
+const PROMO_RATE_MIN_BPS = -5_000;
+const PROMO_RATE_MAX_BPS = 30_000;
+
+export const QUICK_PATH_ASSUMPTION =
+  'Assumes no trade, no down payment, no fees. Confirm the full deal to get the verdict.';
+
+export interface QuickPathQuote {
+  quotedPriceCents: number;
+  cashDiscountCents: number;
+  paymentAmountCents: number;
+  paymentCount: number;
+  paymentFrequency: RegularFrequency;
+}
+
+export type PromoPriceRateUnavailableReason =
+  | 'nonpositive_cash_price'
+  | 'nonpositive_payment'
+  | 'nonpositive_payment_count'
+  | 'rate_outside_supported_range';
+
+export interface PromoPriceRate {
+  /** Null means we could not solve it. Null is an answer; a guess is not. */
+  promoPriceRateBps: number | null;
+  cashPriceCents: number;
+  totalOfPaymentsCents: number;
+  /** What financing costs over paying cash. Negative means financing is cheaper. */
+  costVersusCashCents: number;
+  assumptions: string[];
+  unavailableReason: PromoPriceRateUnavailableReason | null;
+}
+
+/** Present value of a level annuity of `payment` for `periods` at periodic `rate`. */
+function annuityPresentValue(payment: Decimal, rate: Decimal, periods: number): Decimal {
+  if (rate.isZero()) return payment.mul(periods);
+  return payment.mul(new Decimal(1).minus(new Decimal(1).plus(rate).pow(-periods))).div(rate);
+}
+
+export function promoPriceRate(quote: QuickPathQuote): PromoPriceRate {
+  const cashPriceCents = quote.quotedPriceCents - quote.cashDiscountCents;
+  const totalOfPaymentsCents = quote.paymentAmountCents * quote.paymentCount;
+  const base = {
+    cashPriceCents,
+    totalOfPaymentsCents,
+    costVersusCashCents: totalOfPaymentsCents - cashPriceCents,
+    assumptions: [QUICK_PATH_ASSUMPTION],
+  };
+
+  if (quote.paymentCount <= 0) {
+    return { ...base, promoPriceRateBps: null, unavailableReason: 'nonpositive_payment_count' };
+  }
+  if (quote.paymentAmountCents <= 0) {
+    return { ...base, promoPriceRateBps: null, unavailableReason: 'nonpositive_payment' };
+  }
+  if (cashPriceCents <= 0) {
+    return { ...base, promoPriceRateBps: null, unavailableReason: 'nonpositive_cash_price' };
+  }
+
+  const periods = quote.paymentCount;
+  const payment = new Decimal(quote.paymentAmountCents);
+  const target = new Decimal(cashPriceCents);
+  const perYear = periodsPerYear[quote.paymentFrequency];
+  const periodicAt = (annualBps: number) => new Decimal(annualBps).div(10_000).div(perYear);
+
+  // Present value falls as the rate rises, so the bracket is monotonic and a
+  // bisection is exact enough. If the answer is not inside the bracket the
+  // quote is not something we can price, and we say so.
+  const pvAtMin = annuityPresentValue(payment, periodicAt(PROMO_RATE_MIN_BPS), periods);
+  const pvAtMax = annuityPresentValue(payment, periodicAt(PROMO_RATE_MAX_BPS), periods);
+  if (target.greaterThan(pvAtMin) || target.lessThan(pvAtMax)) {
+    return { ...base, promoPriceRateBps: null, unavailableReason: 'rate_outside_supported_range' };
+  }
+
+  let low = new Decimal(PROMO_RATE_MIN_BPS);
+  let high = new Decimal(PROMO_RATE_MAX_BPS);
+  for (let step = 0; step < 200; step += 1) {
+    const middle = low.plus(high).div(2);
+    if (annuityPresentValue(payment, periodicAt(middle.toNumber()), periods).greaterThan(target)) {
+      low = middle;
+    } else {
+      high = middle;
+    }
+  }
+
+  // Normalize negative zero. A payment stream that lands exactly on the cash
+  // price converges from below, and "-0%" is not a rate anybody should read.
+  const solvedBps = low.plus(high).div(2).toDecimalPlaces(0, Decimal.ROUND_HALF_UP).toNumber();
+  return {
+    ...base,
+    promoPriceRateBps: solvedBps === 0 ? 0 : solvedBps,
+    unavailableReason: null,
+  };
+}
