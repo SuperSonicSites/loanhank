@@ -8,10 +8,23 @@ import type {
   ScheduledController,
 } from '@cloudflare/workers-types';
 import { Hono } from 'hono';
-import { formatCurrency, formatRate, promoPriceRate } from '../finance/index.js';
+import {
+  costAgainstBenchmark, decideVerdict, decodeLedger, formatCurrency, formatRate,
+  matchBenchmark, promoPriceRate, VERDICT_BUFFER_VERSION,
+  type BenchmarkRow, type DealLedger, type LedgerFee,
+} from '../finance/index.js';
 import { hashAccessKey } from './security.js';
-import { quickPathFormSchema } from '../shared/schema.js';
-import { renderForm, renderTicket, renderUnpriceable, type FormValues } from '../web/page.js';
+import {
+  centsToInput, confirmableField, ledgerFormSchema, quickPathFormSchema,
+  type ConfirmableField, type QuoteExtraction,
+} from '../shared/schema.js';
+import {
+  renderConfirm, renderForm, renderTicket, renderUnpriceable, renderVerdictTicket,
+  type ConfirmRow, type FormValues,
+} from '../web/page.js';
+import { assertUploadAllowed, PublicApiError } from './security.js';
+import { OpenAIQuoteExtractor } from './extractor.js';
+import { getConfig } from './env.js';
 
 // Must match the crons in wrangler.jsonc. An unrecognized cron logs and does
 // nothing rather than falling into the wrong branch.
@@ -19,6 +32,7 @@ const REAPER_CRON = '*/15 * * * *';
 const BACKUP_CRON = '0 7 * * *';
 
 export interface Env {
+  [key: string]: unknown;
   DB: D1Database;
   QUOTES: R2Bucket;
   BACKUPS: R2Bucket;
@@ -35,7 +49,10 @@ async function withinRateLimit(c: {
   req: { header: (name: string) => string | undefined };
 }, route: string): Promise<boolean> {
   const ip = c.req.header('cf-connecting-ip') ?? 'unknown';
-  const { success } = await c.env.DECODE_LIMIT.limit({ key: `${route}:${hashAccessKey(ip)}` });
+  // Salted, because an unsalted hash of an IPv4 address is not an anonymised
+  // IP address: the whole space is small enough to enumerate in minutes.
+  const salt = typeof c.env.RATE_LIMIT_SALT === 'string' ? c.env.RATE_LIMIT_SALT : '';
+  const { success } = await c.env.DECODE_LIMIT.limit({ key: `${route}:${hashAccessKey(`${salt}:${ip}`)}` });
   return success;
 }
 
@@ -67,6 +84,77 @@ async function recordEvent(
     .run();
 }
 
+
+/**
+ * Canonical server-side Turnstile check. Browser to us to siteverify, never
+ * browser to siteverify. Fails closed on every path: a network error, a
+ * non-2xx, a wrong action, or a hostname we did not expect all refuse.
+ *
+ * This gates the photo path only. The typed form must keep working with no
+ * JavaScript at all (design.md section 9), and a challenge widget is
+ * JavaScript, so it is not allowed anywhere near it.
+ */
+async function turnstilePassed(
+  env: Env,
+  token: string,
+  clientIp: string,
+  expectedHostname: string,
+): Promise<boolean> {
+  const secret = typeof env.TURNSTILE_SECRET_KEY === 'string' ? env.TURNSTILE_SECRET_KEY : '';
+  if (secret === '' || token === '' || token.length > 2_048) return false;
+
+  let result: { success?: boolean; action?: string; hostname?: string };
+  try {
+    const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      signal: AbortSignal.timeout(10_000),
+      body: new URLSearchParams({ secret, response: token, remoteip: clientIp }),
+    });
+    if (!response.ok) return false;
+    result = await response.json() as typeof result;
+  } catch {
+    return false;
+  }
+  return result.success === true
+    && result.action === 'extract'
+    && result.hostname === expectedHostname;
+}
+
+/** The confirm screen, built from what the model could and could not read. */
+function confirmRows(extraction: QuoteExtraction): ConfirmRow[] {
+  const money = (name: string, label: string, source: { value_cents: number | null; confidence: number }, hint?: string): ConfirmRow => ({
+    ...(confirmableField(name, label, { value: source.value_cents, confidence: source.confidence }, centsToInput) as ConfirmableField),
+    ...(hint ? { hint } : {}),
+  });
+  const plain = (name: string, label: string, source: { value: number | null; confidence: number }, hint?: string): ConfirmRow => ({
+    ...(confirmableField(name, label, source) as ConfirmableField),
+    ...(hint ? { hint } : {}),
+  });
+
+  return [
+    money('quotedPrice', 'Quoted price', extraction.quoted_price),
+    money('cashDiscount', 'Cash discount', extraction.cash_discount, 'What they knock off if you pay cash instead of financing. Leave empty if there is none.'),
+    money('payment', 'Payment', extraction.payment_amount),
+    plain('paymentCount', 'How many payments', extraction.payment_count),
+    plain('statedRate', 'Rate printed on the quote', { value: extraction.stated_rate_bps.value === null ? null : extraction.stated_rate_bps.value / 100, confidence: extraction.stated_rate_bps.confidence }, 'As a percentage. A 0% promo is 0.'),
+    money('downPayment', 'Due at signing', extraction.down_payment),
+    money('tradeAllowance', 'Trade allowance', extraction.trade_allowance),
+    money('tradePayoff', 'Still owed on the trade', extraction.trade_payoff),
+    money('deliverySetup', 'Delivery and setup', extraction.delivery_setup),
+    money('financeOnlyFee', 'Fees you only pay if you finance', { value_cents: null, confidence: 0 }, 'Doc, origination, or required insurance. Leave empty if there are none.'),
+  ];
+}
+
+const WARNING_COPY: Record<string, string> = {
+  NOT_AN_EQUIPMENT_QUOTE: 'This does not look like an equipment quote. Check the numbers carefully before you run it.',
+  IMAGE_TOO_BLURRY: 'Too blurry to read. Try again in better light.',
+  MULTIPLE_QUOTES_DETECTED: 'There looks to be more than one quote on this page. We read one of them.',
+  HANDWRITING_UNREADABLE: 'Some of this is handwritten and we could not read it.',
+  PAGE_APPEARS_CROPPED: 'Part of the page is cut off. Check for anything missing.',
+  SENSITIVE_IDENTIFIER_REDACTED: 'We dropped an account or serial number. We never keep those.',
+};
+
 const app = new Hono<{ Bindings: Env }>();
 
 app.get('/', async (c) => {
@@ -78,7 +166,8 @@ app.get('/', async (c) => {
     // stands between a farmer on rural LTE and the form.
     c.executionCtx.waitUntil(recordEvent(c.env, 'page_view'));
   }
-  return c.html(renderForm());
+  const siteKey = typeof c.env.TURNSTILE_SITE_KEY === 'string' ? c.env.TURNSTILE_SITE_KEY : '';
+  return c.html(renderForm(undefined, [], { turnstileSiteKey: siteKey }));
 });
 
 app.post('/decode', async (c) => {
@@ -90,6 +179,9 @@ app.post('/decode', async (c) => {
   }
 
   const body = await c.req.parseBody();
+  // One route, two paths. The confirm screen posts the whole ledger and can
+  // earn a stamp; the landing form posts four fields and never can.
+  if (body.ledger === '1') return decodeFullLedger(c as never, body);
   const raw: FormValues = {
     quotedPrice: String(body.quotedPrice ?? ''),
     cashDiscount: String(body.cashDiscount ?? ''),
@@ -184,6 +276,292 @@ app.post('/decode', async (c) => {
     }),
   );
 });
+
+
+app.post('/extract', async (c) => {
+  if (!(await withinRateLimit(c, 'extract'))) {
+    return c.html(renderUnpriceable('That is a lot of photos in one minute. Give it a minute and try again.'), 429);
+  }
+
+  const siteKey = typeof c.env.TURNSTILE_SITE_KEY === 'string' ? c.env.TURNSTILE_SITE_KEY : '';
+  const apiKey = typeof c.env.OPENAI_API_KEY === 'string' ? c.env.OPENAI_API_KEY : '';
+  if (siteKey === '' || apiKey === '') {
+    // Fail closed and say so plainly rather than accepting a photo we have no
+    // way to read or protect.
+    return c.html(
+      renderUnpriceable('Reading photos is not switched on yet. Type the four numbers off your paper instead.'),
+      503,
+    );
+  }
+
+  const body = await c.req.parseBody();
+  const token = String(body['cf-turnstile-response'] ?? '');
+  const passed = await turnstilePassed(
+    c.env,
+    token,
+    c.req.header('cf-connecting-ip') ?? '',
+    new URL(c.req.url).hostname,
+  );
+  if (!passed) {
+    c.executionCtx.waitUntil(recordEvent(c.env, 'extract_rejected', null, { reason: 'turnstile' }));
+    return c.html(renderUnpriceable('We could not confirm that came from a person. Reload the page and try once more.'), 403);
+  }
+
+  const file = body.photo;
+  if (!(file instanceof File)) {
+    return c.html(renderUnpriceable('Pick a photo of the quote first.'), 422);
+  }
+
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  try {
+    assertUploadAllowed(file.type, bytes.byteLength);
+  } catch (error) {
+    const message = error instanceof PublicApiError
+      ? 'That file is either too large or not a photo we can read. Send a JPG, a PNG, or a PDF under 20 MB.'
+      : 'We could not read that file.';
+    c.executionCtx.waitUntil(recordEvent(c.env, 'extract_rejected', null, { reason: 'upload_guard' }));
+    return c.html(renderUnpriceable(message), 422);
+  }
+
+  // The photo is never written down. It goes from this request straight to the
+  // reader as bytes and is gone when the answer comes back. Nothing to delete,
+  // nothing to leak, nothing for a retention sweep to miss.
+  let extraction;
+  try {
+    const dataUrl = `data:${file.type};base64,${Buffer.from(bytes).toString('base64')}`;
+    extraction = await new OpenAIQuoteExtractor(getConfig(c.env)).extractQuote(dataUrl, file.type);
+  } catch {
+    c.executionCtx.waitUntil(recordEvent(c.env, 'extract_failed'));
+    return c.html(
+      renderUnpriceable('We could not read that one. Try again in better light, or type the numbers off your paper.'),
+      502,
+    );
+  }
+
+  c.executionCtx.waitUntil(recordEvent(c.env, 'extract', null, {
+    document_type: extraction.document_type,
+    warnings: extraction.warnings,
+  }));
+
+  return c.html(renderConfirm({
+    rows: confirmRows(extraction),
+    frequency: extraction.payment_frequency.value ?? 'monthly',
+    warnings: extraction.warnings.map((code) => WARNING_COPY[code] ?? code),
+  }));
+});
+
+/** The verdict path: a complete ledger, a matched reference, and a stamp. */
+async function decodeFullLedger(c: {
+  env: Env;
+  req: { parseBody: () => Promise<Record<string, unknown>> };
+  executionCtx: { waitUntil: (promise: Promise<unknown>) => void };
+  html: (body: string, status?: 200 | 422) => Response;
+}, body: Record<string, unknown>): Promise<Response> {
+  const parsed = ledgerFormSchema.safeParse({
+    quotedPrice: String(body.quotedPrice ?? ''),
+    cashDiscount: String(body.cashDiscount ?? ''),
+    payment: String(body.payment ?? ''),
+    paymentFrequency: String(body.paymentFrequency ?? 'monthly'),
+    paymentCount: String(body.paymentCount ?? ''),
+    statedRate: String(body.statedRate ?? ''),
+    downPayment: String(body.downPayment ?? ''),
+    tradeAllowance: String(body.tradeAllowance ?? ''),
+    tradePayoff: String(body.tradePayoff ?? ''),
+    deliverySetup: String(body.deliverySetup ?? ''),
+    taxCash: String(body.taxCash ?? ''),
+    taxFinance: String(body.taxFinance ?? ''),
+    financeOnlyFee: String(body.financeOnlyFee ?? ''),
+    financeOnlyFeeRolled: body.financeOnlyFeeRolled === undefined ? undefined : 'on',
+    unexplainedAmount: body.unexplainedAmount === undefined ? undefined : 'on',
+  });
+
+  if (!parsed.success) {
+    const problems = parsed.error.issues.map((issue) => issue.message);
+    c.executionCtx.waitUntil(recordEvent(c.env, 'decode_rejected', null, { problems, path: 'ledger' }));
+    return c.html(renderUnpriceable(problems.join(' ')), 422);
+  }
+
+  const form = parsed.data;
+  const fees: LedgerFee[] = [];
+  if (form.financeOnlyFee > 0) {
+    fees.push({
+      name: 'Finance-only fee',
+      amountCents: form.financeOnlyFee,
+      required: true,
+      financeOnly: true,
+      rolledIntoFinance: form.financeOnlyFeeRolled,
+      status: 'confirmed',
+    });
+  }
+  if (form.unexplainedAmount) {
+    // Never called a junk fee. It is an amount nobody has explained yet, and
+    // it holds the verdict until somebody does.
+    fees.push({
+      name: 'Unexplained amount',
+      amountCents: 0,
+      required: true,
+      financeOnly: true,
+      rolledIntoFinance: false,
+      status: 'unknown',
+    });
+  }
+
+  const ledger: DealLedger = {
+    quotedPriceCents: form.quotedPrice,
+    cashDiscountCents: form.cashDiscount,
+    downPaymentCents: form.downPayment,
+    tradeAllowanceCents: form.tradeAllowance,
+    tradePayoffCents: form.tradePayoff,
+    deliverySetupCents: form.deliverySetup,
+    taxCashCents: form.taxCash,
+    taxFinanceCents: form.taxFinance,
+    paymentAmountCents: form.payment,
+    paymentCount: form.paymentCount,
+    paymentFrequency: form.paymentFrequency,
+    statedRateBps: form.statedRate,
+    fees,
+  };
+
+  const decoded = decodeLedger(ledger);
+  if (decoded.realRateAllInBps === null && decoded.unavailableReason !== null) {
+    c.executionCtx.waitUntil(recordEvent(c.env, 'decode_unpriceable', null, { reason: decoded.unavailableReason }));
+    return c.html(
+      renderUnpriceable('Those numbers do not add up to a deal we can price. Check the payment and how many there are against your paper.'),
+      422,
+    );
+  }
+
+  // Tier-1 rows only, most recent card first. The engine picks the band.
+  const rows = await c.env.DB.prepare(
+    `SELECT id, source, source_url, as_of_date, amount_band, amount_min_cents, amount_max_cents,
+            term_band, term_min_months, term_max_months, rate_bps, rate_kind, tier
+       FROM benchmarks
+      WHERE tier = 1 AND as_of_date = (SELECT MAX(as_of_date) FROM benchmarks WHERE tier = 1)`,
+  ).all<Record<string, string | number | null>>();
+
+  const benchmarks: BenchmarkRow[] = rows.results.map((row) => ({
+    id: String(row.id),
+    source: String(row.source),
+    sourceUrl: String(row.source_url),
+    asOfDate: String(row.as_of_date),
+    amountBand: String(row.amount_band),
+    amountMinCents: Number(row.amount_min_cents),
+    amountMaxCents: row.amount_max_cents === null ? null : Number(row.amount_max_cents),
+    termBand: String(row.term_band),
+    termMinMonths: Number(row.term_min_months),
+    termMaxMonths: Number(row.term_max_months),
+    rateBps: Number(row.rate_bps),
+    rateKind: String(row.rate_kind) === 'variable' ? 'variable' : 'fixed',
+    tier: Number(row.tier),
+  }));
+
+  const termMonths = Math.round(form.paymentCount * (12 / PERIODS_PER_YEAR[form.paymentFrequency]));
+  const benchmark = matchBenchmark(benchmarks, {
+    amountCents: decoded.totals.amountFinancedCents,
+    termMonths,
+    rateKind: 'fixed',
+  });
+  const verdict = decideVerdict({
+    realRateAllInBps: decoded.realRateAllInBps,
+    reconciled: decoded.reconciliation.reconciled,
+    benchmark,
+    hasUnknownFee: decoded.totals.hasUnknownFee,
+  });
+
+  const decodeId = crypto.randomUUID();
+  const ts = new Date().toISOString();
+  await c.env.DB.prepare(
+    `INSERT INTO decodes (
+       id, ts, quarter,
+       finance_price_cents, cash_discount_cents, cash_price_cents,
+       down_payment_cents, trade_allowance_cents, trade_payoff_cents,
+       delivery_setup_cents, tax_cash_cents, tax_finance_cents,
+       amount_financed_cents, payment_amount_cents, payment_frequency, payment_count,
+       term_months, stated_rate_bps, fees_json,
+       real_rate_all_in_bps, reconciled, assumptions_json, verdict, verdict_ref_id,
+       benchmark_at_ts, delta_vs_benchmark_bps
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?)`,
+  ).bind(
+    decodeId, ts, quarterOf(ts),
+    form.quotedPrice, form.cashDiscount, decoded.totals.cashOutlayCents,
+    form.downPayment, form.tradeAllowance, form.tradePayoff,
+    form.deliverySetup, form.taxCash, form.taxFinance,
+    decoded.totals.amountFinancedCents, form.payment, form.paymentFrequency, form.paymentCount,
+    termMonths, form.statedRate, JSON.stringify(fees),
+    decoded.realRateAllInBps, decoded.reconciliation.reconciled ? 1 : 0,
+    verdict.verdict, verdict.verdict === 'none' ? null : (benchmark as BenchmarkRow).id,
+    benchmark === null ? null : benchmark.asOfDate,
+    verdict.deltaBps,
+  ).run();
+
+  await recordEvent(c.env, 'decode', decodeId, {
+    path: 'ledger',
+    real_rate_all_in_bps: decoded.realRateAllInBps,
+    verdict: verdict.verdict,
+  });
+
+  const comparison = benchmark === null ? null : costAgainstBenchmark({
+    amountFinancedCents: decoded.totals.amountFinancedCents,
+    paymentAmountCents: form.payment,
+    paymentCount: form.paymentCount,
+    paymentFrequency: form.paymentFrequency,
+    benchmarkRateBps: benchmark.rateBps,
+  });
+
+  const rateText = decoded.realRateAllInBps === null ? 'no rate yet' : formatRate(decoded.realRateAllInBps);
+  const verdictLine = verdict.verdict === 'checks_out'
+    ? "This deal checks out. We'd take it."
+    : verdict.verdict === 'look_closer' && benchmark !== null && comparison !== null
+      ? `Look closer. This deal prices at ${rateText}. The comparable published rate is `
+        + `${formatRate(benchmark.rateBps)}. The difference costs you `
+        + `${formatCurrency(comparison.differenceCents)} over the term.`
+      : 'We can show you the rate. We are not rating this deal yet.';
+
+  return c.html(renderVerdictTicket({
+    rate: rateText,
+    verdict: verdict.verdict,
+    verdictLine,
+    reference: benchmark === null
+      ? null
+      : `Comparable published equipment rate: ${formatRate(benchmark.rateBps)}, subject to approval. `
+        + `${benchmark.source}, ${benchmark.amountBand}, ${benchmark.termBand}, fixed, as of ${benchmark.asOfDate}.`,
+    footnote: benchmark === null
+      ? null
+      : `This is not the legal APR. It is the annual cost of this deal against its cash alternative, `
+        + `using the costs we can verify. Buffer policy ${VERDICT_BUFFER_VERSION}.`,
+    assumption: null,
+    missing: missingForVerdict(verdict.noVerdictReason, decoded.reconciliation.differenceCents),
+    lines: [
+      { label: 'Quoted price', amount: formatCurrency(form.quotedPrice) },
+      { label: 'Cash discount', amount: `− ${formatCurrency(form.cashDiscount)}` },
+      { label: 'Trade, net of payoff', amount: formatCurrency(decoded.totals.netTradeCents) },
+      { label: 'Due at signing', amount: formatCurrency(form.downPayment) },
+      { label: 'Cash price today', amount: formatCurrency(decoded.totals.cashOutlayCents) },
+      { label: 'Amount financed', amount: formatCurrency(decoded.totals.amountFinancedCents) },
+      { label: 'Total of payments', amount: formatCurrency(decoded.totalOfPaymentsCents) },
+      { label: 'What financing costs', amount: formatCurrency(decoded.costVersusCashCents) },
+    ],
+  }));
+}
+
+const PERIODS_PER_YEAR = { monthly: 12, quarterly: 4, semiannual: 2, annual: 1 } as const;
+
+function missingForVerdict(reason: string | null, differenceCents: number): string[] {
+  if (reason === null) return [];
+  if (reason === 'unknown_fee') {
+    return ['An amount on this quote that nobody has explained yet. Find out what it is and run it again.'];
+  }
+  if (reason === 'unreconciled_ledger') {
+    return [
+      `The quoted total and the scheduled payments differ by ${formatCurrency(differenceCents)} a payment. `
+      + 'A trade, down payment, tax, fee, or add-on may be missing. Confirm it before we rate this deal.',
+    ];
+  }
+  if (reason === 'no_matched_benchmark') {
+    return ['No published equipment rate matches this size and term, so we have nothing honest to rate it against.'];
+  }
+  return MISSING_FOR_VERDICT;
+}
 
 export default {
   fetch: app.fetch,

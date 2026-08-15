@@ -45,6 +45,8 @@ const styles = `
   --ink-soft: #57534A;
   --rule: #D8D4C8;
   --denim: #2F5D8A;
+  --field: #3F7A34;
+  --field-fill: #E4EDDC;
   --amber-ink: #8A5A00;
   --amber-fill: #F2E4C2;
 }
@@ -84,7 +86,12 @@ input[type="text"], select {
   font-family: 'Courier Prime', 'Courier New', monospace;
   font-size: 18px;
 }
-input[type="text"]:focus, select:focus { border: 2px solid var(--denim); outline: none; }
+input[type="file"] {
+  width: 100%; min-height: 56px; padding: 12px;
+  background: #FFF; border: 1px solid var(--rule); border-radius: 2px;
+  font-family: inherit; font-size: 16px;
+}
+input[type="text"]:focus, select:focus, input[type="file"]:focus { border: 2px solid var(--denim); outline: none; }
 
 .field { margin: 0 0 16px; }
 
@@ -141,11 +148,53 @@ button {
 footer { margin: 48px 0 0; padding-top: 16px; border-top: 1px solid var(--rule); }
 footer p { font-size: 14px; color: var(--ink-soft); margin: 0; }
 
+
+/* Confirm screen field flags. A field we could not read gets an amber label
+   and an EMPTY box. Never a guess sitting in a filled box. */
+.flag-read { font-size: 14px; color: var(--ink-soft); margin: 0 0 4px; }
+.flag-unreadable {
+  font-size: 14px; color: var(--amber-ink); background: var(--amber-fill);
+  display: inline-block; padding: 2px 8px; margin: 0 0 4px;
+}
+
+.field.checkbox label { font-weight: 400; font-size: 16px; }
+.field.checkbox input { width: 24px; height: 24px; margin-right: 8px; vertical-align: middle; }
+
+/* The stamp. Rubber-stamp register: mono caps, a hair of rotation, a plain
+   box. A pristine vector distressed edge is fake antique, so there is none. */
+.stamp {
+  display: inline-block;
+  font-family: 'Courier Prime', 'Courier New', monospace;
+  font-weight: 700; font-size: 20px; letter-spacing: 0.12em;
+  padding: 6px 16px; margin: 12px 0;
+  transform: rotate(-1.75deg);
+}
+.stamp-good { color: var(--field); border: 3px solid var(--field); background: var(--field-fill); }
+.stamp-amber { color: var(--amber-ink); border: 3px solid var(--amber-ink); background: var(--amber-fill); }
+
+.verdict-line { font-family: 'Libre Franklin', sans-serif; font-weight: 600; font-size: 24px; margin: 8px 0 0; }
+.reference { font-size: 16px; margin: 0; }
+.footnote { font-size: 14px; color: var(--ink-soft); }
+
+.secondary {
+  background: var(--paper); color: var(--denim); border: 2px solid var(--denim);
+  margin-top: 12px;
+}
+
+.divider { text-align: center; color: var(--ink-soft); font-size: 16px; margin: 24px 0 8px; }
+
 a { color: var(--denim); }
 
 @media print {
-  body { background: #FFF; color: #000; }
-  .no-print { display: none; }
+  body { background: #FFF; color: #000; font-size: 12pt; }
+  main { max-width: none; padding: 0; }
+  .no-print, form, footer { display: none; }
+  .ticket-rule, .wordmark-rule { border-top-color: #000; }
+  .ticket-rule-double { border-top-color: #000; }
+  .ticket td { border-bottom-color: #999; }
+  /* The stamp prints. It is the thing the farmer carries back to the desk. */
+  .stamp { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  a[href]::after { content: ""; }
 }
 `;
 
@@ -215,8 +264,17 @@ function frequencyOptions(selected: string): string {
     .join('\n        ');
 }
 
+export interface PhotoPath {
+  /** Empty means the photo path is off, and the button does not render. */
+  turnstileSiteKey: string;
+}
+
 /** Screen 1. The tool is the landing page. */
-export function renderForm(values: FormValues = EMPTY_FORM, problems: string[] = []): string {
+export function renderForm(
+  values: FormValues = EMPTY_FORM,
+  problems: string[] = [],
+  photo: PhotoPath | null = null,
+): string {
   const problemBlock = problems.length === 0
     ? ''
     : `  <div class="problem">
@@ -253,7 +311,33 @@ export function renderForm(values: FormValues = EMPTY_FORM, problems: string[] =
     </div>
     <button type="submit">Run the numbers</button>
   </form>
-`);
+${photoBlock(photo)}`);
+}
+
+/**
+ * The photo path, and the only JavaScript in the product.
+ *
+ * It renders only when Turnstile is configured, because the upload calls a
+ * vision model and every call costs real money. The typed form above never
+ * depends on any of this: design.md section 9 makes a working no-JS form law,
+ * so the challenge lives here and nowhere near it.
+ */
+function photoBlock(photo: PhotoPath | null): string {
+  if (photo === null || photo.turnstileSiteKey === '') return '';
+  return `
+  <p class="divider">or</p>
+
+  <form method="post" action="/extract" enctype="multipart/form-data">
+    <div class="field">
+      <label for="photo">Snap the quote instead</label>
+      <input type="file" id="photo" name="photo" accept="image/jpeg,image/png,application/pdf" capture="environment" required>
+    </div>
+    <div class="cf-turnstile" data-sitekey="${escapeHtml(photo.turnstileSiteKey)}" data-action="extract"></div>
+    <button type="submit" class="secondary">Read my quote</button>
+    <p class="note">Reading your paper takes about 10 seconds. The photo is never saved.</p>
+  </form>
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+`;
 }
 
 export interface TicketLine {
@@ -305,5 +389,131 @@ export function renderUnpriceable(reason: string): string {
     <p>${escapeHtml(reason)}</p>
   </div>
   <p><a href="/">Go back and check the numbers</a></p>
+`);
+}
+
+export interface ConfirmRow {
+  name: string;
+  label: string;
+  /** 'read' pre-fills the box. 'unreadable' leaves it empty with an amber label. */
+  state: 'read' | 'unreadable';
+  value: string;
+  hint?: string;
+}
+
+export interface ConfirmView {
+  rows: ConfirmRow[];
+  frequency: string;
+  warnings: string[];
+}
+
+/**
+ * Screen 2, the confirm screen. Photo path only.
+ *
+ * Anything we could not read arrives here as an EMPTY box with an amber
+ * label, never as a guess the farmer has to catch. That is the whole reason
+ * this screen exists: the model abstains, and the farmer fills the gap from
+ * the paper in his hand.
+ */
+export function renderConfirm(view: ConfirmView): string {
+  const warningBlock = view.warnings.length === 0
+    ? ''
+    : `  <div class="problem">
+    <ul>${view.warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join('')}</ul>
+  </div>
+`;
+
+  const field = (row: ConfirmRow): string => {
+    const unreadable = row.state === 'unreadable';
+    return `    <div class="field">
+      <label for="${row.name}">${escapeHtml(row.label)}</label>
+      <p class="${unreadable ? 'flag-unreadable' : 'flag-read'}">${
+      unreadable ? 'Could not read it, type it in' : 'Read from your paper'
+    }</p>
+      <input type="text" id="${row.name}" name="${row.name}" inputmode="decimal" value="${escapeHtml(row.value)}">
+${row.hint ? `      <p class="note">${escapeHtml(row.hint)}</p>\n` : ''}    </div>`;
+  };
+
+  return shell('Check these — LoanHank', `${warningBlock}  <h1>Check these against your paper. Fix anything we got wrong.</h1>
+  <p>Your photo is gone already. It was read and never saved.</p>
+
+  <form method="post" action="/decode">
+    <input type="hidden" name="ledger" value="1">
+${view.rows.map(field).join('\n')}
+    <div class="field">
+      <label for="paymentFrequency">How often you pay</label>
+      <p class="flag-read">Check this one carefully</p>
+      <select id="paymentFrequency" name="paymentFrequency">
+        ${frequencyOptions(view.frequency)}
+      </select>
+    </div>
+    <div class="field checkbox">
+      <label for="financeOnlyFeeRolled">
+        <input type="checkbox" id="financeOnlyFeeRolled" name="financeOnlyFeeRolled">
+        That fee is rolled into the payments rather than due at signing
+      </label>
+    </div>
+    <div class="field checkbox">
+      <label for="unexplainedAmount">
+        <input type="checkbox" id="unexplainedAmount" name="unexplainedAmount">
+        There is an amount on this quote I cannot account for
+      </label>
+      <p class="note">Tick this and we will show your rate but hold the verdict. We will not rate a deal with money in it that nobody can explain.</p>
+    </div>
+    <button type="submit">Looks right — run it</button>
+  </form>
+`);
+}
+
+export interface VerdictTicketView {
+  rate: string;
+  verdict: 'checks_out' | 'look_closer' | 'none';
+  verdictLine: string;
+  lines: TicketLine[];
+  reference: string | null;
+  footnote: string | null;
+  missing: string[];
+  assumption: string | null;
+}
+
+/**
+ * Screen 3 with a verdict. Two stamps only, and no verdict is not a third:
+ * it renders as plain words and the absence of the stamp is the message.
+ */
+export function renderVerdictTicket(view: VerdictTicketView): string {
+  const rows = view.lines
+    .map((line) => `      <tr><td>${escapeHtml(line.label)}</td><td>${escapeHtml(line.amount)}</td></tr>`)
+    .join('\n');
+
+  const stamp = view.verdict === 'checks_out'
+    ? '<p class="stamp stamp-good">CHECKS OUT</p>'
+    : view.verdict === 'look_closer'
+      ? '<p class="stamp stamp-amber">LOOK CLOSER</p>'
+      : '';
+
+  const abstention = view.verdict !== 'none'
+    ? ''
+    : `  <div class="verdict-none">
+    <h2>No verdict yet. Here's what's missing.</h2>
+    <ul>${view.missing.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>
+  </div>
+`;
+
+  return shell('Your ticket — LoanHank', `  <div class="ticket">
+    <hr class="ticket-rule">
+    <p class="headline-label">Your real rate</p>
+    <p class="headline-rate">${escapeHtml(view.rate)}</p>
+    ${stamp}
+    <p class="verdict-line">${escapeHtml(view.verdictLine)}</p>
+    <hr class="ticket-rule">
+    <table>
+${rows}
+    </table>
+    <hr class="ticket-rule-double">
+${view.reference ? `    <p class="reference">${escapeHtml(view.reference)}</p>\n` : ''}  </div>
+
+${view.assumption ? `  <p class="assumption">${escapeHtml(view.assumption)}</p>\n` : ''}${abstention}${
+    view.footnote ? `  <p class="footnote">${escapeHtml(view.footnote)}</p>\n` : ''
+  }  <p class="no-print"><a href="/">Run another quote</a></p>
 `);
 }

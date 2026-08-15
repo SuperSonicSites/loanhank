@@ -1543,3 +1543,132 @@ export function costAgainstBenchmark(input: {
     differenceCents: dealTotalCents - benchmarkTotalCents,
   };
 }
+
+// ---------------------------------------------------------------------------
+// THE DEAL LEDGER — spec.md section 2.2
+//
+// The quick path asks for four fields and prints its assumptions. This is the
+// other half: the whole deal, so the answer can carry a stamp. Everything the
+// route needs to know about how the pieces combine is decided here, because
+// the route does no arithmetic.
+// ---------------------------------------------------------------------------
+
+export interface DealLedger {
+  /** The price you pay if you take the financing, before any cash discount. */
+  quotedPriceCents: number;
+  cashDiscountCents: number;
+  downPaymentCents: number;
+  tradeAllowanceCents: number;
+  /** What is still owed on the trade. Larger than the allowance is negative equity. */
+  tradePayoffCents: number;
+  deliverySetupCents: number;
+  /** Tax can differ between the two alternatives, so it is entered per alternative. */
+  taxCashCents: number;
+  taxFinanceCents: number;
+  paymentAmountCents: number;
+  paymentCount: number;
+  paymentFrequency: RegularFrequency;
+  statedRateBps: number;
+  fees: LedgerFee[];
+}
+
+export interface LedgerTotals {
+  /** Trade allowance less what is still owed on it. Can be negative. */
+  netTradeCents: number;
+  /** What paying cash today actually costs, all in. */
+  cashOutlayCents: number;
+  /** What gets financed if the deal is taken. */
+  amountFinancedCents: number;
+  /**
+   * What you keep in your pocket at signing by financing instead of paying
+   * cash. This is the t0 leg of the rate, and it is the cash outlay less
+   * anything you hand over at signing anyway.
+   */
+  financedBenefitCents: number;
+  rolledFinanceOnlyFeesCents: number;
+  upfrontFinanceOnlyFeesCents: number;
+  hasUnknownFee: boolean;
+}
+
+function feeTotal(fees: LedgerFee[], rolled: boolean): number {
+  return fees
+    .filter((fee) => fee.status === 'confirmed' && fee.required && fee.financeOnly && fee.rolledIntoFinance === rolled)
+    .reduce((total, fee) => total + fee.amountCents, 0);
+}
+
+export function ledgerTotals(ledger: DealLedger): LedgerTotals {
+  const netTradeCents = ledger.tradeAllowanceCents - ledger.tradePayoffCents;
+  const rolledFinanceOnlyFeesCents = feeTotal(ledger.fees, true);
+  const upfrontFinanceOnlyFeesCents = feeTotal(ledger.fees, false);
+
+  // Paying cash forfeits the discount that financing would have cost you, so
+  // the discount comes off here and nowhere else.
+  const cashOutlayCents = ledger.quotedPriceCents
+    - ledger.cashDiscountCents
+    + ledger.deliverySetupCents
+    + ledger.taxCashCents
+    - netTradeCents;
+
+  const amountFinancedCents = ledger.quotedPriceCents
+    + ledger.deliverySetupCents
+    + ledger.taxFinanceCents
+    - netTradeCents
+    - ledger.downPaymentCents
+    + rolledFinanceOnlyFeesCents;
+
+  return {
+    netTradeCents,
+    cashOutlayCents,
+    amountFinancedCents,
+    financedBenefitCents: cashOutlayCents - ledger.downPaymentCents - upfrontFinanceOnlyFeesCents,
+    rolledFinanceOnlyFeesCents,
+    upfrontFinanceOnlyFeesCents,
+    hasUnknownFee: ledger.fees.some((fee) => fee.status === 'unknown'),
+  };
+}
+
+export interface LedgerDecode {
+  totals: LedgerTotals;
+  reconciliation: LedgerReconciliation;
+  realRateAllInBps: number | null;
+  totalOfPaymentsCents: number;
+  costVersusCashCents: number;
+  unavailableReason: PromoPriceRateUnavailableReason | null;
+}
+
+/**
+ * The whole verdict-path calculation, from a complete ledger to the headline
+ * rate. It does not decide the verdict; that needs a matched benchmark and
+ * lives in decideVerdict.
+ */
+export function decodeLedger(ledger: DealLedger): LedgerDecode {
+  const totals = ledgerTotals(ledger);
+  const reconciliation = reconcileLedger({
+    amountFinancedCents: totals.amountFinancedCents,
+    statedRateBps: ledger.statedRateBps,
+    paymentAmountCents: ledger.paymentAmountCents,
+    paymentCount: ledger.paymentCount,
+    paymentFrequency: ledger.paymentFrequency,
+  });
+
+  // The rate is the IRR of what financing keeps in your pocket at signing
+  // against what it takes back in payments.
+  const rate = promoPriceRate({
+    quotedPriceCents: totals.financedBenefitCents,
+    cashDiscountCents: 0,
+    paymentAmountCents: ledger.paymentAmountCents,
+    paymentCount: ledger.paymentCount,
+    paymentFrequency: ledger.paymentFrequency,
+  });
+
+  const totalOfPaymentsCents = ledger.paymentAmountCents * ledger.paymentCount;
+  return {
+    totals,
+    reconciliation,
+    realRateAllInBps: totals.hasUnknownFee ? null : rate.promoPriceRateBps,
+    totalOfPaymentsCents,
+    costVersusCashCents:
+      totalOfPaymentsCents + ledger.downPaymentCents + totals.upfrontFinanceOnlyFeesCents - totals.cashOutlayCents,
+    unavailableReason: rate.unavailableReason,
+  };
+}

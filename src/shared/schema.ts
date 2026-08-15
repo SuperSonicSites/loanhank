@@ -421,3 +421,213 @@ export const quickPathFormSchema = z.object({
 });
 
 export type QuickPathForm = z.infer<typeof quickPathFormSchema>;
+
+// ---------------------------------------------------------------------------
+// QUOTE EXTRACTION — what the vision model is allowed to return.
+//
+// Two structural rules, enforced by the shape rather than by a prompt asking
+// nicely:
+//
+// 1. There is no dealer name field, and no field that could carry one. A
+//    dealer name cannot be stored if there is nowhere to put it.
+// 2. Every field is a value that may be null plus a confidence. Null is a
+//    first-class answer meaning "could not read it", and it renders as an
+//    empty box with an amber label for the farmer to fill in. The model is
+//    never asked to infer, calculate, or complete a figure.
+// ---------------------------------------------------------------------------
+
+const confidence = z.number().min(0).max(1);
+
+const extractedMoney = z.object({
+  /** Integer cents, never dollars. Null means unreadable, never zero. */
+  value_cents: z.number().int().min(0).max(100_000_000_000).nullable(),
+  confidence,
+});
+
+const extractedCount = z.object({
+  value: z.number().int().min(0).max(600).nullable(),
+  confidence,
+});
+
+const extractedYear = z.object({
+  value: z.number().int().min(1900).max(2100).nullable(),
+  confidence,
+});
+
+const extractedHours = z.object({
+  value: z.number().int().min(0).max(100_000).nullable(),
+  confidence,
+});
+
+const extractedRateBps = z.object({
+  value: z.number().int().min(0).max(10_000).nullable(),
+  confidence,
+});
+
+const extractedFrequency = z.object({
+  value: z.enum(['monthly', 'quarterly', 'semiannual', 'annual']).nullable(),
+  confidence,
+});
+
+const extractedCondition = z.object({
+  value: z.enum(['new', 'used']).nullable(),
+  confidence,
+});
+
+const extractedBrand = z.object({
+  /** Manufacturer only, e.g. "John Deere". Never a dealership name. */
+  value: z.string().max(40).nullable(),
+  confidence,
+});
+
+export const quoteExtractionWarnings = [
+  'NOT_AN_EQUIPMENT_QUOTE',
+  'IMAGE_TOO_BLURRY',
+  'MULTIPLE_QUOTES_DETECTED',
+  'HANDWRITING_UNREADABLE',
+  'PAGE_APPEARS_CROPPED',
+  'SENSITIVE_IDENTIFIER_REDACTED',
+] as const;
+
+export const quoteExtractionSchema = z.object({
+  document_type: z.enum(['equipment_quote', 'other']),
+  // The deal
+  quoted_price: extractedMoney,
+  cash_discount: extractedMoney,
+  payment_amount: extractedMoney,
+  payment_frequency: extractedFrequency,
+  payment_count: extractedCount,
+  stated_rate_bps: extractedRateBps,
+  down_payment: extractedMoney,
+  trade_allowance: extractedMoney,
+  trade_payoff: extractedMoney,
+  balloon: extractedMoney,
+  delivery_setup: extractedMoney,
+  // Forage. Grab if on the paper, never require.
+  brand: extractedBrand,
+  model_year: extractedYear,
+  hours: extractedHours,
+  list_price: extractedMoney,
+  new_or_used: extractedCondition,
+  warnings: z.array(z.enum(quoteExtractionWarnings)),
+});
+
+export type QuoteExtraction = z.infer<typeof quoteExtractionSchema>;
+
+/**
+ * Below this, we do not put a number in the box. The farmer reads it off the
+ * paper himself. A confidently wrong figure is the one fatal bug class, and a
+ * half-sure figure sitting in a filled box is exactly how one gets through.
+ */
+export const EXTRACTION_CONFIDENCE_FLOOR = 0.75;
+
+export type ExtractedFieldState = 'read' | 'unreadable';
+
+export interface ConfirmableField {
+  name: string;
+  label: string;
+  state: ExtractedFieldState;
+  /** Pre-filled only when it was read confidently. Otherwise an empty box. */
+  value: string;
+}
+
+/** Money for a form box: cents to a plain decimal, no symbol, no grouping. */
+export function centsToInput(valueCents: number): string {
+  const sign = valueCents < 0 ? '-' : '';
+  const absolute = Math.abs(valueCents);
+  return `${sign}${Math.floor(absolute / 100)}.${String(absolute % 100).padStart(2, '0')}`;
+}
+
+interface FieldSource {
+  value: number | string | null;
+  confidence: number;
+}
+
+/**
+ * One extracted field, ready for the confirm screen.
+ *
+ * Anything null, or read with less confidence than the floor, comes back as an
+ * empty box flagged `unreadable`. We never show a guess and then ask the
+ * farmer to notice it is wrong.
+ */
+export function confirmableField(
+  name: string,
+  label: string,
+  source: FieldSource,
+  format: (value: never) => string = String as never,
+): ConfirmableField {
+  const readable = source.value !== null && source.confidence >= EXTRACTION_CONFIDENCE_FLOOR;
+  return {
+    name,
+    label,
+    state: readable ? 'read' : 'unreadable',
+    value: readable ? format(source.value as never) : '',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// CONFIRM SCREEN INPUT — the full ledger, typed or corrected by the farmer.
+//
+// Every money field is optional and defaults to zero ONLY because the farmer
+// has been shown the box and left it empty, which is an answer. That is the
+// difference between this and the quick path, where the same zeroes would be
+// assumptions and get printed as such.
+// ---------------------------------------------------------------------------
+
+const ledgerMoney = z.string().transform((value, context) => {
+  if (value.trim() === '') return 0;
+  const cents = parseMoneyToCents(value);
+  if (cents === null) {
+    context.addIssue({ code: 'custom', message: 'Enter this as a number, like 4000 or 4,000.00.' });
+    return z.NEVER;
+  }
+  return cents;
+});
+
+/** A percentage off the paper, e.g. "9.9" or "0", into basis points. */
+export function parseRateToBps(raw: string): number | null {
+  const cleaned = raw.trim().replace(/%$/, '').trim();
+  if (cleaned === '') return null;
+  if (!/^\d{1,2}(\.\d{1,4})?$/.test(cleaned)) return null;
+  const bps = Math.round(Number(cleaned) * 100);
+  return bps >= 0 && bps <= 10_000 ? bps : null;
+}
+
+export const ledgerFormSchema = z.object({
+  quotedPrice: moneyCentsSchema,
+  cashDiscount: ledgerMoney,
+  payment: moneyCentsSchema,
+  paymentFrequency: regularPaymentFrequencySchema,
+  paymentCount: z.string().transform((value, context) => {
+    const cleaned = value.trim();
+    if (!/^\d{1,4}$/.test(cleaned) || Number(cleaned) < 1) {
+      context.addIssue({ code: 'custom', message: 'Enter how many payments there are, like 48.' });
+      return z.NEVER;
+    }
+    return Number(cleaned);
+  }),
+  statedRate: z.string().transform((value, context) => {
+    const bps = value.trim() === '' ? 0 : parseRateToBps(value);
+    if (bps === null) {
+      context.addIssue({ code: 'custom', message: 'Enter the rate as a number, like 0 or 9.9.' });
+      return z.NEVER;
+    }
+    return bps;
+  }),
+  downPayment: ledgerMoney,
+  tradeAllowance: ledgerMoney,
+  tradePayoff: ledgerMoney,
+  deliverySetup: ledgerMoney,
+  taxCash: ledgerMoney,
+  taxFinance: ledgerMoney,
+  financeOnlyFee: ledgerMoney,
+  financeOnlyFeeRolled: z.string().optional().transform((value) => value === 'on'),
+  /**
+   * The farmer telling us there is money on the paper he cannot account for.
+   * This blocks the verdict outright (spec.md 2.1). We never call it a junk
+   * fee; we say we will not rate a deal with an amount nobody can explain.
+   */
+  unexplainedAmount: z.string().optional().transform((value) => value === 'on'),
+});
+
+export type LedgerForm = z.infer<typeof ledgerFormSchema>;

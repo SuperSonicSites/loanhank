@@ -66,6 +66,6 @@
     "RAW_FILE_TTL_SECONDS": "3600",
     // Turnstile site key is public by design; TURNSTILE_SECRET_KEY is a secret.
     // Empty = upload protection off.
-    "TURNSTILE_SITE_KEY": ""
+    "TURNSTILE_SITE_KEY": "0x4AAAAAAEQrCZAfzTs3XiRr"
   }
 }
