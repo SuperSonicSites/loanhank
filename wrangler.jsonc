@@ -29,9 +29,12 @@
     }
   ],
 
-  // Two buckets on purpose. QUOTES carries a lifecycle rule that deletes every
-  // object shortly after upload (spec.md: photo deleted after extraction), and
-  // that rule must never be anywhere near the backups, which are the company.
+  // QUOTES is deliberately empty. The happy path never writes a photo: the
+  // bytes go from the request straight to the reader and are gone when the
+  // answer comes back, so there is nothing to store and nothing to delete.
+  // The bucket and its one-day expiry rule stay as a backstop against any
+  // future path that does write one. Its rule must never be anywhere near the
+  // backups, which are the company.
   "r2_buckets": [
     { "binding": "QUOTES", "bucket_name": "loanhank-quotes" },
     { "binding": "BACKUPS", "bucket_name": "loanhank-backups" }

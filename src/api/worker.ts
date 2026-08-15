@@ -155,6 +155,41 @@ const WARNING_COPY: Record<string, string> = {
   SENSITIVE_IDENTIFIER_REDACTED: 'We dropped an account or serial number. We never keep those.',
 };
 
+
+/**
+ * What the model read against what the farmer confirmed, per field.
+ *
+ * This replaces keeping photos. A farmer photo is never written down, so there
+ * is no image to turn into a fixture; the correction he makes is the signal
+ * instead, and it is text and numbers only. Untrusted input, so it is size
+ * capped and shape checked before anything is recorded.
+ */
+function extractionDiff(
+  rawSnapshot: string,
+  confirmed: Record<string, unknown>,
+): Array<{ field: string; read: string; confirmed: string }> | null {
+  if (rawSnapshot === '' || rawSnapshot.length > 4_000) return null;
+  let snapshot: unknown;
+  try {
+    snapshot = JSON.parse(rawSnapshot);
+  } catch {
+    return null;
+  }
+  if (typeof snapshot !== 'object' || snapshot === null || Array.isArray(snapshot)) return null;
+
+  const diff: Array<{ field: string; read: string; confirmed: string }> = [];
+  for (const [field, readValue] of Object.entries(snapshot as Record<string, unknown>)) {
+    if (typeof readValue !== 'string' || readValue.length > 40) continue;
+    const confirmedValue = String(confirmed[field] ?? '');
+    // Normalize so "6000" and "6000.00" do not read as a correction.
+    const same = readValue.trim() === confirmedValue.trim()
+      || (readValue !== '' && confirmedValue !== ''
+        && Number(readValue.replace(/,/g, '')) === Number(confirmedValue.replace(/,/g, '')));
+    if (!same) diff.push({ field, read: readValue, confirmed: confirmedValue.slice(0, 40) });
+  }
+  return diff;
+}
+
 const app = new Hono<{ Bindings: Env }>();
 
 app.get('/', async (c) => {
@@ -330,8 +365,15 @@ app.post('/extract', async (c) => {
   try {
     const dataUrl = `data:${file.type};base64,${Buffer.from(bytes).toString('base64')}`;
     extraction = await new OpenAIQuoteExtractor(getConfig(c.env)).extractQuote(dataUrl, file.type);
-  } catch {
-    c.executionCtx.waitUntil(recordEvent(c.env, 'extract_failed'));
+  } catch (error) {
+      // A failed read is a re-snap the farmer has to do, and the only place we
+    // would ever see it. Losing it means losing the signal that the extractor
+    // is drifting on some quote format we have never met.
+    c.executionCtx.waitUntil(recordEvent(c.env, 'extract_failed', null, {
+      content_type: file.type,
+      size_bytes: bytes.byteLength,
+      reason: error instanceof Error ? error.name : 'unknown',
+    }));
     return c.html(
       renderUnpriceable('We could not read that one. Try again in better light, or type the numbers off your paper.'),
       502,
@@ -499,6 +541,16 @@ async function decodeFullLedger(c: {
     real_rate_all_in_bps: decoded.realRateAllInBps,
     verdict: verdict.verdict,
   });
+
+  // The extraction flywheel. Only written when the ledger came off a photo.
+  const diff = extractionDiff(String(body.extracted ?? ''), body);
+  if (diff !== null) {
+    c.executionCtx.waitUntil(recordEvent(c.env, 'extraction_diff', decodeId, {
+      corrected_fields: diff.map((entry) => entry.field),
+      corrections: diff,
+      field_count: Object.keys(JSON.parse(String(body.extracted))).length,
+    }));
+  }
 
   const comparison = benchmark === null ? null : costAgainstBenchmark({
     amountFinancedCents: decoded.totals.amountFinancedCents,

@@ -131,8 +131,10 @@ An $84,500 quote with a $6,000 cash discount, taken at the dealer's "0%" over 60
 - `a.published_band`: 5 years
 - `a.published_source`: AgDirect
 - `a.published_as_of`: 2026-08-01
+- `a.published_amount_band`: $25,000-$99,999
 - `a.verdict`: CHECKS OUT
 - `a.line`: This deal checks out. We'd take it.
+- `a.reference`: Comparable published equipment rate: 7.25%, subject to approval. AgDirect, $25,000-$99,999, 5 years, fixed, as of 2026-08-01.
 
 **This example blesses the dealer's promo, and it stays canonical for that reason.** The 0% costs $6,000 against paying cash, and 2.94% is still far under the 7.25% an independent lender publishes for this size and term. A farmer reading it should go sign. A tool that never says that is a tool nobody believes, so the neutrality proof lives here in permanent view rather than in a promise about our intentions.
 
@@ -151,10 +153,13 @@ Used equipment, $62,000 financed at a stated 9.9% over 48 monthly payments, no c
 - `b.published_band`: 4 years
 - `b.published_total`: $71,610
 - `b.difference`: $3,726
+- `b.published_amount_band`: $25,000-$99,999
 - `b.verdict`: LOOK CLOSER
 - `b.line`: Look closer. This deal prices at 9.90%. The comparable published rate is 7.25%. The difference costs you $3,726 over the term.
 
 <!-- canon:end -->
+
+The reference line prints the matched band's own bounds, not just the rate. The matching discipline is the part a reader can check: a $78,500 quote over five years is compared against the $25,000-$99,999 five-year row and nothing else, and printing the band is what makes that visible rather than merely true.
 
 Both examples carry "subject to approval" beside the published rate wherever they appear in product, per spec.md §3. Neither is a promise of a rate any farmer will be offered.
 

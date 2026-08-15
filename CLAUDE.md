@@ -32,6 +32,7 @@ Keep these true in package.json; if you rename a script, update this file in the
 ## Money-math rules (non-negotiable)
 
 - Any change in `src/finance/` starts with a failing test.
+- Every abstention path needs a companion canary proving the positive path is reachable. A canary that abstains fails the build (spec.md §7.3).
 - If a finance test fails, assume the code is wrong, not the test. Changing an expected value requires a comment explaining why the old value was incorrect.
 - Extraction never guesses. Unreadable field → null + flagged for the farmer to type. A confidently-wrong extracted number is the one fatal bug class; abstaining is success.
 - Longer amortization is never labeled "savings."
@@ -41,7 +42,7 @@ Keep these true in package.json; if you rename a script, update this file in the
 
 ## Data rules
 
-- `decodes` rows: no PII, no dealer names, no account numbers, ever. Quote photos are deleted after extraction (reaper + R2 lifecycle rule, belt and suspenders).
+- `decodes` rows: no PII, no dealer names, no account numbers, ever. Quote photos are never written down: the bytes go from the request to the reader and are gone. The `loanhank-quotes` bucket and its one-day rule are a backstop for a future path that writes one; the happy path never touches it.
 - A lead never moves without a consent row: timestamp + `consent_text_version` of the exact text shown.
 - Aggregate outputs only, n ≥ 20; row-level data never leaves the system.
 
@@ -54,7 +55,7 @@ Keep these true in package.json; if you rename a script, update this file in the
 ## Workflow
 
 - Typecheck + full tests before every commit. Main is always deployable.
-- New real quote format encountered → add an anonymized fixture to `tests/fixtures/` in the same PR.
+- A farmer photo never becomes a fixture; it is never stored in the first place. Extraction improvement comes from the extracted-versus-confirmed field diff, text only. New quote shapes get a synthetic fixture via `tests/fixtures/make-synthetic-quote.py`.
 - Do not add: accounts/login, native app, CMS, hosted forms, tracking cookies, third fonts, new colors, SMS. These are carved in the docs; a feature idea that needs one goes back to the docs first.
 
 ## Gotchas

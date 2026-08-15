@@ -115,8 +115,18 @@ describe('design.md canonical example A, CHECKS OUT', () => {
     expect(figure(entries, 'a.published_band')).toBe((benchmark as BenchmarkRow).termBand);
     expect(figure(entries, 'a.published_source')).toBe((benchmark as BenchmarkRow).source);
     expect(figure(entries, 'a.published_as_of')).toBe((benchmark as BenchmarkRow).asOfDate);
+    expect(figure(entries, 'a.published_amount_band')).toBe((benchmark as BenchmarkRow).amountBand);
     expect(figure(entries, 'a.verdict')).toBe('CHECKS OUT');
     expect(verdict.verdict).toBe('checks_out');
+
+    // The reference line the product prints, assembled from the matched row.
+    // The band bounds are part of it: the matching discipline has to be
+    // checkable by the reader, not just correct in the matcher.
+    const reference = `Comparable published equipment rate: ${formatRate((benchmark as BenchmarkRow).rateBps)}, `
+      + `subject to approval. ${(benchmark as BenchmarkRow).source}, `
+      + `${(benchmark as BenchmarkRow).amountBand}, ${(benchmark as BenchmarkRow).termBand}, fixed, `
+      + `as of ${(benchmark as BenchmarkRow).asOfDate}.`;
+    expect(figure(entries, 'a.reference')).toBe(reference);
   });
 
   it('still blesses the dealer, which is the whole point of keeping it', async () => {
@@ -192,6 +202,7 @@ describe('design.md canonical example B, LOOK CLOSER', () => {
     expect(figure(entries, 'b.published_band')).toBe((benchmark as BenchmarkRow).termBand);
     expect(figure(entries, 'b.published_total')).toBe(formatCurrency(comparison.benchmarkTotalCents));
     expect(figure(entries, 'b.difference')).toBe(formatCurrency(comparison.differenceCents));
+    expect(figure(entries, 'b.published_amount_band')).toBe((benchmark as BenchmarkRow).amountBand);
     expect(figure(entries, 'b.verdict')).toBe('LOOK CLOSER');
     expect(verdict.verdict).toBe('look_closer');
   });

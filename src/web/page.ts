@@ -10,6 +10,20 @@
 import type { PromoPriceRate } from '../finance/index.js';
 
 const styles = `
+/* ---------------------------------------------------------------------------
+   TOKENS — design/tokens/*.css, values verbatim from the design bundle.
+   Inlined rather than imported because every byte on this page is served from
+   the worker and nothing is fetched from a third party.
+
+   ONE DELIBERATE OMISSION: the bundle's typography.css opens with
+   @import url('https://fonts.googleapis.com/css2?...'). That is dropped.
+   design.md §4 requires subset woff2, self-hosted and preloaded; §9 forbids the
+   third-party request; and the no-cookie-banner stance in spec.md §10 only
+   holds while nothing leaves the page. A Google Fonts import hands every
+   visitor's IP to a third party on first paint. design.md wins on conflict, so
+   the faces below are the self-hosted ones and the import is not here.
+   --------------------------------------------------------------------------- */
+
 @font-face {
   font-family: 'Libre Franklin';
   font-style: normal;
@@ -38,8 +52,16 @@ const styles = `
   font-display: swap;
   src: url('/fonts/courier-prime-latin-400-normal.woff2') format('woff2');
 }
+@font-face {
+  font-family: 'Courier Prime';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/courier-prime-latin-700-normal.woff2') format('woff2');
+}
 
 :root {
+  /* colors.css */
   --paper: #F7F5EF;
   --ink: #191813;
   --ink-soft: #57534A;
@@ -49,6 +71,34 @@ const styles = `
   --field-fill: #E4EDDC;
   --amber-ink: #8A5A00;
   --amber-fill: #F2E4C2;
+  --input-white: #FFFFFF; /* pure white allowed inside input fields only */
+
+  /* typography.css */
+  --font-ui: "Libre Franklin", "Franklin Gothic Medium", "Segoe UI", Arial, sans-serif;
+  --font-mono: "Courier Prime", "Courier New", monospace;
+  --text-apr: 48px;
+  --text-apr-desktop: 56px;
+  --text-verdict: 24px;
+  --text-h1: 28px;
+  --text-body: 18px;
+  --text-receipt: 16px;
+  --text-label: 16px;
+  --text-footnote: 14px;
+  --lh-body: 1.5;
+
+  /* spacing.css */
+  --s-4: 4px;
+  --s-8: 8px;
+  --s-12: 12px;
+  --s-16: 16px;
+  --s-24: 24px;
+  --s-32: 32px;
+  --s-48: 48px;
+  --radius: 2px;
+  --col-max: 640px;
+  --control-h: 56px;
+  --tap-min: 48px;
+  --hairline: 1px solid var(--rule);
 }
 
 * { box-sizing: border-box; }
@@ -57,55 +107,65 @@ body {
   margin: 0;
   background: var(--paper);
   color: var(--ink);
-  font-family: 'Libre Franklin', 'Franklin Gothic Medium', 'Segoe UI', Arial, sans-serif;
-  font-size: 18px;
-  line-height: 1.5;
+  font-family: var(--font-ui);
+  font-size: var(--text-body);
+  line-height: var(--lh-body);
 }
 
-main { max-width: 640px; margin: 0 auto; padding: 32px 16px 48px; }
+main { max-width: var(--col-max); margin: 0 auto; padding: var(--s-32) var(--s-16) var(--s-48); }
 
-.wordmark { font-weight: 900; font-size: 28px; letter-spacing: -0.02em; text-transform: uppercase; margin: 0; }
+.wordmark { font-weight: 900; font-size: var(--text-h1); letter-spacing: -0.02em; text-transform: uppercase; margin: 0; }
 .wordmark a { color: var(--ink); text-decoration: none; }
-.wordmark-rule { border: 0; border-top: 1px solid var(--rule); margin: 8px 0 4px; }
-.tagline { font-size: 14px; color: var(--ink-soft); margin: 0 0 32px; }
+.wordmark-rule { border: 0; border-top: var(--hairline); margin: var(--s-8) 0 var(--s-4); }
+.tagline { font-size: var(--text-footnote); color: var(--ink-soft); margin: 0 0 var(--s-32); }
 
-h1 { font-weight: 700; font-size: 28px; line-height: 1.3; margin: 0 0 16px; }
-p { margin: 0 0 16px; }
-.note { color: var(--ink-soft); font-size: 14px; }
+h1 { font-weight: 700; font-size: var(--text-h1); line-height: 1.3; margin: 0 0 var(--s-16); }
+p { margin: 0 0 var(--s-16); }
+.note { color: var(--ink-soft); font-size: var(--text-footnote); }
 
-label { display: block; font-weight: 500; font-size: 16px; margin: 0 0 4px; }
+label { display: block; font-weight: 500; font-size: var(--text-label); margin: 0 0 var(--s-4); }
 
 input[type="text"], select {
   width: 100%;
-  height: 56px;
-  padding: 0 12px;
-  background: #FFF;
-  border: 1px solid var(--rule);
-  border-radius: 2px;
+  height: var(--control-h);
+  padding: 0 var(--s-12);
+  background: var(--input-white);
+  border: var(--hairline);
+  border-radius: var(--radius);
   color: var(--ink);
-  font-family: 'Courier Prime', 'Courier New', monospace;
-  font-size: 18px;
+  font-family: var(--font-mono);
+  font-size: var(--text-body);
 }
 input[type="file"] {
-  width: 100%; min-height: 56px; padding: 12px;
-  background: #FFF; border: 1px solid var(--rule); border-radius: 2px;
-  font-family: inherit; font-size: 16px;
+  width: 100%; min-height: var(--control-h); padding: var(--s-12);
+  background: var(--input-white); border: var(--hairline); border-radius: var(--radius);
+  font-family: inherit; font-size: var(--text-receipt);
 }
 input[type="text"]:focus, select:focus, input[type="file"]:focus { border: 2px solid var(--denim); outline: none; }
+input[type="email"] {
+  width: 100%; height: var(--control-h); padding: 0 var(--s-12);
+  background: var(--input-white); border: var(--hairline); border-radius: var(--radius);
+  color: var(--ink); font-family: var(--font-mono); font-size: var(--text-body);
+}
+input[type="email"]:focus { border: 2px solid var(--denim); outline: none; }
 
-.field { margin: 0 0 16px; }
+.field { margin: 0 0 var(--s-16); }
 
 button {
   width: 100%;
-  height: 56px;
+  min-height: var(--control-h);
   border: 1px solid var(--denim);
-  border-radius: 2px;
+  border-radius: var(--radius);
   background: var(--denim);
-  color: #FFF;
+  color: var(--input-white);
   font-family: inherit;
-  font-size: 18px;
+  font-size: var(--text-body);
   font-weight: 700;
   cursor: pointer;
+}
+.secondary {
+  background: var(--paper); color: var(--denim); border: 2px solid var(--denim);
+  margin-top: var(--s-12);
 }
 
 /* Errors are ink on amber. No red exists in this product. */
@@ -113,86 +173,97 @@ button {
   background: var(--amber-fill);
   color: var(--amber-ink);
   border-left: 4px solid var(--amber-ink);
-  padding: 12px 16px;
-  margin: 0 0 24px;
+  padding: var(--s-12) var(--s-16);
+  margin: 0 0 var(--s-24);
 }
-.problem ul { margin: 8px 0 0; padding-left: 20px; }
-
-/* The ticket. Receipt rules, mono numbers, right aligned, double rule before
-   the total, exactly like the shop hands you. */
-.ticket { font-family: 'Courier Prime', 'Courier New', monospace; margin: 24px 0 0; }
-.ticket-rule { border: 0; border-top: 1px solid var(--ink); margin: 16px 0; }
-.ticket-rule-double { border: 0; border-top: 3px double var(--ink); margin: 16px 0; }
-
-.headline-label { font-size: 14px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); margin: 0; }
-.headline-rate { font-size: 48px; font-weight: 700; line-height: 1.1; margin: 4px 0 0; }
-
-.ticket table { width: 100%; border-collapse: collapse; font-size: 16px; }
-.ticket td { padding: 6px 0; border-bottom: 1px solid var(--rule); }
-.ticket td:last-child { text-align: right; white-space: nowrap; }
-.ticket tr:last-child td { border-bottom: 0; }
-
-.verdict-none { font-family: 'Libre Franklin', sans-serif; margin: 24px 0 0; }
-.verdict-none h2 { font-size: 24px; font-weight: 600; margin: 0 0 8px; }
-.verdict-none ul { margin: 8px 0 0; padding-left: 20px; }
-
-.assumption {
-  font-family: 'Libre Franklin', sans-serif;
-  background: var(--amber-fill);
-  color: var(--amber-ink);
-  padding: 12px 16px;
-  margin: 16px 0 0;
-  font-size: 16px;
-}
-
-footer { margin: 48px 0 0; padding-top: 16px; border-top: 1px solid var(--rule); }
-footer p { font-size: 14px; color: var(--ink-soft); margin: 0; }
-
+.problem ul { margin: var(--s-8) 0 0; padding-left: 20px; }
 
 /* Confirm screen field flags. A field we could not read gets an amber label
    and an EMPTY box. Never a guess sitting in a filled box. */
-.flag-read { font-size: 14px; color: var(--ink-soft); margin: 0 0 4px; }
+.flag-read { font-size: var(--text-footnote); color: var(--ink-soft); margin: 0 0 var(--s-4); }
 .flag-unreadable {
-  font-size: 14px; color: var(--amber-ink); background: var(--amber-fill);
-  display: inline-block; padding: 2px 8px; margin: 0 0 4px;
+  font-size: var(--text-footnote); color: var(--amber-ink); background: var(--amber-fill);
+  display: inline-block; padding: 2px var(--s-8); margin: 0 0 var(--s-4);
 }
 
-.field.checkbox label { font-weight: 400; font-size: 16px; }
-.field.checkbox input { width: 24px; height: 24px; margin-right: 8px; vertical-align: middle; }
+.field.checkbox label { font-weight: 400; font-size: var(--text-label); }
+.field.checkbox input { width: var(--tap-min); height: var(--tap-min); margin-right: var(--s-8); vertical-align: middle; }
+
+/* The ticket. Labels left in Libre Franklin, values right in Courier Prime,
+   hairline between every line, double rule above the total. No zebra, no
+   header fill, no cell borders, no card, no shadow, no rounded wrapper. */
+.ticket { margin: var(--s-24) 0 0; }
+.ticket-rule { border: 0; border-top: 1px solid var(--ink); margin: var(--s-16) 0; }
+.ticket-rule-double { border: 0; border-top: 3px double var(--ink); margin: var(--s-16) 0; }
+
+.headline-label {
+  font-family: var(--font-mono);
+  font-size: var(--text-footnote); letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--ink-soft); margin: 0;
+}
+.headline-rate {
+  font-family: var(--font-mono); font-weight: 700;
+  font-size: var(--text-apr); line-height: 1.1; margin: var(--s-4) 0 0;
+}
+@media (min-width: 700px) {
+  .headline-rate { font-size: var(--text-apr-desktop); }
+}
+
+.ticket table { width: 100%; border-collapse: collapse; font-size: var(--text-receipt); }
+.ticket td { padding: 6px 0; border-bottom: var(--hairline); }
+.ticket td:first-child { font-family: var(--font-ui); }
+.ticket td:last-child { font-family: var(--font-mono); text-align: right; white-space: nowrap; }
+.ticket tr:last-child td { border-bottom: 0; }
 
 /* The stamp. Rubber-stamp register: mono caps, a hair of rotation, a plain
    box. A pristine vector distressed edge is fake antique, so there is none. */
 .stamp {
   display: inline-block;
-  font-family: 'Courier Prime', 'Courier New', monospace;
+  font-family: var(--font-mono);
   font-weight: 700; font-size: 20px; letter-spacing: 0.12em;
-  padding: 6px 16px; margin: 12px 0;
+  padding: 6px var(--s-16); margin: var(--s-12) 0;
   transform: rotate(-1.75deg);
 }
 .stamp-good { color: var(--field); border: 3px solid var(--field); background: var(--field-fill); }
 .stamp-amber { color: var(--amber-ink); border: 3px solid var(--amber-ink); background: var(--amber-fill); }
 
-.verdict-line { font-family: 'Libre Franklin', sans-serif; font-weight: 600; font-size: 24px; margin: 8px 0 0; }
-.reference { font-size: 16px; margin: 0; }
-.footnote { font-size: 14px; color: var(--ink-soft); }
+.verdict-line { font-family: var(--font-ui); font-weight: 600; font-size: var(--text-verdict); margin: var(--s-8) 0 0; }
+.reference { font-family: var(--font-mono); font-size: var(--text-receipt); margin: 0; }
+.footnote { font-size: var(--text-footnote); color: var(--ink-soft); }
 
-.secondary {
-  background: var(--paper); color: var(--denim); border: 2px solid var(--denim);
-  margin-top: 12px;
+.verdict-none { font-family: var(--font-ui); margin: var(--s-24) 0 0; }
+.verdict-none h2 { font-size: var(--text-verdict); font-weight: 600; margin: 0 0 var(--s-8); }
+.verdict-none ul { margin: var(--s-8) 0 0; padding-left: 20px; }
+
+.assumption {
+  font-family: var(--font-ui);
+  background: var(--amber-fill);
+  color: var(--amber-ink);
+  padding: var(--s-12) var(--s-16);
+  margin: var(--s-16) 0 0;
+  font-size: var(--text-receipt);
 }
 
-.divider { text-align: center; color: var(--ink-soft); font-size: 16px; margin: 24px 0 8px; }
+.gate { border-top: var(--hairline); margin: var(--s-32) 0 0; padding-top: var(--s-24); }
+.gate h2 { font-size: var(--text-verdict); font-weight: 600; margin: 0 0 var(--s-8); }
+
+.divider { text-align: center; color: var(--ink-soft); font-size: var(--text-receipt); margin: var(--s-24) 0 var(--s-8); }
+
+footer { margin: var(--s-48) 0 0; padding-top: var(--s-16); border-top: var(--hairline); }
+footer p { font-size: var(--text-footnote); color: var(--ink-soft); margin: 0; }
+footer nav { font-size: var(--text-footnote); margin: 0 0 var(--s-8); }
+footer nav a { margin-right: var(--s-12); }
 
 a { color: var(--denim); }
 
+/* The printout negotiates for the farmer at the dealer desk. It is the best
+   marketing this product will ever ship, so it prints like a shop ticket. */
 @media print {
   body { background: #FFF; color: #000; font-size: 12pt; }
   main { max-width: none; padding: 0; }
   .no-print, form, footer { display: none; }
-  .ticket-rule, .wordmark-rule { border-top-color: #000; }
-  .ticket-rule-double { border-top-color: #000; }
+  .ticket-rule, .wordmark-rule, .ticket-rule-double { border-top-color: #000; }
   .ticket td { border-bottom-color: #999; }
-  /* The stamp prints. It is the thing the farmer carries back to the desk. */
   .stamp { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   a[href]::after { content: ""; }
 }
@@ -408,6 +479,19 @@ export interface ConfirmView {
 }
 
 /**
+ * What the model read, carried forward so the next screen can diff it against
+ * what the farmer corrected it to.
+ *
+ * Numbers only, by schema. This is the whole eval signal now that photos are
+ * never stored: the fields farmers fix most are the next prompt change.
+ */
+function extractedSnapshot(view: ConfirmView): string {
+  const snapshot: Record<string, string> = { paymentFrequency: view.frequency };
+  for (const row of view.rows) snapshot[row.name] = row.state === 'read' ? row.value : '';
+  return escapeHtml(JSON.stringify(snapshot));
+}
+
+/**
  * Screen 2, the confirm screen. Photo path only.
  *
  * Anything we could not read arrives here as an EMPTY box with an amber
@@ -439,6 +523,7 @@ ${row.hint ? `      <p class="note">${escapeHtml(row.hint)}</p>\n` : ''}    </di
 
   <form method="post" action="/decode">
     <input type="hidden" name="ledger" value="1">
+    <input type="hidden" name="extracted" value="${extractedSnapshot(view)}">
 ${view.rows.map(field).join('\n')}
     <div class="field">
       <label for="paymentFrequency">How often you pay</label>
