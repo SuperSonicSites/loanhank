@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 import { parseMoneyToCents, quickPathFormSchema } from '../src/shared/schema.js';
 
@@ -64,5 +65,33 @@ describe('quickPathFormSchema', () => {
       payment: '1408.33', paymentFrequency: 'weekly',
     });
     expect(result.success).toBe(false);
+  });
+});
+
+describe('the never-capture list is enforced by shape', () => {
+  // spec.md 9.5. A model cannot return what there is nowhere to put. This test
+  // reads the schema source, because the point is that the field does not
+  // exist, and you cannot assert the absence of a field from a type.
+  it('gives the extraction schema nowhere to store an identity', async () => {
+    const source = await readFile(new URL('../src/shared/schema.ts', import.meta.url), 'utf8');
+    const block = source.slice(
+      source.indexOf('export const quoteExtractionSchema'),
+      source.indexOf('export type QuoteExtraction'),
+    );
+    expect(block.length).toBeGreaterThan(0);
+    for (const forbidden of [
+      'dealer', 'dealership', 'salesperson', 'seller_name', 'customer',
+      'serial', 'vin', 'stock_no', 'stock_number', 'account_number',
+      'phone', 'email', 'address',
+    ]) {
+      expect(block.toLowerCase(), `quoteExtractionSchema has a field for ${forbidden}`)
+        .not.toContain(forbidden);
+    }
+  });
+
+  it('tells the model the same thing in words', async () => {
+    const source = await readFile(new URL('../src/api/extractor.ts', import.meta.url), 'utf8');
+    expect(source).toContain('Never return the dealership name');
+    expect(source).toContain('The schema has no place for them.');
   });
 });

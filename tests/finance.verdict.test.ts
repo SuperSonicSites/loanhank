@@ -26,6 +26,7 @@ function row(partial: Partial<BenchmarkRow> & { id: string }): BenchmarkRow {
     rateBps: 725,
     rateKind: 'fixed',
     tier: 1,
+    country: 'US',
     ...partial,
   };
 }
@@ -40,24 +41,24 @@ const CARD: BenchmarkRow[] = [
 
 describe('matchBenchmark', () => {
   it('matches the band the quote actually falls in', () => {
-    const match = matchBenchmark(CARD, { amountCents: 7_850_000, termMonths: 60, rateKind: 'fixed' });
+    const match = matchBenchmark(CARD, { amountCents: 7_850_000, termMonths: 60, rateKind: 'fixed', country: 'US' });
     expect(match?.id).toBe('c');
     expect(match?.rateBps).toBe(725);
   });
 
   it('will not match a fixed quote to a variable card rate', () => {
     const variable = CARD.map((entry) => ({ ...entry, rateKind: 'variable' as const, rateBps: 599 }));
-    expect(matchBenchmark(variable, { amountCents: 7_850_000, termMonths: 60, rateKind: 'fixed' })).toBeNull();
+    expect(matchBenchmark(variable, { amountCents: 7_850_000, termMonths: 60, rateKind: 'fixed', country: 'US' })).toBeNull();
   });
 
   it('refuses anything below tier 1, whatever else fits', () => {
     const surveys = CARD.map((entry) => ({ ...entry, tier: 2 }));
-    expect(matchBenchmark(surveys, { amountCents: 7_850_000, termMonths: 60, rateKind: 'fixed' })).toBeNull();
+    expect(matchBenchmark(surveys, { amountCents: 7_850_000, termMonths: 60, rateKind: 'fixed', country: 'US' })).toBeNull();
   });
 
   it('refuses a quote outside every amount band', () => {
     // $2,000,000 is past the top of this card's bands.
-    expect(matchBenchmark(CARD, { amountCents: 200_000_000, termMonths: 60, rateKind: 'fixed' })).toBeNull();
+    expect(matchBenchmark(CARD, { amountCents: 200_000_000, termMonths: 60, rateKind: 'fixed', country: 'US' })).toBeNull();
   });
 
   it('snaps to the nearest supported term inside the card', () => {
@@ -65,19 +66,19 @@ describe('matchBenchmark', () => {
     // That was wrong arithmetic on my part, not a wrong matcher: 54 is exactly
     // six months from both 48 and 60, so it is a tie, not a near miss. 56 is
     // genuinely nearer the 5 year row.
-    expect(matchBenchmark(CARD, { amountCents: 7_850_000, termMonths: 56, rateKind: 'fixed' })?.id).toBe('c');
+    expect(matchBenchmark(CARD, { amountCents: 7_850_000, termMonths: 56, rateKind: 'fixed', country: 'US' })?.id).toBe('c');
     // Distance is measured to the nearest edge of a band, not to its middle.
     // 40 months is four past the top of the 2-3 year row (24-36) and eight
     // short of the 4 year row, so it snaps back, not forward. 44 snaps
     // forward. I got both of these backwards first time by eyeballing them.
-    expect(matchBenchmark(CARD, { amountCents: 7_850_000, termMonths: 40, rateKind: 'fixed' })?.id).toBe('a');
-    expect(matchBenchmark(CARD, { amountCents: 7_850_000, termMonths: 44, rateKind: 'fixed' })?.id).toBe('b');
+    expect(matchBenchmark(CARD, { amountCents: 7_850_000, termMonths: 40, rateKind: 'fixed', country: 'US' })?.id).toBe('a');
+    expect(matchBenchmark(CARD, { amountCents: 7_850_000, termMonths: 44, rateKind: 'fixed', country: 'US' })?.id).toBe('b');
   });
 
   it('takes the shorter term when a tie cannot be broken on rate', () => {
     // 54 months is equidistant from the 4 year and 5 year rows and both are
     // published at 7.25%. The result still has to be the same every time.
-    expect(matchBenchmark(CARD, { amountCents: 7_850_000, termMonths: 54, rateKind: 'fixed' })?.id).toBe('b');
+    expect(matchBenchmark(CARD, { amountCents: 7_850_000, termMonths: 54, rateKind: 'fixed', country: 'US' })?.id).toBe('b');
   });
 
   it('never flatters the deal when two terms are equally near', () => {
@@ -85,13 +86,13 @@ describe('matchBenchmark', () => {
     // rates differ, the lower one wins, so a tie can never bless a deal that a
     // stricter reading would question.
     const uneven = CARD.map((entry) => (entry.id === 'b' ? { ...entry, rateBps: 900 } : entry));
-    expect(matchBenchmark(uneven, { amountCents: 7_850_000, termMonths: 42, rateKind: 'fixed' })?.id).toBe('a');
+    expect(matchBenchmark(uneven, { amountCents: 7_850_000, termMonths: 42, rateKind: 'fixed', country: 'US' })?.id).toBe('a');
   });
 
   it('abstains past the end of the card rather than stretching the top band', () => {
     // 96 months against a card that stops at 84. spec.md section 3: no matched
     // reference means rate yes, verdict no.
-    expect(matchBenchmark(CARD, { amountCents: 7_850_000, termMonths: 96, rateKind: 'fixed' })).toBeNull();
+    expect(matchBenchmark(CARD, { amountCents: 7_850_000, termMonths: 96, rateKind: 'fixed', country: 'US' })).toBeNull();
   });
 });
 
@@ -285,5 +286,24 @@ describe('costAgainstBenchmark', () => {
     expect(result.dealTotalCents).toBe(7_533_600);
     expect(result.benchmarkTotalCents).toBe(7_160_976);
     expect(result.differenceCents).toBe(372_624);
+  });
+});
+
+describe('matchBenchmark country guard', () => {
+  const usCard = CARD.map((row) => ({ ...row, country: 'US' as const }));
+
+  it('matches an American quote to an American card', () => {
+    expect(matchBenchmark(usCard, {
+      amountCents: 7_850_000, termMonths: 60, rateKind: 'fixed', country: 'US',
+    })?.id).toBe('c');
+  });
+
+  it('abstains on a Canadian deal rather than blessing it with an American card', () => {
+    // The engine can price the Canadian deal. What does not exist is a
+    // published Canadian equipment rate card, and an American one is not a
+    // near miss, it is a different market and a different currency.
+    expect(matchBenchmark(usCard, {
+      amountCents: 7_850_000, termMonths: 60, rateKind: 'fixed', country: 'CA',
+    })).toBeNull();
   });
 });

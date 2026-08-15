@@ -59,6 +59,7 @@ async function stampFor(ledger: DealLedger, termMonths: number) {
     amountCents: decoded.totals.amountFinancedCents,
     termMonths,
     rateKind: 'fixed',
+    country: 'US',
   });
   const verdict = decideVerdict({
     realRateAllInBps: decoded.realRateAllInBps,
@@ -79,6 +80,7 @@ describe('canary: the positive path is reachable', () => {
       amountCents: 8_450_000,
       termMonths: 60,
       rateKind: 'fixed',
+      country: 'US',
     });
     expect(matched, 'no seeded band contains an $84,500 quote').not.toBeNull();
   });
@@ -115,6 +117,7 @@ describe('canary: the positive path is reachable', () => {
         amountCents: inside,
         termMonths: 60,
         rateKind: 'fixed',
+        country: 'US',
       });
       expect(matched, `nothing matches inside ${band.amountBand}`).not.toBeNull();
       expect((matched as BenchmarkRow).amountBand).toBe(band.amountBand);

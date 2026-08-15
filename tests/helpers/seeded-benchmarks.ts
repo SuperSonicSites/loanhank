@@ -34,6 +34,8 @@ function parseInserts(sql: string): BenchmarkRow[] {
       rateBps: Number(m[12]),
       rateKind: (m[13] as string) === 'variable' ? 'variable' : 'fixed',
       tier: Number(m[14]),
+      // The seed is American. 0003 makes it explicit in the table.
+      country: 'US',
     });
   }
   return rows;

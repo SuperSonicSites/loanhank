@@ -289,6 +289,41 @@ Every decode = one row of truth nobody else in America has: real dealer quote, r
 - Row count itself = marketing. "Compared against 12,000 real quotes" — number goes in ad when number big.
 - Flywheel: more decodes → tighter medians → better answer → better ad claim → more decodes. Feed it, never fake it.
 
+### 9.2 Currency and country are never pooled
+
+**CAD and USD are never pooled, converted, or compared in any statistic, ever.** Not in a median, not in a percentile, not in a quarterly report, not in an ad claim. They are different money in different markets, no conversion is performed anywhere in this product, and a blended figure would be indefensible the first time somebody checked it. Country and currency are part of the cohort key rather than a column somebody could forget to filter on (`decodes_cohort_v2`).
+
+Canada is collected from day one and rated by nobody. There is no published Canadian equipment rate card, so a Canadian deal gets its arithmetic and an abstention in plain words:
+
+> No published Canadian equipment rate exists to compare against. We show the math; there is no card to check it against.
+
+Labeled Canadian rows are the only Canadian equipment-finance benchmark that will ever exist. They exist only if collected before there is any use for them.
+
+### 9.3 The peer ladder
+
+Two systems, permanently separate. **The stamp is anchored** to published cards plus the versioned policy buffer and is never influenced by the pile. **The peer context comes alive** as the pile grows.
+
+Always the finest cohort with n ≥ 20, falling back deterministically: drop price band, then term band, then widen the window to two quarters, then four. Country, currency, equipment category and condition are never dropped. The chosen cohort and its n print on every ticket. `cohortLadder` in `src/finance/`, policy version `PEER_POLICY_VERSION`.
+
+Every peer statistic shown is **snapshotted on the decode row** — exact median, quartiles, n, cohort key, computed-at, policy version — so a ticket rendered today is reproducible in two years after the cohort has moved underneath it. Same discipline as `verdict_ref_id`.
+
+The ladder returns "no cohort qualifies yet" for weeks. That is correct output, not a gap. The day a cohort crosses twenty, nothing changes but what there is to print.
+
+### 9.4 Capture greed never touches the sixty-second flow
+
+Forage fields are read silently and never block a decode. **The farmer confirms only what drives the math and the stamp.** Everything else — model, hours, promo name, trade description, quote dates — is taken if it is on the paper and left null if it is not. An empty forage column is fine. A farmer who abandoned the form because we asked him about combine hours is not.
+
+### 9.5 The never-capture list
+
+These are on the paper. They are never extracted, never stored, and never inferable from what is stored:
+
+- Dealer or dealership identity, in any form
+- Salesperson name
+- Customer name, address, phone, email
+- Serial numbers, VINs, stock numbers, account numbers
+
+This is enforced by shape, not by discipline: `quoteExtractionSchema` has no field that can hold any of them, so a model that returned one would have nowhere to put it. `brand` means the manufacturer and is null when only a dealership name is visible. We rank quotes, never dealers.
+
 ### 9.1 Quote pile treasures (forage like alpha)
 
 Pile worth more than leads. Ten treasures sleep in it. Forage all, from day one, so no gold lost.

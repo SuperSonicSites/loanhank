@@ -8,6 +8,7 @@
 // computed and already formatted by src/finance/.
 
 import type { PromoPriceRate } from '../finance/index.js';
+import { CA_PROVINCES, US_STATES } from '../shared/schema.js';
 
 const styles = `
 /* ---------------------------------------------------------------------------
@@ -328,6 +329,20 @@ const FREQUENCIES: Array<[string, string]> = [
   ['annual', 'Once a year'],
 ];
 
+
+/**
+ * One list, both countries. A Canadian deal gets its arithmetic and an honest
+ * abstention, because no published Canadian equipment rate card exists to
+ * check it against, and an American one is not a substitute.
+ */
+function regionOptions(selected: string): string {
+  const group = (label: string, codes: readonly string[]) =>
+    `<optgroup label="${label}">`
+    + codes.map((code) => `<option value="${code}"${code === selected ? ' selected' : ''}>${code}</option>`).join('')
+    + '</optgroup>';
+  return `<option value="">Pick one</option>${group('United States', US_STATES)}${group('Canada', CA_PROVINCES)}`;
+}
+
 function frequencyOptions(selected: string): string {
   return FREQUENCIES
     .map(([value, label]) =>
@@ -530,6 +545,13 @@ ${view.rows.map(field).join('\n')}
       <p class="flag-read">Check this one carefully</p>
       <select id="paymentFrequency" name="paymentFrequency">
         ${frequencyOptions(view.frequency)}
+      </select>
+    </div>
+    <div class="field">
+      <label for="region">State or province</label>
+      <p class="flag-read">Where the deal is written</p>
+      <select id="region" name="region" required>
+        ${regionOptions('')}
       </select>
     </div>
     <div class="field checkbox">

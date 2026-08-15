@@ -38,13 +38,14 @@ h2 .n{font-family:var(--font-mono);font-weight:700}
 .rcpt tr.total td{border-top:3px double var(--ink);border-bottom:0;font-weight:600}
 .rcpt tr.total td.v{font-weight:700}
 </style>
+
 </head>
 <body>
-<main data-screen-label="Verdict card">
+<main data-screen-label="verdict card">
 <header class="wmrow"><span class="wm">LOANHANK</span>
 <div class="fields">
 <div class="fld"><span class="lab">SHEET</span><span class="val">verdict</span></div>
-<div class="fld"><span class="lab">REV</span><span class="val">A</span></div>
+<div class="fld"><span class="lab">REV</span><span class="val">B</span></div>
 <div class="fld"><span class="lab">DATE</span><span class="val">8/2026</span></div>
 </div>
 </header>
@@ -52,42 +53,26 @@ h2 .n{font-family:var(--font-mono);font-weight:700}
 <h2><span class="n">1</span> CHECKS OUT</h2>
 <div><span class="stamp st-good">CHECKS OUT</span></div>
 <p class="verdict">This deal checks out. We'd take it.</p>
-<p class="ref">Comparable published equipment rate <span class="num">6.5%</span>, subject to approval. You are <span class="num">40</span> basis points over. AgDirect published card, as of 2026-07-01.</p>
+<p class="ref">Comparable published equipment rate <span class="num">7.25%</span>, subject to approval. You are <span class="num">431</span> basis points under. AgDirect, $25,000-$99,999, 5 years, fixed, as of 2026-08-01.</p>
+<p class="note">This example blesses the dealer's promo and stays canonical for that reason. A tool that never says take the deal is a tool nobody believes.</p>
 </section>
 <section>
 <h2><span class="n">2</span> LOOK CLOSER</h2>
 <div><span class="stamp st-caution">LOOK CLOSER</span></div>
-<p class="verdict">Look closer. The <span class="num">0%</span> costs you <span class="num">$2,347</span> more than the cash price.</p>
-<p class="ref">Comparable published equipment rate <span class="num">6.5%</span>, subject to approval. You are <span class="num">140</span> basis points over. AgDirect published card, as of 2026-07-01.</p>
+<p class="verdict">Look closer. This deal prices at 9.90%. The comparable published rate is 7.25%. The difference costs you $3,726 over the term.</p>
+<p class="ref">Comparable published equipment rate <span class="num">7.25%</span>, subject to approval. You are <span class="num">265</span> basis points over. AgDirect, $25,000-$99,999, 4 years, fixed, as of 2026-08-01.</p>
 </section>
 <section>
 <h2><span class="n">3</span> No verdict. No stamp.</h2>
 <p class="verdict">No verdict yet. Here's what's missing.</p>
-<div class="missing">
-<div>Term on your quote: <span class="num">84</span> months.</div>
-<div>Published rate cards for this equipment stop at <span class="num">72</span> months. There is no comparable rate, and we won't guess one.</div>
-</div>
-<div class="hl-lab">Your real rate</div>
-<div class="hl-rate">7.9%</div>
-<table class="rcpt">
-<tbody>
-<tr><td>Quoted price</td><td class="v">$84,500</td></tr>
-<tr><td>Cash discount</td><td class="v">− $6,000</td></tr>
-<tr><td>True amount financed</td><td class="v">$78,500</td></tr>
-<tr><td>Total of payments</td><td class="v">$86,847</td></tr>
-<tr class="total"><td>Cost of the "0%"</td><td class="v">$2,347</td></tr>
-</tbody>
-</table>
-<p class="fnote">This is an abstention, not a judgment. No stamp, no grey badge, no outline stamp, no pending chip. The rate and the receipt still print in full. Only the stamp is absent, and the absence is the message.</p>
+<p>Term on your quote: <span class="num">96 months</span>. Published rate cards for this equipment stop at <span class="num">84 months</span>. There is no comparable rate, and we won't guess one.</p>
+<p class="note">An abstention is not a third stamp. No stamp, no grey badge, no neutral chip. The absence of the stamp is the message, and the words carry it.</p>
 </section>
 <section>
-<h2><span class="n">4</span> Stamp rules</h2>
-<div class="missing">
-<div>Two stamps exist and there will never be a third. Courier Prime Bold caps, <span class="num">24px</span>, <span class="num">3px</span> border, <span class="num">2px</span> corners, rotated <span class="num">-1.5</span> degrees.</div>
-<div>A verdict is three things at once, never colour alone: the colour, the stamp shape, and the words. About <span class="num">8</span> percent of this audience is colourblind, and green against amber alone fails exactly them.</div>
-<div>This plain box is the standing render. A real rubber stamp impression gets scanned and dropped in later. No vector distressing, no fake ink bleed, no torn edge. Fake antique is worse than plain.</div>
-</div>
+<h2><span class="n">4</span> Anatomy</h2>
+<p class="note">Stamp: mono caps, 24px, 0.08em tracking, 3px border, 2px radius, rotated -1.5deg. Field green on field-fill for CHECKS OUT, amber ink on amber-fill for LOOK CLOSER. Two stamps exist and there will never be a third. Colour never carries the verdict alone: stamp shape and words carry it too.</p>
 </section>
+<p class="note">Figures on this sheet are design.md §2¾ canon, which is engine output. Do not edit them here; edit the engine or the canon block and re-run <code>design/_sweep-from-canon.mjs</code>.</p>
 </main>
 </body>
 </html>

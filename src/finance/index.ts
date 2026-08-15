@@ -1311,12 +1311,14 @@ export interface BenchmarkRow {
   rateBps: number;
   rateKind: 'fixed' | 'variable';
   tier: number;
+  country: 'US' | 'CA';
 }
 
 export interface BenchmarkCriteria {
   amountCents: number;
   termMonths: number;
   rateKind: 'fixed' | 'variable';
+  country: 'US' | 'CA';
 }
 
 /**
@@ -1334,6 +1336,10 @@ export interface BenchmarkCriteria {
 export function matchBenchmark(rows: BenchmarkRow[], criteria: BenchmarkCriteria): BenchmarkRow | null {
   const candidates = rows.filter((candidate) =>
     candidate.tier === 1
+    // A card from another country is not a near miss. It is a different
+    // market, a different currency and a different lender, and comparing
+    // across them is exactly the purpose-mixing spec.md section 4 forbids.
+    && candidate.country === criteria.country
     && candidate.rateKind === criteria.rateKind
     && criteria.amountCents >= candidate.amountMinCents
     && (candidate.amountMaxCents === null || criteria.amountCents <= candidate.amountMaxCents));
@@ -1671,4 +1677,177 @@ export function decodeLedger(ledger: DealLedger): LedgerDecode {
       totalOfPaymentsCents + ledger.downPaymentCents + totals.upfrontFinanceOnlyFeesCents - totals.cashOutlayCents,
     unavailableReason: rate.unavailableReason,
   };
+}
+
+// ---------------------------------------------------------------------------
+// THE PEER LADDER — spec.md section 9
+//
+// Two systems, permanently separate, and this is the one that comes alive.
+//
+// The stamp is anchored: a published rate card plus a versioned policy buffer,
+// never influenced by the pile. Nothing here touches it. What the pile earns
+// is context: what quotes like yours actually carry, once enough of them exist
+// to say so honestly.
+//
+// The ladder returns null for weeks, and that is the correct output. The day a
+// cohort crosses twenty nothing changes except that there is something true to
+// print. It is never rescued by pooling a different category, a different
+// condition, a different country, or a different currency.
+// ---------------------------------------------------------------------------
+
+/** Below this, no peer statistic is ever shown. Published rule, not a knob. */
+export const COHORT_MIN_N = 20;
+
+/** Versioned so /how-we-figure-it can print which rules produced a number. */
+export const PEER_POLICY_VERSION = 'v1 (2026-08-15)';
+
+export interface CohortSubject {
+  country: 'US' | 'CA';
+  currency: 'USD' | 'CAD';
+  quarter: string;
+  equipCategory: string | null;
+  newOrUsed: string | null;
+  termBand: string | null;
+  priceBand: string | null;
+}
+
+export interface CohortRow extends CohortSubject {
+  realRateAllInBps: number;
+}
+
+export interface CohortResult {
+  key: string;
+  label: string;
+  n: number;
+  medianBps: number;
+  p25Bps: number;
+  p75Bps: number;
+  quartersIncluded: string[];
+  droppedDimensions: Array<'priceBand' | 'termBand'>;
+  policyVersion: string;
+}
+
+/**
+ * The R-7 percentile, which is what Excel's PERCENTILE.INC and numpy's default
+ * both compute. Chosen because a farmer or a journalist checking our published
+ * median in their own tool has to get our number back, not one near it.
+ */
+function percentile(sorted: number[], fraction: number): number {
+  if (sorted.length === 1) return sorted[0] as number;
+  const position = (sorted.length - 1) * fraction;
+  const lower = Math.floor(position);
+  const upper = Math.ceil(position);
+  const low = sorted[lower] as number;
+  if (lower === upper) return low;
+  return Math.round(low + (position - lower) * ((sorted[upper] as number) - low));
+}
+
+interface LadderStep {
+  quarters: number;
+  dropped: Array<'priceBand' | 'termBand'>;
+}
+
+// Fixed and ordered. Determinism matters more than cleverness here: the same
+// pile and the same quote must always produce the same cohort, or a statistic
+// stops being reproducible.
+const LADDER: LadderStep[] = [
+  { quarters: 1, dropped: [] },
+  { quarters: 1, dropped: ['priceBand'] },
+  { quarters: 1, dropped: ['priceBand', 'termBand'] },
+  { quarters: 2, dropped: ['priceBand', 'termBand'] },
+  { quarters: 4, dropped: ['priceBand', 'termBand'] },
+];
+
+function cohortLabel(subject: CohortSubject, dropped: Array<'priceBand' | 'termBand'>): string {
+  const parts = [subject.newOrUsed, subject.equipCategory].filter(Boolean).join(' ');
+  const term = dropped.includes('termBand') ? null : subject.termBand;
+  const price = dropped.includes('priceBand') ? null : subject.priceBand;
+  return [parts || 'equipment', term ? `${term} months` : null, price]
+    .filter(Boolean)
+    .join(', ');
+}
+
+/**
+ * The finest cohort that reaches twenty, or null.
+ *
+ * `quarterWindow` is the quarters to consider, newest first, and the caller
+ * supplies it because the engine never reads a clock.
+ */
+export function cohortLadder(
+  rows: CohortRow[],
+  subject: CohortSubject,
+  quarterWindow: string[],
+): CohortResult | null {
+  for (const step of LADDER) {
+    const quarters = quarterWindow.slice(0, step.quarters);
+    const matching = rows.filter((row) =>
+      // Country and currency are never dropped and never widened. Different
+      // money is not a wider cohort, it is a different question.
+      row.country === subject.country
+      && row.currency === subject.currency
+      && row.equipCategory === subject.equipCategory
+      && row.newOrUsed === subject.newOrUsed
+      && quarters.includes(row.quarter)
+      && (step.dropped.includes('termBand') || row.termBand === subject.termBand)
+      && (step.dropped.includes('priceBand') || row.priceBand === subject.priceBand));
+
+    if (matching.length < COHORT_MIN_N) continue;
+
+    const sorted = matching.map((row) => row.realRateAllInBps).sort((a, b) => a - b);
+    const keyParts = [
+      subject.country,
+      subject.currency,
+      subject.equipCategory ?? 'any',
+      subject.newOrUsed ?? 'any',
+      step.dropped.includes('termBand') ? 'any' : subject.termBand ?? 'any',
+      step.dropped.includes('priceBand') ? 'any' : subject.priceBand ?? 'any',
+      quarters.join('+'),
+    ];
+    return {
+      key: keyParts.join('|'),
+      label: cohortLabel(subject, step.dropped),
+      n: sorted.length,
+      medianBps: percentile(sorted, 0.5),
+      p25Bps: percentile(sorted, 0.25),
+      p75Bps: percentile(sorted, 0.75),
+      quartersIncluded: quarters,
+      droppedDimensions: step.dropped,
+      policyVersion: PEER_POLICY_VERSION,
+    };
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// SANITY BOUNDS
+//
+// The third pollution source, after synthetic rows and unreconciled ones. A
+// fat-fingered price is not a market signal, and one $900,000,000 tractor
+// drags a median nobody can defend.
+//
+// Flagged, never refused. The farmer still gets his arithmetic; the pile just
+// does not publish it.
+// ---------------------------------------------------------------------------
+
+export const SANITY_MIN_PRICE_CENTS = 100_000;        // $1,000
+export const SANITY_MAX_PRICE_CENTS = 500_000_000;    // $5,000,000
+export const SANITY_MIN_TERM_MONTHS = 1;
+export const SANITY_MAX_TERM_MONTHS = 120;
+
+export type SanityReason = 'price_out_of_range' | 'term_out_of_range' | 'nonpositive_payment';
+
+export function quoteWithinSanityBounds(input: {
+  quotedPriceCents: number;
+  termMonths: number;
+  paymentAmountCents: number;
+}): { outOfBounds: boolean; reasons: SanityReason[] } {
+  const reasons: SanityReason[] = [];
+  if (input.quotedPriceCents < SANITY_MIN_PRICE_CENTS || input.quotedPriceCents > SANITY_MAX_PRICE_CENTS) {
+    reasons.push('price_out_of_range');
+  }
+  if (input.termMonths < SANITY_MIN_TERM_MONTHS || input.termMonths > SANITY_MAX_TERM_MONTHS) {
+    reasons.push('term_out_of_range');
+  }
+  if (input.paymentAmountCents <= 0) reasons.push('nonpositive_payment');
+  return { outOfBounds: reasons.length > 0, reasons };
 }

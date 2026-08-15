@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 import {
   calculatePaymentCents,
@@ -36,6 +36,7 @@ const CARD_ROW = {
   amountMaxCents: 9_999_900,
   rateKind: 'fixed' as const,
   tier: 1,
+  country: 'US' as const,
 };
 const CARD: BenchmarkRow[] = [
   { ...CARD_ROW, id: '2to3y', termBand: '2-3 years', termMinMonths: 24, termMaxMonths: 36, rateBps: 725 },
@@ -99,6 +100,7 @@ describe('design.md canonical example A, CHECKS OUT', () => {
       amountCents: quotedPriceCents as number,
       termMonths: 60,
       rateKind: 'fixed',
+      country: 'US',
     });
     const verdict = decideVerdict({
       realRateAllInBps: rate.realRateAllInBps,
@@ -181,6 +183,7 @@ describe('design.md canonical example B, LOOK CLOSER', () => {
       amountCents: amountFinancedCents as number,
       termMonths: 48,
       rateKind: 'fixed',
+      country: 'US',
     });
     const verdict = decideVerdict({
       realRateAllInBps: rate.realRateAllInBps,
@@ -224,5 +227,82 @@ describe('design.md', () => {
     // never reappear as a verdict figure.
     expect(text).not.toContain('The 0% costs you $2,347 more than the cash price');
     expect(text).not.toContain('Total of payments     $86,847');
+  });
+});
+
+describe('the design bundle carries no arithmetic of its own', () => {
+  // design/ is the visual system: tokens, type, colour, spacing, component
+  // anatomy. It has no copy authority and no arithmetic authority.
+  //
+  // The first bundle shipped carrying figures canon had already retired, and
+  // a reader of those cards would have reintroduced every one of them. So the
+  // retired figures are named here and the build fails if any comes back.
+  //
+  // Two files are exempt because naming the figures is their job:
+  // _sweep-from-canon.mjs has to name them in order to replace them, and
+  // README.md has to name them to explain why this gate exists at all.
+  const RETIRED = [
+    '$2,347',      // cost against the quoted price, sold as the cost against cash
+    '$86,847',     // total of payments from the same broken example
+    '7.9%',        // the rate that went with them
+    '6.5%',        // the $250,000+ band rate, quoted for an $84,500 deal
+    '$75,000 to $100,000', // a band that is not on the AgDirect card
+    'stop at 72 months',   // the card runs to 84
+    'n=143',       // a peer count from a pile that does not exist
+    '7.4%',        // the median that went with it
+  ];
+
+  it('contains none of the retired figures', async () => {
+    const root = new URL('../design/', import.meta.url);
+    const offenders: string[] = [];
+
+    async function walk(directory: URL, prefix = ''): Promise<void> {
+      for (const entry of await readdir(directory, { withFileTypes: true })) {
+        const name = `${prefix}${entry.name}`;
+        if (entry.name === '_sweep-from-canon.mjs' || entry.name === 'README.md') continue;
+        if (entry.isDirectory()) {
+          await walk(new URL(`${entry.name}/`, directory), `${name}/`);
+          continue;
+        }
+        if (!/\.(html|css|md|json|js|mjs)$/.test(entry.name)) continue;
+        const text = await readFile(new URL(entry.name, directory), 'utf8');
+        for (const figure of RETIRED) {
+          if (text.includes(figure)) offenders.push(`${name}: ${figure}`);
+        }
+      }
+    }
+
+    await walk(root);
+    expect(offenders, `retired figures are back in the design bundle:\n${offenders.join('\n')}`)
+      .toEqual([]);
+  });
+
+  it('keeps the worked cards agreeing with canon', async () => {
+    const entries = await canon();
+    const verdict = await readFile(new URL('../design/guidelines/Verdict.html', import.meta.url), 'utf8');
+    const receipt = await readFile(new URL('../design/guidelines/Receipt.html', import.meta.url), 'utf8');
+
+    expect(verdict).toContain(figure(entries, 'a.line'));
+    expect(verdict).toContain(figure(entries, 'b.line'));
+    expect(receipt).toContain(figure(entries, 'a.real_rate'));
+    expect(receipt).toContain(figure(entries, 'a.cash_price'));
+    expect(receipt).toContain(figure(entries, 'a.published_amount_band'));
+  });
+
+  it('does not keep a second copy of design.md', async () => {
+    // A stale duplicate of the law is worse than no copy: somebody reads the
+    // wrong one and is not wrong to have trusted it.
+    const names: string[] = [];
+    async function walk(directory: URL, prefix = ''): Promise<void> {
+      for (const entry of await readdir(directory, { withFileTypes: true })) {
+        if (entry.isDirectory()) {
+          await walk(new URL(`${entry.name}/`, directory), `${prefix}${entry.name}/`);
+        } else if (entry.name === 'design.md') {
+          names.push(`${prefix}${entry.name}`);
+        }
+      }
+    }
+    await walk(new URL('../design/', import.meta.url));
+    expect(names).toEqual([]);
   });
 });

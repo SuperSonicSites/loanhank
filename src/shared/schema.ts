@@ -405,6 +405,35 @@ const optionalMoneyCentsSchema = z.string().transform((value, context) => {
   return cents;
 });
 
+/**
+ * States and provinces, in one list, grouped by country.
+ *
+ * The country is derived from the region rather than asked twice: a farmer who
+ * picks Saskatchewan has told us everything we need, and one fewer question is
+ * one fewer reason to abandon a sixty-second flow.
+ */
+export const US_STATES = [
+  'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA', 'HI', 'ID', 'IL', 'IN', 'IA',
+  'KS', 'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
+  'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT',
+  'VA', 'WA', 'WV', 'WI', 'WY',
+] as const;
+
+export const CA_PROVINCES = [
+  'AB', 'BC', 'MB', 'NB', 'NL', 'NS', 'NT', 'NU', 'ON', 'PE', 'QC', 'SK', 'YT',
+] as const;
+
+export type Region = (typeof US_STATES)[number] | (typeof CA_PROVINCES)[number];
+
+export function countryForRegion(region: string): 'US' | 'CA' | null {
+  if ((US_STATES as readonly string[]).includes(region)) return 'US';
+  if ((CA_PROVINCES as readonly string[]).includes(region)) return 'CA';
+  return null;
+}
+
+export const currencyForCountry = (country: 'US' | 'CA'): 'USD' | 'CAD' =>
+  (country === 'CA' ? 'CAD' : 'USD');
+
 export const quickPathFormSchema = z.object({
   quotedPrice: moneyCentsSchema,
   cashDiscount: optionalMoneyCentsSchema,
@@ -628,6 +657,17 @@ export const ledgerFormSchema = z.object({
    * fee; we say we will not rate a deal with an amount nobody can explain.
    */
   unexplainedAmount: z.string().optional().transform((value) => value === 'on'),
+  region: z.string().transform((value, context) => {
+    const region = value.trim().toUpperCase();
+    if (countryForRegion(region) === null) {
+      context.addIssue({ code: 'custom', message: 'Pick the state or province the deal is in.' });
+      return z.NEVER;
+    }
+    return region;
+  }),
+}).transform((form) => {
+  const country = countryForRegion(form.region) as 'US' | 'CA';
+  return { ...form, country, currency: currencyForCountry(country) };
 });
 
 export type LedgerForm = z.infer<typeof ledgerFormSchema>;

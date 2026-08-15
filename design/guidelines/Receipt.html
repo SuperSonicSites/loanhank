@@ -37,58 +37,39 @@ h2 .n{font-family:var(--font-mono);font-weight:700}
 .printwrap .src{color:#000000}
 .printwrap .bench{color:#000000}
 </style>
+
 </head>
 <body>
-<main data-screen-label="Receipt card">
+<main data-screen-label="receipt card">
 <header class="wmrow"><span class="wm">LOANHANK</span>
 <div class="fields">
 <div class="fld"><span class="lab">SHEET</span><span class="val">receipt</span></div>
-<div class="fld"><span class="lab">REV</span><span class="val">A</span></div>
+<div class="fld"><span class="lab">REV</span><span class="val">B</span></div>
 <div class="fld"><span class="lab">DATE</span><span class="val">8/2026</span></div>
 </div>
 </header>
 <section>
 <h2><span class="n">1</span> The ticket. This table is the product.</h2>
-<div class="hl-lab">Your real rate</div>
-<div class="hl-rate">7.9%</div>
-<table class="rcpt">
-<tbody>
-<tr><td>Quoted price</td><td class="v">$84,500</td></tr>
-<tr><td>Cash discount</td><td class="v">− $6,000</td></tr>
-<tr><td>True amount financed</td><td class="v">$78,500</td></tr>
-<tr><td>Total of payments</td><td class="v">$86,847</td></tr>
-<tr class="total"><td>Cost of the "0%"</td><td class="v">$2,347</td></tr>
-</tbody>
+<p class="rate-label">Your real rate</p>
+<p class="rate">2.94%</p>
+<table>
+<tr><td>Quoted price</td><td class="num">$84,500</td></tr>
+<tr><td>Cash discount</td><td class="num">&minus; $6,000</td></tr>
+<tr><td>Cash price today</td><td class="num">$78,500</td></tr>
+<tr><td>Total of payments</td><td class="num">$84,500</td></tr>
+<tr class="total"><td>What financing costs</td><td class="num">$6,000</td></tr>
 </table>
-<p class="bench">The published rate for this band is <span class="num">8.2%</span>¹. Quotes like yours carry a median of <span class="num">7.4%</span>², <span class="num">n=143</span>.</p>
-<div class="src">
-<div>¹ AgDirect published equipment rate card, $75,000 to $100,000 band, 60-month term, as of 2026-07-01</div>
-<div>² Chicago Fed AgLetter, Q1 2026</div>
-</div>
-<p class="fnote">Labels left in Libre Franklin. Values right-aligned in Courier Prime 16px, ink, always to the dollar. The minus is a real minus, aligned in the mono column. Hairline rule between every line, double rule above the total. No zebra striping, no header fill, no cell borders, no card, no shadow, no rounded wrapper.</p>
+<p class="ref">The published rate for this band is <span class="num">7.25%</span><sup>1</sup>, subject to approval.</p>
+<p class="ref">Quotes like yours carry a median of <span class="num">M.MM%</span><sup>2</sup>, <span class="num">n=NN</span>.</p>
+<p class="note"><sup>1</sup> AgDirect published equipment rate card, $25,000-$99,999 band, 5 years term, as of 2026-08-01.<br>
+<sup>2</sup> Placeholder, not canon. No pile exists yet, so there is no median and no n. The peer row does not render at all until a cohort reaches twenty, and it always prints its own n.</p>
 </section>
 <section>
-<h2><span class="n">2</span> Print</h2>
-<div class="printwrap">
-<div class="hl-lab">Your real rate</div>
-<div class="hl-rate">7.9%</div>
-<table class="rcpt">
-<tbody>
-<tr><td>Quoted price</td><td class="v">$84,500</td></tr>
-<tr><td>Cash discount</td><td class="v">− $6,000</td></tr>
-<tr><td>True amount financed</td><td class="v">$78,500</td></tr>
-<tr><td>Total of payments</td><td class="v">$86,847</td></tr>
-<tr class="total"><td>Cost of the "0%"</td><td class="v">$2,347</td></tr>
-</tbody>
-</table>
-<p class="bench">The published rate for this band is <span class="num">8.2%</span>¹. Quotes like yours carry a median of <span class="num">7.4%</span>², <span class="num">n=143</span>.</p>
-<div class="src">
-<div>¹ AgDirect published equipment rate card, $75,000 to $100,000 band, 60-month term, as of 2026-07-01</div>
-<div>² Chicago Fed AgLetter, Q1 2026</div>
-</div>
-</div>
-<p class="fnote">Pure black on pure white. The farmer prints this and carries it to the dealer's desk, so it survives an office laser printer with no colour at all. Rules print black. The white here is the print sheet itself, not a product surface.</p>
+<h2><span class="n">2</span> Anatomy</h2>
+<p class="note">Labels left in Libre Franklin. Values right-aligned in Courier Prime 16px, ink, always to the dollar. The minus is a real minus, aligned in the mono column. Hairline rule between every line, double rule above the total. No zebra striping, no header fill, no cell borders, no card, no shadow, no rounded wrapper.</p>
+<p class="note">Print: black on white, same rules, stamp included. The printout is what the farmer carries back to the dealer desk, and it is the best marketing this product will ever ship.</p>
 </section>
+<p class="note">Figures on this sheet are design.md §2¾ canon, which is engine output. Do not edit them here; edit the engine or the canon block and re-run <code>design/_sweep-from-canon.mjs</code>.</p>
 </main>
 </body>
 </html>

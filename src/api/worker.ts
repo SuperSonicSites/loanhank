@@ -10,7 +10,7 @@ import type {
 import { Hono } from 'hono';
 import {
   costAgainstBenchmark, decideVerdict, decodeLedger, formatCurrency, formatRate,
-  matchBenchmark, promoPriceRate, VERDICT_BUFFER_VERSION,
+  matchBenchmark, promoPriceRate, quoteWithinSanityBounds, VERDICT_BUFFER_VERSION,
   type BenchmarkRow, type DealLedger, type LedgerFee,
 } from '../finance/index.js';
 import { hashAccessKey } from './security.js';
@@ -415,6 +415,7 @@ async function decodeFullLedger(c: {
     financeOnlyFee: String(body.financeOnlyFee ?? ''),
     financeOnlyFeeRolled: body.financeOnlyFeeRolled === undefined ? undefined : 'on',
     unexplainedAmount: body.unexplainedAmount === undefined ? undefined : 'on',
+    region: String(body.region ?? ''),
   });
 
   if (!parsed.success) {
@@ -476,7 +477,7 @@ async function decodeFullLedger(c: {
   // Tier-1 rows only, most recent card first. The engine picks the band.
   const rows = await c.env.DB.prepare(
     `SELECT id, source, source_url, as_of_date, amount_band, amount_min_cents, amount_max_cents,
-            term_band, term_min_months, term_max_months, rate_bps, rate_kind, tier
+            term_band, term_min_months, term_max_months, rate_bps, rate_kind, tier, country
        FROM benchmarks
       WHERE tier = 1 AND as_of_date = (SELECT MAX(as_of_date) FROM benchmarks WHERE tier = 1)`,
   ).all<Record<string, string | number | null>>();
@@ -495,13 +496,24 @@ async function decodeFullLedger(c: {
     rateBps: Number(row.rate_bps),
     rateKind: String(row.rate_kind) === 'variable' ? 'variable' : 'fixed',
     tier: Number(row.tier),
+    country: String(row.country) === 'CA' ? 'CA' : 'US',
   }));
 
   const termMonths = Math.round(form.paymentCount * (12 / PERIODS_PER_YEAR[form.paymentFrequency]));
+  const country = form.country;
+  // Garbage is the third pollution source after synthetic and unreconciled
+  // rows. Flagged, never refused: the farmer still gets his arithmetic, the
+  // pile just never publishes it.
+  const bounds = quoteWithinSanityBounds({
+    quotedPriceCents: form.quotedPrice,
+    termMonths,
+    paymentAmountCents: form.payment,
+  });
   const benchmark = matchBenchmark(benchmarks, {
     amountCents: decoded.totals.amountFinancedCents,
     termMonths,
     rateKind: 'fixed',
+    country,
   });
   const verdict = decideVerdict({
     realRateAllInBps: decoded.realRateAllInBps,
@@ -521,8 +533,9 @@ async function decodeFullLedger(c: {
        amount_financed_cents, payment_amount_cents, payment_frequency, payment_count,
        term_months, stated_rate_bps, fees_json,
        real_rate_all_in_bps, reconciled, assumptions_json, verdict, verdict_ref_id,
-       benchmark_at_ts, delta_vs_benchmark_bps
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?)`,
+       benchmark_at_ts, delta_vs_benchmark_bps,
+       country, currency, province_or_state, out_of_bounds
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).bind(
     decodeId, ts, quarterOf(ts),
     form.quotedPrice, form.cashDiscount, decoded.totals.cashOutlayCents,
@@ -534,12 +547,15 @@ async function decodeFullLedger(c: {
     verdict.verdict, verdict.verdict === 'none' ? null : (benchmark as BenchmarkRow).id,
     benchmark === null ? null : benchmark.asOfDate,
     verdict.deltaBps,
+    country, form.currency, form.region, bounds.outOfBounds ? 1 : 0,
   ).run();
 
   await recordEvent(c.env, 'decode', decodeId, {
     path: 'ledger',
     real_rate_all_in_bps: decoded.realRateAllInBps,
     verdict: verdict.verdict,
+    country,
+    out_of_bounds: bounds.outOfBounds ? bounds.reasons : undefined,
   });
 
   // The extraction flywheel. Only written when the ledger came off a photo.
@@ -582,7 +598,7 @@ async function decodeFullLedger(c: {
       : `This is not the legal APR. It is the annual cost of this deal against its cash alternative, `
         + `using the costs we can verify. Buffer policy ${VERDICT_BUFFER_VERSION}.`,
     assumption: null,
-    missing: missingForVerdict(verdict.noVerdictReason, decoded.reconciliation.differenceCents),
+    missing: missingForVerdict(verdict.noVerdictReason, decoded.reconciliation.differenceCents, country),
     lines: [
       { label: 'Quoted price', amount: formatCurrency(form.quotedPrice) },
       { label: 'Cash discount', amount: `− ${formatCurrency(form.cashDiscount)}` },
@@ -598,7 +614,7 @@ async function decodeFullLedger(c: {
 
 const PERIODS_PER_YEAR = { monthly: 12, quarterly: 4, semiannual: 2, annual: 1 } as const;
 
-function missingForVerdict(reason: string | null, differenceCents: number): string[] {
+function missingForVerdict(reason: string | null, differenceCents: number, country: 'US' | 'CA'): string[] {
   if (reason === null) return [];
   if (reason === 'unknown_fee') {
     return ['An amount on this quote that nobody has explained yet. Find out what it is and run it again.'];
@@ -610,6 +626,12 @@ function missingForVerdict(reason: string | null, differenceCents: number): stri
     ];
   }
   if (reason === 'no_matched_benchmark') {
+    if (country === 'CA') {
+      return [
+        'No published Canadian equipment rate exists to compare against. We show the math; '
+        + 'there is no card to check it against.',
+      ];
+    }
     return ['No published equipment rate matches this size and term, so we have nothing honest to rate it against.'];
   }
   return MISSING_FOR_VERDICT;
