@@ -278,7 +278,18 @@ function escapeHtml(value: string): string {
     .replace(/"/g, '&quot;');
 }
 
-function shell(title: string, body: string): string {
+/** Footer-linked on every page (spec.md §10). */
+const FOOTER_PAGES: Array<[string, string]> = [
+  ['/how-we-figure-it', 'How we figure it'],
+  ['/how-we-make-money', 'How we make money'],
+  ['/straight-answers', 'Straight answers'],
+  ['/privacy', 'Privacy'],
+  ['/terms', 'Terms'],
+  ['/whos-behind-this', "Who's behind this"],
+  ['/contact', 'Contact'],
+];
+
+export function shell(title: string, body: string): string {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -289,6 +300,7 @@ function shell(title: string, body: string): string {
 <link rel="preload" as="font" type="font/woff2" href="/fonts/libre-franklin-latin-900-normal.woff2" crossorigin>
 <link rel="preload" as="font" type="font/woff2" href="/fonts/libre-franklin-latin-400-normal.woff2" crossorigin>
 <link rel="preload" as="font" type="font/woff2" href="/fonts/courier-prime-latin-400-normal.woff2" crossorigin>
+<link rel="manifest" href="/manifest.webmanifest">
 <style>${styles}</style>
 </head>
 <body>
@@ -298,6 +310,7 @@ function shell(title: string, body: string): string {
   <p class="tagline">Runs the numbers. Takes no side.</p>
 ${body}
   <footer>
+    <nav>${FOOTER_PAGES.map(([href, label]) => `<a href="${href}">${label}</a>`).join('')}</nav>
     <p>Free tool. Nothing leaves here unless you say go.</p>
   </footer>
 </main>
@@ -445,7 +458,7 @@ export function renderTicket(view: TicketView): string {
     .map((line) => `      <tr><td>${escapeHtml(line.label)}</td><td>${escapeHtml(line.amount)}</td></tr>`)
     .join('\n');
 
-  return shell('Your ticket — LoanHank', `  <div class="ticket">
+  return shell('Your ticket · LoanHank', `  <div class="ticket">
     <hr class="ticket-rule">
     <p class="headline-label">Cost of the cash discount</p>
     <p class="headline-rate">${escapeHtml(view.rate)}</p>
@@ -533,7 +546,7 @@ export function renderConfirm(view: ConfirmView): string {
 ${row.hint ? `      <p class="note">${escapeHtml(row.hint)}</p>\n` : ''}    </div>`;
   };
 
-  return shell('Check these — LoanHank', `${warningBlock}  <h1>Check these against your paper. Fix anything we got wrong.</h1>
+  return shell('Check these · LoanHank', `${warningBlock}  <h1>Check these against your paper. Fix anything we got wrong.</h1>
   <p>Your photo is gone already. It was read and never saved.</p>
 
   <form method="post" action="/decode">
@@ -670,7 +683,7 @@ export function renderVerdictTicket(view: VerdictTicketView): string {
   </div>
 `;
 
-  return shell('Your ticket — LoanHank', `  <div class="ticket">
+  return shell('Your ticket · LoanHank', `  <div class="ticket">
     <hr class="ticket-rule">
     <p class="headline-label">Your real rate</p>
     <p class="headline-rate">${escapeHtml(view.rate)}</p>
@@ -691,7 +704,7 @@ ${view.assumption ? `  <p class="assumption">${escapeHtml(view.assumption)}</p>\
 
 /** Plain confirmations. One line, on voice, nothing to click. */
 export function renderNotice(heading: string, body: string): string {
-  return shell(`${heading} — LoanHank`, `  <h1>${escapeHtml(heading)}</h1>
+  return shell(`${heading} · LoanHank`, `  <h1>${escapeHtml(heading)}</h1>
   <p>${escapeHtml(body)}</p>
   <p class="no-print"><a href="/">Back to the tool</a></p>
 `);

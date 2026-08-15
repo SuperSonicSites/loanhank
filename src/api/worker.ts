@@ -25,6 +25,10 @@ import {
 import { assertUploadAllowed, PublicApiError } from './security.js';
 import { OpenAIQuoteExtractor } from './extractor.js';
 import { renderTeardownPdf, type TeardownLine } from './teardown-pdf.js';
+import {
+  renderContact, renderHowWeFigureIt, renderHowWeMakeMoney, renderManifest, renderNotFound,
+  renderPrivacy, renderSent, renderStraightAnswers, renderTerms, renderWhosBehindThis,
+} from '../web/pages.js';
 import { getConfig } from './env.js';
 
 // Must match the crons in wrangler.jsonc. An unrecognized cron logs and does
@@ -128,6 +132,10 @@ function confirmRows(extraction: QuoteExtraction): ConfirmRow[] {
     ...(confirmableField(name, label, { value: source.value_cents, confidence: source.confidence }, centsToInput) as ConfirmableField),
     ...(hint ? { hint } : {}),
   });
+  const text = (name: string, label: string, source: { value: string | null; confidence: number }, hint?: string): ConfirmRow => ({
+    ...(confirmableField(name, label, source) as ConfirmableField),
+    ...(hint ? { hint } : {}),
+  });
   const plain = (name: string, label: string, source: { value: number | null; confidence: number }, hint?: string): ConfirmRow => ({
     ...(confirmableField(name, label, source) as ConfirmableField),
     ...(hint ? { hint } : {}),
@@ -144,6 +152,11 @@ function confirmRows(extraction: QuoteExtraction): ConfirmRow[] {
     money('tradePayoff', 'Still owed on the trade', extraction.trade_payoff),
     money('deliverySetup', 'Delivery and setup', extraction.delivery_setup),
     money('financeOnlyFee', 'Fees you only pay if you finance', { value_cents: null, confidence: 0 }, 'Doc, origination, or required insurance. Leave empty if there are none.'),
+    // Read silently, never required. The expiry drives the only honest
+    // deadline this product has, and the quote date keeps stale paper out of a
+    // current-quarter median (spec.md 9.4: forage never blocks a decode).
+    text('quoteDate', 'Date on the quote', extraction.quote_date, 'Like 2026-08-11. Leave empty if it is not printed.'),
+    text('quoteExpiryDate', 'Quote valid until', extraction.quote_expiry_date, 'Leave empty if the paper does not say.'),
   ];
 }
 
@@ -485,6 +498,8 @@ async function decodeFullLedger(c: {
     financeOnlyFeeRolled: body.financeOnlyFeeRolled === undefined ? undefined : 'on',
     unexplainedAmount: body.unexplainedAmount === undefined ? undefined : 'on',
     region: String(body.region ?? ''),
+    quoteDate: String(body.quoteDate ?? ''),
+    quoteExpiryDate: String(body.quoteExpiryDate ?? ''),
   });
 
   if (!parsed.success) {
@@ -603,8 +618,9 @@ async function decodeFullLedger(c: {
        term_months, stated_rate_bps, fees_json,
        real_rate_all_in_bps, reconciled, assumptions_json, verdict, verdict_ref_id,
        benchmark_at_ts, delta_vs_benchmark_bps,
-       country, currency, province_or_state, out_of_bounds
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, ?, ?, ?, ?)`,
+       country, currency, province_or_state, out_of_bounds,
+       quote_date, quote_expiry_date
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).bind(
     decodeId, ts, quarterOf(ts),
     form.quotedPrice, form.cashDiscount, decoded.totals.cashOutlayCents,
@@ -617,6 +633,8 @@ async function decodeFullLedger(c: {
     benchmark === null ? null : benchmark.asOfDate,
     verdict.deltaBps,
     country, form.currency, form.region, bounds.outOfBounds ? 1 : 0,
+    form.quoteDate === '' ? null : form.quoteDate,
+    form.quoteExpiryDate === '' ? null : form.quoteExpiryDate,
   ).run();
 
   await recordEvent(c.env, 'decode', decodeId, {
@@ -789,10 +807,11 @@ app.post('/email', async (c) => {
   }
 
   await recordEvent(c.env, 'email', parsed.data.decodeId, {});
-  return c.html(renderNotice(
-    'On its way',
-    'Check your inbox in a minute. That is all we use your email for.',
-  ));
+
+  // The confirmation screen carries the second opt-in, and only when the
+  // farmer's own paper gives us a date to remind him about. No date, no offer.
+  const expiry = typeof row.quote_expiry_date === 'string' ? row.quote_expiry_date : null;
+  return c.html(renderSent(emailId, expiry));
 });
 
 // One click, both ways: the RFC 8058 POST and a plain link somebody can click.
@@ -832,6 +851,59 @@ app.post('/interest', async (c) => {
     answer === 'yes'
       ? 'Nothing has moved and nobody has your numbers. We are counting how many farmers would want that, and you are counted.'
       : 'Nothing moves. Your numbers stay here.',
+  ));
+});
+
+
+// The boring pages that keep the cave safe (spec.md §10). Static, cached, and
+// footer-linked from every screen.
+const STATIC_PAGES: Array<[string, () => string]> = [
+  ['/privacy', renderPrivacy],
+  ['/terms', renderTerms],
+  ['/how-we-make-money', renderHowWeMakeMoney],
+  ['/how-we-figure-it', renderHowWeFigureIt],
+  ['/straight-answers', renderStraightAnswers],
+  ['/contact', renderContact],
+  ['/whos-behind-this', renderWhosBehindThis],
+];
+for (const [path, render] of STATIC_PAGES) {
+  app.get(path, (c) => {
+    c.header('cache-control', 'public, max-age=600');
+    return c.html(render());
+  });
+}
+
+app.get('/manifest.webmanifest', (c) => {
+  c.header('content-type', 'application/manifest+json');
+  c.header('cache-control', 'public, max-age=86400');
+  return c.body(renderManifest());
+});
+
+app.notFound((c) => c.html(renderNotFound(), 404));
+
+
+// Opt-in to a reminder before the quote on the paper expires. Second ask, on
+// the screen after the teardown was already sent, and only ever offered when
+// the quote itself carried an expiry date.
+app.post('/remind', async (c) => {
+  if (!(await withinRateLimit(c, 'remind'))) {
+    return c.html(renderNotice('Give it a minute', 'That is a lot of requests in one minute.'), 429);
+  }
+  const body = await c.req.parseBody();
+  const emailId = String(body.emailId ?? '');
+  const remindOn = String(body.remindOn ?? '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(remindOn)) {
+    return c.html(renderNotice('No date to work from', 'That quote did not carry an expiry date we could read.'), 422);
+  }
+
+  await c.env.DB.prepare(
+    'UPDATE emails SET reminder_opt_in = 1, remind_on = ? WHERE id = ? AND unsubscribed_at IS NULL',
+  ).bind(remindOn, emailId).run();
+  c.executionCtx.waitUntil(recordEvent(c.env, 'reminder_opt_in', null, { remind_on: remindOn }));
+
+  return c.html(renderNotice(
+    'We will remind you',
+    `We will send one note before ${remindOn}, which is the date on your own paper. One note, and you can stop it from any email we send.`,
   ));
 });
 

@@ -366,6 +366,7 @@ All footer-linked. All Hank voice: plain-words summary box on top, lawyer text u
 8. `404` — one line, go-home link, on voice.
 
 **Email plumbing (law, not pages):**
+- **Every send this product makes is a send that was requested.** The teardown is asked for. The expiry reminder is opted into on a second screen, after the teardown, and only when the farmer's own paper carried a date. Nothing is sent because we decided he might like it. That posture is what satisfies CAN-SPAM and Canada's CASL at the same time, and CASL is the stricter of the two: it wants consent, not merely an exit. Counsel confirms the details.
 - Every email: one-click unsubscribe + postal address. CAN-SPAM, no exceptions.
 - No SMS v1. TCPA is a swamp; enter only with lawyer.
 - Log consent forever: timestamp + exact text version farmer saw (`consent_text_version`). Receipts protect cave too.
@@ -438,6 +439,8 @@ Check off before ads spend a dollar.
 - [ ] **Cost + abuse protection on `/extract`.** Max upload size (`security.ts` has bones — verify), Turnstile invisible mode on submit, hard monthly spend cap + alert on the LLM provider account. An abuse script hitting `/extract` is a bill, not an outage. Turnstile belongs on the photo path only: it needs JS, and the typed form must keep working without any (design.md §9).
 - [x] **Per-IP rate limit.** Native Workers rate limiting binding, 20 a minute per route per hashed IP, on `GET /` and `POST /decode`. Verified live: the twenty-first decode gets a 429. The form still renders when the page-view limit trips, because an undercounted funnel beats a farmer who cannot see the tool.
 - [x] **Email deliverability.** Resend, sending from `hank@mail.loanhank.com`, domain verified. DMARC is inherited from `loanhank.com` at `p=none`; tighten later.
+- [ ] **Tighten DMARC to `p=quarantine`** after the first few weeks of clean sending. `p=none` is right while nothing has sent; leaving it there once mail is flowing is leaving the door open.
+- [ ] **Real name and photograph for `/whos-behind-this`.** The page currently admits it is unfinished rather than inventing a byline. An anonymous site about money is a fair thing to distrust, and this is the biggest trust page there is.
 - [ ] **Postal address for the CAN-SPAM footer.** A PO box is fine. **This blocks the email gate**, which does not render and does not send while `POSTAL_ADDRESS` is empty. Nothing is stored either: a farmer who typed his address into a promise we cannot legally keep would have lost something real.
 - [ ] ~~Pick provider (Decision 10).~~ Send from `mail.loanhank.com`. SPF + DKIM + DMARC; DMARC starts `p=none`, tighten later. Postal address for the CAN-SPAM footer before the first teardown sends.
 - [ ] **Meta Business setup — start NOW, has lead time.** Business Manager + business verification + domain verification on loanhank.com + Conversions API token. Verification can take days-to-weeks.

@@ -503,6 +503,12 @@ const extractedCondition = z.object({
   confidence,
 });
 
+const extractedDate = z.object({
+  /** ISO 8601 date as printed. Null when the paper does not carry one. */
+  value: z.string().nullable(),
+  confidence,
+});
+
 const extractedBrand = z.object({
   /** Manufacturer only, e.g. "John Deere". Never a dealership name. */
   value: z.string().max(40).nullable(),
@@ -532,6 +538,8 @@ export const quoteExtractionSchema = z.object({
   trade_payoff: extractedMoney,
   balloon: extractedMoney,
   delivery_setup: extractedMoney,
+  quote_date: extractedDate,
+  quote_expiry_date: extractedDate,
   // Forage. Grab if on the paper, never require.
   brand: extractedBrand,
   model_year: extractedYear,
@@ -657,6 +665,8 @@ export const ledgerFormSchema = z.object({
    * fee; we say we will not rate a deal with an amount nobody can explain.
    */
   unexplainedAmount: z.string().optional().transform((value) => value === 'on'),
+  quoteDate: z.string().transform((value) => (/^\d{4}-\d{2}-\d{2}$/.test(value.trim()) ? value.trim() : '')),
+  quoteExpiryDate: z.string().transform((value) => (/^\d{4}-\d{2}-\d{2}$/.test(value.trim()) ? value.trim() : '')),
   region: z.string().transform((value, context) => {
     const region = value.trim().toUpperCase();
     if (countryForRegion(region) === null) {
