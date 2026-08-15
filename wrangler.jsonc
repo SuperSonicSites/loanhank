@@ -37,6 +37,18 @@
     { "binding": "BACKUPS", "bucket_name": "loanhank-backups" }
   ],
 
+  // Per-IP rate limit (spec.md Decision 7). Every decode writes a row into the
+  // pile and every extract will cost real model money, so both are metered.
+  // Twenty a minute is generous for a farmer trying variations on his quote
+  // and useless to a script.
+  "ratelimits": [
+    {
+      "name": "DECODE_LIMIT",
+      "namespace_id": "1001",
+      "simple": { "limit": 20, "period": 60 }
+    }
+  ],
+
   // Retention reaper every 15 minutes; D1 export to R2 nightly at 07:00 UTC.
   "triggers": {
     "crons": ["*/15 * * * *", "0 7 * * *"]

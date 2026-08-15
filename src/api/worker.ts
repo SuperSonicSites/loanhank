@@ -4,10 +4,12 @@ import type {
   D1Database,
   ExecutionContext,
   R2Bucket,
+  RateLimit,
   ScheduledController,
 } from '@cloudflare/workers-types';
 import { Hono } from 'hono';
 import { formatCurrency, formatRate, promoPriceRate } from '../finance/index.js';
+import { hashAccessKey } from './security.js';
 import { quickPathFormSchema } from '../shared/schema.js';
 import { renderForm, renderTicket, renderUnpriceable, type FormValues } from '../web/page.js';
 
@@ -20,6 +22,21 @@ export interface Env {
   DB: D1Database;
   QUOTES: R2Bucket;
   BACKUPS: R2Bucket;
+  DECODE_LIMIT: RateLimit;
+}
+
+/**
+ * Rate limit key. The IP is salted and hashed rather than used raw: it is a
+ * personal identifier and nothing in this product handles one in the clear.
+ * Routes get separate budgets so reloading the page cannot spend the decodes.
+ */
+async function withinRateLimit(c: {
+  env: Env;
+  req: { header: (name: string) => string | undefined };
+}, route: string): Promise<boolean> {
+  const ip = c.req.header('cf-connecting-ip') ?? 'unknown';
+  const { success } = await c.env.DECODE_LIMIT.limit({ key: `${route}:${hashAccessKey(ip)}` });
+  return success;
 }
 
 // What the farmer still owes us before anything earns a stamp (spec.md 2.2).
@@ -52,14 +69,26 @@ async function recordEvent(
 
 const app = new Hono<{ Bindings: Env }>();
 
-app.get('/', (c) => {
-  // The funnel denominator. Written behind waitUntil so measuring never
-  // stands between a farmer on rural LTE and the form.
-  c.executionCtx.waitUntil(recordEvent(c.env, 'page_view'));
+app.get('/', async (c) => {
+  // A flood here would bloat the events table and the bill. The form still
+  // renders when the limit trips; only the measurement row is dropped, because
+  // refusing to show a farmer the tool is worse than an undercounted funnel.
+  if (await withinRateLimit(c, 'page_view')) {
+    // The funnel denominator. Written behind waitUntil so measuring never
+    // stands between a farmer on rural LTE and the form.
+    c.executionCtx.waitUntil(recordEvent(c.env, 'page_view'));
+  }
   return c.html(renderForm());
 });
 
 app.post('/decode', async (c) => {
+  if (!(await withinRateLimit(c, 'decode'))) {
+    return c.html(
+      renderUnpriceable('That is a lot of quotes in one minute. Give it a minute and run it again.'),
+      429,
+    );
+  }
+
   const body = await c.req.parseBody();
   const raw: FormValues = {
     quotedPrice: String(body.quotedPrice ?? ''),
