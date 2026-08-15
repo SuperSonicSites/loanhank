@@ -1,0 +1,377 @@
+# QUOTE DECODER — SPEC
+
+Single source of product law. `design.md` covers how it looks and sounds. Nothing else is law.
+
+Version 1.0, merged 2026-08-15 from the cave spec and the rate/verdict law. Pre-merge originals live in `docs/archive/` for provenance only.
+
+---
+
+## BLURB
+
+Dealer show farmer shiny quote. Quote hide real rate. "0% financing" not 0%. Discount is secret interest. Farmer smell trick. Farmer cannot do math.
+
+We give farmer club: point phone at quote → see real rate → see real cost → see quote vs what other farmers pay. Free. Fast. No login. Sixty seconds.
+
+Farmer trust us because we only tribe at table not selling him something. Sometimes we say "dealer deal good, take it." This why farmer believe us.
+
+Farmer with quote in hand = best lead in America. Buying THIS WEEK. When farmer say "make lenders fight for my deal" — we sell that lead. That the business. Tool free forever. Lead only move when farmer say go. Never sneak. Sneak once on AgTalk = tribe exile forever.
+
+Site headline: **"Point your phone at the dealer's quote. See the number they didn't print."**
+
+## ONE BIG WARNING BEFORE BUILD
+
+Old cave have magic spear: `src/finance/index.ts` (1,175 line money math) + its test pit. Canada test. Extraction-security test. Privacy test.
+
+**CARRY SPEAR TO NEW CAVE. DO NOT CARVE NEW SPEAR.** Copy folder. Copy tests. New math = new bugs = wrong number shown to farmer = brand dead day one. Whole brand IS "number right."
+
+Everything else — screens, auth, watches, portfolio — leave in old cave. Let sleep. Year-end PDF module (`report-pdf.ts`) also good loot — take later, January weapon.
+
+---
+
+## 1. WHY THE APR IS MISSING (the structural fact)
+
+Credit primarily for agricultural purpose is exempt from federal Truth in Lending disclosure (Reg Z, 12 CFR §1026.3(a)). Most farm-equipment paper is not required to show an APR. That is the market gap, stated as regulation, not as dealer intent.
+
+**Approved public wording (only this framing, never intent claims):**
+> "Most farm-equipment credit is not federally required to show an APR. We calculate a comparable rate from the actual deal you were offered."
+
+Never say or imply "they hid it." Say "it is not required, so we compute it."
+
+---
+
+## 2. THE RATE — definition of record
+
+**Headline number: "Your real rate" = the all-in annualized cost of choosing this financing deal instead of the cash deal.**
+
+Formally: the annual IRR (XIRR for non-monthly or irregular schedules) of the DIFFERENCE between the all-in cash-purchase cash flows and the all-in financing cash flows. Decision math, not a claimed Reg-Z APR, and we say so.
+
+**Two computed views, one headline:**
+- `real_rate_all_in` — includes every mandatory finance-only cost, upfront or rolled. **This is the only number that gets the 48px treatment.**
+- `promo_price_rate` — excludes finance-only fees; isolates the cost of forgoing the cash discount. **Receipt line only. Never a second headline. Two big numbers confuse a man holding a quote.**
+
+**Public contract sentence:**
+> "This is not the legal APR. It is the annual cost of this deal against its cash alternative, using the costs we can verify."
+
+### 2.1 Fee taxonomy (drives the math)
+
+| Item | Treatment |
+|---|---|
+| Sales tax, registration, delivery charged either way | Excluded from rate; shown separately on receipt |
+| Mandatory finance-only doc/origination/insurance fee | Included in `real_rate_all_in` |
+| Optional warranty/service plan | Excluded by default; farmer-toggleable |
+| Fee rolled into payments | Included, and explicitly called out on receipt |
+| Unknown/unclassified amount | **Blocks the verdict.** "Confirm this amount." |
+
+`fees_json` entry shape: `{ name, amount, required: bool, finance_only: bool, rolled_into_finance: bool, status: "confirmed"|"unknown" }`
+
+**Tax edge (golden-fixture requirement):** tax is not always invariant between alternatives. Some states tax pre-discount price; trade-in tax credits vary by state. Ledger must allow per-alternative tax entry. At least one golden test encodes a state where cash-deal tax ≠ finance-deal tax.
+
+### 2.2 The deal ledger (the full input model)
+
+Fields: cash price · finance price · cash discount/rebate · trade allowance · trade payoff (negative equity) · down payment/due at signing · taxes (per-alternative capable) · delivery/setup · mandatory finance-only fees · amount financed if stated · payment amount · **payment frequency (monthly/quarterly/semiannual/annual — ag pays annual, this is not optional)** · payment count · balloon.
+
+**Reconciliation gate:** if the ledger and scheduled payments don't reconcile, no verdict. Say:
+> "We found a difference between the quoted total and scheduled payments. A trade, down payment, tax, fee, or add-on may be missing. Confirm it before we rate this deal."
+
+An unexplained gap between `payment × periods` and the financed ledger = an **unexplained amount** flag. Never call it a junk fee until the farmer confirms what it is. Confirmed ones feed the junk-fee index honestly.
+
+### 2.3 Quick path vs verdict path (protects the 60-second doctrine)
+
+The reconciliation gate guards the **stamp**, not the **first number**.
+
+- **Quick path** (price, discount, term, payment + frequency toggle): instant `promo_price_rate` with assumptions PRINTED in ink: "Assumes no trade, no down payment, no fees. Confirm the full deal to get the verdict." Never a silent zero — a stated assumption.
+- **Verdict path** (ledger complete or photo-extracted + confirmed, reconciled): earns `real_rate_all_in` and a stamp.
+
+Value in sixty seconds. Rigor before judgment. Both, no compromise between.
+
+---
+
+## 3. VERDICT RULE v1
+
+- **CHECKS OUT** — `real_rate_all_in` ≤ matched published reference + 100 bps
+- **LOOK CLOSER** — `real_rate_all_in` > matched published reference + 100 bps
+- **NO VERDICT YET** — no matched reference (e.g., 84-month deal, card stops at 7 years), unreconciled ledger, or any unknown fee
+
+**Stamp law:** two stamps only. NO VERDICT YET is NOT a third stamp. A stamp is a judgment; this is an abstention. Render as plain words, no stamp: "No verdict yet. Here's what's missing." The absence of the stamp is the message.
+
+**Always show beside any verdict:** the delta, the reference source + as-of date, and the caveat "subject to approval."
+> "Your real rate: 5.2%. Comparable published equipment rate: 6.5%, subject to approval. This deal checks out."
+
+**The 100 bps buffer is policy, not discovered truth.** Version it in `/how-we-figure-it`. Revisit only when the pile has real cohort data. Explicit, symmetric, reproducible beats falsely precise.
+
+Note the credibility feature: this rule will frequently bless captive 0% promos. Good. A tool that sometimes says "take the dealer's deal" is the only tool anyone believes.
+
+---
+
+## 4. BENCHMARK HIERARCHY
+
+1. **Matched live equipment rate card** (same amount band, nearest supported term band) → may support a verdict. Phase-0 source: AgDirect published equipment rates.
+2. **Regional machinery/intermediate survey rates** (KC Fed) → market context line only, never the verdict source.
+3. **Operating, real-estate, Prime, SOFR, GoC, broad Fed rates** → NEVER shown as comparable for an equipment-paper verdict. Purpose-mixing is how the receipt test dies.
+4. **No suitable match** → rate yes, verdict no.
+
+**Snapshot rule:** every benchmark row carries `source_url`, `as_of_date`, and an archived copy (R2). Any past verdict must be reproducible after the source page changes. Update cadence: on source change, minimum quarterly check.
+
+**Single-source fragility, on the record:** AgDirect can reformat, pull, or object to being the reference. It is also Farm Credit-affiliated and a plausible future lead buyer — awkward or synergistic; decide knowingly before scale. Expansion path: add other published, date-stamped equipment programs under the same matching transparency; later, pile cohort medians (n ≥ 20) complement but do not replace tier 1 for verdicts.
+
+---
+
+## 5. ARCHITECTURE
+
+Small. Boring. One worker.
+
+```
+Cloudflare Worker (Hono)
+ ├─ GET  /            → the page (form + photo button). server-rendered. NO LOGIN.
+ ├─ POST /extract     → photo → vision LLM → fields. farmer CONFIRMS every field. photo deleted after.
+ ├─ POST /decode      → ledger → engine → real rate, total cost, cash-vs-finance, verdict vs benchmark
+ ├─ POST /email       → save email, queue PDF teardown send
+ └─ POST /interest    → farmer answers the non-binding interest question (Phase A, §8)
+D1
+ ├─ decodes    ← THE GOLD. no PII, no dealer name.
+ ├─ emails     (email, decode_id, consent fields, consent_text_version)
+ ├─ benchmarks (published equipment rates, hand-entered, one row per source+date)
+ └─ events     (funnel metrics: event, decode_id nullable, ts, meta json)
+```
+
+A real consent route and lead handoff ship only after the lawyer stones clear (§8 Phase C). Until then nothing moves and there is no consent button.
+
+Rules of cave:
+
+- Engine = pure functions. No fetch inside. No DB inside. Same input → same output. All money math lives here, NOWHERE else. UI never do arithmetic. UI only paint engine output.
+- Photo: extract → confirm → DELETE. No account numbers ever stored. This is sales weapon, not chore.
+- US only v1. Published equipment rate cards are US. Canada later; the engine already knows Canadian semi-annual compounding and the tests are in the pit.
+
+### 5.1 Schema
+
+`decodes` — one row per decode, no PII, no dealer name, no account numbers:
+
+- identity/context: `id`, `ts`, `quarter`, `state`, `region`, `equip_category`, `new_or_used`, `structure_type` (`0pct_discount|standard|lease|balloon`), `lender_type` (`captive|bank|fcs|cu|unknown`)
+- ledger (§2.2): `cash_price`, `finance_price`, `cash_discount`, `trade_allowance`, `trade_payoff`, `down_payment`, `tax_cash`, `tax_finance`, `delivery_setup`, `amount_financed`, `payment_amount`, `payment_frequency`, `payment_count`, `balloon`, `term_months`, `stated_rate`
+- fees: `fees_json` (§2.1 entry shape)
+- computed: `real_rate_all_in`, `promo_price_rate`, `reconciled` (bool), `assumptions_json`, `verdict` (`checks_out|look_closer|none`), `verdict_ref_id`, `benchmark_at_ts`, `delta_vs_benchmark`
+- banding for cohorts: `price_band`, `term_band`, `down_pct`
+- forage fields, grab if on paper, NEVER require: `brand`, `model_year`, `hours`, `list_price`
+
+`emails` — `email`, `decode_id`, `consented` (bool), `consent_ts`, `consent_text_version`.
+
+`benchmarks` — published rate rows: `id`, `source`, `source_url`, `as_of_date`, `snapshot_key` (R2 archive of the source page), `amount_band`, `term_band`, `rate`, `tier` (1 = verdict-eligible per §4).
+
+`events` — `id`, `event`, `decode_id` nullable, `ts`, `meta_json`. Event types include `decode`, `email`, `interest_yes`.
+
+Migrations are append-only. Never edit a shipped migration; add a new one.
+
+## 6. REPO
+
+```
+src/finance/  ← the spear. touch only with test first.
+src/api/      ← worker routes. thin. dumb. call engine.
+src/web/      ← one page. form, confirm screen, result screen. that all.
+src/shared/   ← schema types and validation.
+migrations/   ← D1 SQL, append-only.
+tests/        ← engine tests (stolen), api tests, extraction fixtures.
+ops/          ← runbook.md, benchmarks.md (rate table + source links), ads.md (copy variants), leads.md (buyer list), funnel.sql
+```
+
+Method:
+
+- Money math = test FIRST, then code. Always.
+- Every real quote uploaded → becomes anonymized fixture in test pit. Quote pile = moat.
+- Main branch always deployable. One command ship (`pnpm deploy`). No staging theater.
+- No feature before funnel number demand it. **No build barn before have cow.**
+
+---
+
+## 7. FUNNEL
+
+```
+Meta ad ($500 test)
+  "0% financing isn't 0%. Point your phone at the quote. See what it really costs."
+   ↓ click
+THE TOOL IS THE LANDING PAGE. no brochure page. form above fold.
+   ↓ type 4 numbers (price, discount, term, payment) OR photo
+INSTANT ANSWER. no gate. real rate big font. verdict vs published benchmark. honest — sometimes "deal good."
+   ↓ gate 1 (soft)
+"Want full teardown PDF?" → email
+   ↓ gate 2 (non-binding, Phase A)
+"If an independent equipment lender could quote this deal, would you want to hear from one?" → interest-yes
+   ↓ after counsel clears (Phase C)
+explicit consent → LEAD → sell to equipment-finance broker/lender. manual first: email + spreadsheet to 3 buyers. no API until money.
+   ↓ later
+email owns farmer: benchmark updates, year-end tax PDF (January), maturity pings → repeat leads
+```
+
+Value before email. Email before interest. Interest before consent. Consent before handoff. Never reorder. This the whole religion.
+
+### 7.1 Wall numbers — write on cave wall BEFORE spend $500
+
+| step | good | bad = stop, fix, retest |
+|---|---|---|
+| click → completed decode | ≥ 25% | < 10% |
+| decode → email | ≥ 20% | < 8% |
+| email → **interest-yes** | ≥ 10% | < 3% |
+| $ per interested decode | ≤ $50 | > $150 |
+
+(garbage form-fill industry sell junk leads at $600/mo minimums. our lead = verified quote, real intent, this-week buyer. worth multiples. 2-3 broker calls confirm price.)
+
+One week data > one month opinion. If numbers good → scale spend. If bad twice → THEN rethink. No new strategy hunts between tests. **No more cave-painting. Throw spear.**
+
+---
+
+## 8. VALIDATION SPLIT
+
+**Phase A — demand test, no counsel needed.** `ad → decode → optional email receipt → non-binding interest question`:
+> "If an independent equipment lender could quote this deal, would you want to hear from one?"  [Yes] [Not now]
+
+No forwarding, no lender contact, no shared PII, no "consent" label. This measures intent, not permission. It is not brokering because nothing moves.
+
+**Phase B — parallel buyer discovery.** Anonymized example deal structures (never farmer records) to 3-5 potential finance buyers. Written answers: states + deal types accepted, minimum ticket, required borrower info, whether they pay for verified quote-in-hand introductions, price, exclusivity, contact policy.
+
+**Phase C — counsel-gated monetization.** Real consent button ships only after the lawyer stones (§10). Then: actual consent → funded conversation validates the business.
+
+Honest ladder: decode/email = farmer demand. Interest-yes = directional intent. Buyer LOIs = revenue model. Post-counsel consent = the business. No rung skipped, no rung overclaimed.
+
+---
+
+## 9. DATA ENGINE (THE MOAT)
+
+Every decode = one row of truth nobody else in America has: real dealer quote, real structure, real all-in rate, dated. Form-fill competitors have name + phone. We have the market itself. After 10,000 rows, uncatchable.
+
+**Golden columns: `real_rate_all_in` and `promo_price_rate`.** The engine computes them for every quote (0% w/ discount → real rate; lease → money factor → rate; standard → stated). Comparable numbers across all structures. Everything ranks on `real_rate_all_in`.
+
+**Cohort = how quotes become comparable:**
+`equip_category × new_or_used × term_band (0-48/49-72/73+) × price_band × quarter`. Region split later, when rows enough.
+
+**Pile hygiene:** only `reconciled = true` decodes enter cohort medians, percentile claims, and the quarterly report. Quick-path rows are stored, flagged `reconciled = false`, and excluded from all published statistics. Assumption-laden rates in the medians = the moat rotting quietly.
+
+**Stats: caveman math, no ML.** Pull cohort rows in worker, sort, take median + p25/p75 + your-percentile. D1 fine at this scale. No warehouse until 50k rows.
+
+**Cold start — three phases, honest at every step:**
+
+| phase | reconciled rows in cohort | farmer sees |
+|---|---|---|
+| 0 | < 20 | published equipment rate cards only (§4 tier 1). say "vs published rates" |
+| 1 | ≥ 20 | "median for used tractors, 60-72 mo, this quarter: 7.4% (n=143). you: 8.9% — higher than 78%." ALWAYS show n |
+| 2 | thousands | quarterly "State of Farm Equipment Financing" report from the pile. free, public, sourced. = PR + SEO + authority + what lead buyers drool on |
+
+**Stone rules:**
+- NEVER show peer stat with n < 20. Fake percentile = lie = brand dead. Show benchmark instead, say so.
+- NEVER store or show dealer name. Photo extraction DROPS it. "Dealer X bad" = lawsuit. We rank quotes, not dealers.
+- Always print n next to any peer claim. Honesty is the costume AND the body.
+- Row count itself = marketing. "Compared against 12,000 real quotes" — number goes in ad when number big.
+- Flywheel: more decodes → tighter medians → better answer → better ad claim → more decodes. Feed it, never fake it.
+
+### 9.1 Quote pile treasures (forage like alpha)
+
+Pile worth more than leads. Ten treasures sleep in it. Forage all, from day one, so no gold lost.
+
+1. **PRICE DATABASE — buried king.** Valuation data locked behind paywalls (Sandhills, EquipmentWatch). But every quote carry price + model + year + hours. Pile slowly rebuild the locked database — FREE, as exhaust.
+2. **SUBVENTION DEPTH — Wall Street meat.** Cash-discount size = manufacturer's secret subsidy. Track buydown depth by brand by quarter → demand-health signal for DE / CNH / AGCO tickers.
+3. **DEMAND INDEX.** Quote volume by category × region × week. Quote come BEFORE purchase = leading indicator.
+4. **STRESS SIGNALS.** Term creep (60→72→84 mo). Balloon/lease share rise. Down payment shrink. = ag-credit stress measured at the desk, quarters before Fed surveys see it.
+5. **COMPETITION GAP MAPS.** Delta-vs-benchmark by region + lender type = map of where spreads fat because nobody compete. Price own leads from fat-spread regions HIGHER.
+6. **LEAD SCORING — direct money.** Quote 200bp over cohort median = lead that almost surely convert for competing lender. Tier lead price on beatability.
+7. **JUNK-FEE INDEX.** Which add-ons appear, cost, how often forced insurance show up. Only farmer-confirmed unexplained amounts count (§2.2).
+8. **TIMING INTEL.** Seasonality of promos + prices → farmer-facing negotiation content.
+9. **SEO PAGES NOBODY CAN COPY.** Every cohort median = a page. "Average used combine financing rate 2026."
+10. **BETTER SPEAR.** Every new quote format = new extraction fixture. Accuracy compound.
+
+**Forage stones (carve deep):**
+- Capture forage fields from day one even if unused. Grab if on paper. NEVER require. Empty field fine, lost field gone forever.
+- Sell AGGREGATE only, forever. n ≥ 20. No row-level sale. No dealer names. ToS line from day one: "anonymized, aggregated market statistics." Farmer data never leave cave raw.
+- Know the bias: pile over-index suspicious farmers with bad quotes. Quoted ≠ funded. Say so in public report, or smart people debunk report and authority die.
+
+---
+
+## 10. PAGES + LEGAL
+
+All footer-linked. All Hank voice: plain-words summary box on top, lawyer text under. A 40-page SaaS-template ToS smells robot AND scam. Short and plain wins twice.
+
+**Day-one pages (ship with tool):**
+
+1. `/privacy` — law requires + Meta ads demand a privacy URL before ads run. Must say plainly: what we take (quote numbers; email if you give it; photo for ~10 seconds), photo deleted after reading, anonymized aggregate stats kept forever (this line = license for the treasure pile — no line, no pile), nothing personal moves without your go. **California catch: farmer-consented lead handoff = "sale/share" of personal info under CCPA — and if >50% of revenue comes from it, the law applies at ANY company size. Need "Do Not Sell or Share My Personal Information" link + a rights process.**
+2. `/terms` — not financial or tax advice, math shown and farmer confirms inputs, no savings guaranteed, aggregate-data license, the "not a lender / not a broker" sentence ONLY as lawyer approves.
+3. `/how-we-make-money` — the Kennedy damaging admission gets its own page: free tool, farmer pushes go, lenders pay for the introduction, that is the whole business. ALSO linked right next to the interest/consent question — FTC wants disclosure clear, conspicuous, and near the action, not buried in footer.
+4. `/contact` — real email, real postal address (PO box fine — CAN-SPAM requires postal address in every email anyway).
+5. `/whos-behind-this` — REAL name, REAL face, real camera, two paragraphs. Machinery Pete works because Pete is a person. Anonymous finance site = scam smell. Biggest trust page on the site.
+6. `/how-we-figure-it` — show the work: formulas in plain words, benchmark sources + dates + links, what the real rate means, the 100 bps buffer and its version, the n≥20 rule stated out loud. Farmer can check our math = ultimate Kennedy proof. Also an SEO page for free.
+7. `/straight-answers` — small FAQ, objections only, 6-8 max: Is it free? Why? Are you a lender? Who sees my numbers? What happens to the photo? What if my deal is good?
+8. `404` — one line, go-home link, on voice.
+
+**Email plumbing (law, not pages):**
+- Every email: one-click unsubscribe + postal address. CAN-SPAM, no exceptions.
+- No SMS v1. TCPA is a swamp; enter only with lawyer.
+- Log consent forever: timestamp + exact text version farmer saw (`consent_text_version`). Receipts protect cave too.
+
+**Ads measurement tension (decided, don't drift):** doctrine says no tracking cookies, no banner. Meta test still needs conversion signal. Answer: server-side Conversions API on decode/email/interest events, first-party only, disclosed in `/privacy`. No third-party pixel cookie → no-banner stance holds. If lawyer disagrees, banner is one quiet line, never a modal wall.
+
+**LAWYER STONES — spend $2-5k BEFORE any consent button goes live. Not optional:**
+1. **State commercial-finance broker laws.** Some states make "introduce borrower to lender for money" a licensed activity. Lead-gen vs. broker line is drawn per state by a fintech lawyer, not by us. May mean geo-gating the consent feature to safe states at launch — tool math itself fine everywhere.
+2. **CCPA/CPRA** sale/share analysis + DNSMPI mechanics.
+3. **"Not a broker" wording** — might become false in some states the day leads sell. Words follow law, not vibes.
+4. **FTC lead-generator guidance** — bless the consent-flow wording.
+5. **LoanHank USPTO clearance** (aggregator zero-hit ≠ clearance). Before hats.
+
+**Not building:** cookie-consent modal wall, live chat, accessibility statement page (just BE accessible per design doc), refund page (free tool).
+
+---
+
+## 11. PROCESS
+
+- **Week 1:** steal engine. build page. wire decode. ship live.
+- **Week 2:** PDF + email send. benchmark table seeded from published equipment rate cards. ads live.
+- **Daily (10 min):** look funnel numbers. no dashboard building. `ops/funnel.sql`, one query.
+- **Weekly:** read every uploaded quote (anonymized). free market research nobody else has. new quote shapes → new fixtures.
+- **Quarterly:** re-check benchmark sources, re-snapshot, update the table.
+- **Now, manual:** call 3 equipment finance brokers. ask: "verified dealer quote, farmer asked for competition, buying this week — what you pay?" price discovery before automation.
+
+---
+
+## 12. DO-NOT LIST (carve in stone)
+
+- No app store. No native app. Web only.
+- No accounts. No login. No portfolio. No watches. v1 = one page.
+- No Canada v1 (keep the Canada math, it's the expansion path).
+- No lead move without farmer button-push, and no consent button before counsel. No dark pattern. Tribe small, tribe talk.
+- No "not a lead form" copy — that old promise, old product. New honest words: "Free tool. If you want lenders to compete, you tell us. Otherwise your numbers go nowhere."
+- No new research loop. Idea validated twice (own audit + field evidence). Next validation = market, $500, one week.
+
+---
+
+## 13. DECISIONS
+
+Architectural choices of record. Change one only by editing this table in the same commit as the code.
+
+| # | Decision | Choice | Why |
+|---|---|---|---|
+| 1 | Database | **D1.** No Supabase anywhere, code or refs | one vendor, one worker, pile is SQLite-scale for years |
+| 2 | Page delivery | **Server-rendered HTML from the worker, no client framework.** Form works as a plain POST; photo path is the only JS | 150KB budget, no-JS fallback is law, rural LTE |
+| 3 | Router | Hono | already in the code, fine |
+| 4 | Migrations | `wrangler d1 migrations`, `migrations/0001_init.sql` implements §5.1 | append-only law |
+| 5 | Extraction model | one vision-capable model behind a thin interface in `src/api/extractor.ts`; provider key via secret; hard monthly spend cap set at the provider | swappable, cost-capped |
+| 6 | Email | Resend (or Postmark if deliverability testing says so), from `mail.loanhank.com` | CAN-SPAM plumbing per §10 |
+| 7 | Anti-abuse | Turnstile invisible on submit + per-IP rate limit on `/extract` + max upload size | each decode costs real money |
+| 8 | Analytics | the `events` table + `ops/funnel.sql`. No third-party analytics, no pixel; Meta via server-side CAPI later | measure-or-dead without tracking cookies |
+| 9 | Consent route | **Deferred.** `POST /interest` ships now (non-binding, §8 Phase A); a real consent route ships only after the lawyer stones clear | Phase A measures intent without brokering |
+| 10 | Email provider pick | **Pending** — Resend vs Postmark, decided by deliverability testing (§14) | has DNS lead time, decide early |
+| 11 | Fonts | Libre Franklin + Courier Prime, subset woff2, self-hosted from the worker | no third-party font CDN, 150KB budget, no tracking |
+
+---
+
+## 14. LAUNCH CHECKLIST
+
+Check off before ads spend a dollar.
+
+- [ ] **Migrations.** `migrations/0001_init.sql` implements §5.1: decodes with full ledger + forage fields, emails with `consent_text_version`, benchmarks with `source_url`/`as_of_date`/`snapshot_key`, events.
+- [ ] **Funnel query.** `ops/funnel.sql` — the 10-minute morning ritual is one query, not a dashboard.
+- [ ] **Backups.** Nightly D1 export to R2 (scheduled worker). D1 Time Travel covers ~30 days; the pile must outlive any mistake. Test a restore once before launch.
+- [ ] **CI.** GitHub Actions: typecheck + tests + `test:eval` gate on PR; deploy on merge to main. The eval gate is what lets extraction prompts change safely.
+- [ ] **Cost + abuse protection on `/extract`.** Per-IP rate limit, max upload size (`security.ts` has bones — verify), Turnstile invisible mode on submit, hard monthly spend cap + alert on the LLM provider account. An abuse script hitting `/extract` is a bill, not an outage.
+- [ ] **Email deliverability — start NOW, has lead time.** Pick provider (Decision 10). Send from `mail.loanhank.com`. SPF + DKIM + DMARC; DMARC starts `p=none`, tighten later. Postal address for the CAN-SPAM footer before the first teardown sends.
+- [ ] **Meta Business setup — start NOW, has lead time.** Business Manager + business verification + domain verification on loanhank.com + Conversions API token. Verification can take days-to-weeks.
+- [ ] **Eval samples.** Mystery-shop 12-15 dealers + forum-posted quote photos + synthetic print-and-photograph pipeline (20 docs × 5 conditions). Golden holdout of 5, never tuned against. Metric #1: false-confidence rate = 0.
+- [ ] **Tax-edge golden fixture.** At least one where cash-deal tax ≠ finance-deal tax (§2.1).
+- [ ] **Day-one pages** (§10, all eight) live and footer-linked.
+- [ ] **Lawyer stones** (§10) — before any consent button.
+- [ ] **USPTO clearance** on LoanHank — before hats.
+- [ ] **Real-face photo** for `/whos-behind-this` — real camera.

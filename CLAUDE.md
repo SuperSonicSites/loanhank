@@ -2,10 +2,11 @@
 
 One Cloudflare Worker. A free web tool that reads farm-equipment dealer quotes and shows the real rate; consented leads are the business. No accounts, no app.
 
-Product law lives in three docs — read the relevant one before deciding, don't improvise doctrine:
-- `docs/master-prompt.md` — spec, funnel, data engine, legal pages, do-not list
+Product law lives in two docs — read the relevant one before deciding, don't improvise doctrine:
+- `docs/spec.md` — rate definition of record, deal ledger, verdict rules, benchmark hierarchy, schema, funnel, data engine, legal pages, decisions, launch checklist
 - `docs/design.md` — visual system, Hank voice, sales copy rules, canonical microcopy
-- `docs/rate-verdict-law.md` — rate definition of record, deal ledger, verdict rules, benchmark hierarchy. **Wins on conflict with the other two.**
+
+`docs/archive/` is history, not law. Never cite it and never create a third living doc.
 
 ## Commands
 
@@ -34,7 +35,7 @@ Keep these true in package.json; if you rename a script, update this file in the
 - Longer amortization is never labeled "savings."
 - Peer stats render only when cohort n ≥ 20, and n is always printed. Below 20, show published benchmarks and say so. Only `reconciled = true` decodes feed published statistics.
 - Worst verdict is amber. No red exists in this product — not in errors, not in charts.
-- The headline rate is `real_rate_all_in` per rate-verdict-law.md. No stamp without a reconciled ledger and a matched tier-1 benchmark; abstention ("no verdict yet") renders stampless.
+- The headline rate is `real_rate_all_in` per `docs/spec.md` §2. No stamp without a reconciled ledger and a matched tier-1 benchmark; abstention ("no verdict yet") renders stampless.
 
 ## Data rules
 
@@ -57,5 +58,5 @@ Keep these true in package.json; if you rename a script, update this file in the
 ## Gotchas
 
 - The engine supports Canadian semi-annual compounding (Interest Act s.6). Benchmarks are US-only v1. Don't strip the Canada math; it's tested and it's the expansion path.
-- Fed benchmark table is hand-entered quarterly in `migrations/` seed data; sources and dates live with the values.
+- The benchmark table is hand-entered quarterly in `migrations/` seed data; sources and dates live with the values. Only tier-1 published equipment rate cards can back a verdict (spec.md §4); Fed survey rates are context lines, never the comparison.
 - The old app (x-ray repo) is the ancestor. Its portfolio/watch/alert modules are deliberately NOT here — do not port them without a docs change first.
