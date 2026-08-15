@@ -110,7 +110,7 @@ Note the credibility feature: this rule will frequently bless captive 0% promos.
 3. **Operating, real-estate, Prime, SOFR, GoC, broad Fed rates** → NEVER shown as comparable for an equipment-paper verdict. Purpose-mixing is how the receipt test dies.
 4. **No suitable match** → rate yes, verdict no.
 
-**Snapshot rule:** every benchmark row carries `source_url`, `as_of_date`, and an archived copy (R2). Any past verdict must be reproducible after the source page changes. Update cadence: on source change, minimum quarterly check.
+**Snapshot rule:** every benchmark row carries `source_url`, `as_of_date`, and an archived copy (R2, bucket `loanhank-snapshots`, no expiry rule). Any past verdict must be reproducible after the source page changes. Update cadence: on source change, minimum quarterly check. **AgDirect republishes its card monthly** ("Rates effective August 01-31 2026"), so the tier-1 table is checked monthly, not quarterly, or verdicts run against a card two months stale.
 
 **Single-source fragility, on the record:** AgDirect can reformat, pull, or object to being the reference. It is also Farm Credit-affiliated and a plausible future lead buyer — awkward or synergistic; decide knowingly before scale. Expansion path: add other published, date-stamped equipment programs under the same matching transparency; later, pile cohort medians (n ≥ 20) complement but do not replace tier 1 for verdicts.
 
@@ -144,18 +144,24 @@ Rules of cave:
 
 ### 5.1 Schema
 
+**Units live in the column names.** Every money column is integer `_cents`, every rate column is integer `_bps`. The engine works in cents and basis points end to end, and a column named `cash_price` holding `84500` is indistinguishable from one holding `8450000`. Implemented in `migrations/0001_init.sql`.
+
 `decodes` — one row per decode, no PII, no dealer name, no account numbers:
 
 - identity/context: `id`, `ts`, `quarter`, `state`, `region`, `equip_category`, `new_or_used`, `structure_type` (`0pct_discount|standard|lease|balloon`), `lender_type` (`captive|bank|fcs|cu|unknown`)
-- ledger (§2.2): `cash_price`, `finance_price`, `cash_discount`, `trade_allowance`, `trade_payoff`, `down_payment`, `tax_cash`, `tax_finance`, `delivery_setup`, `amount_financed`, `payment_amount`, `payment_frequency`, `payment_count`, `balloon`, `term_months`, `stated_rate`
-- fees: `fees_json` (§2.1 entry shape)
-- computed: `real_rate_all_in`, `promo_price_rate`, `reconciled` (bool), `assumptions_json`, `verdict` (`checks_out|look_closer|none`), `verdict_ref_id`, `benchmark_at_ts`, `delta_vs_benchmark`
+- ledger (§2.2): `cash_price_cents`, `finance_price_cents`, `cash_discount_cents`, `trade_allowance_cents`, `trade_payoff_cents`, `down_payment_cents`, `tax_cash_cents`, `tax_finance_cents`, `delivery_setup_cents`, `amount_financed_cents`, `payment_amount_cents`, `payment_frequency`, `payment_count`, `balloon_cents`, `term_months`, `stated_rate_bps`
+- fees: `fees_json` (§2.1 entry shape, amounts as `amount_cents`)
+- computed: `real_rate_all_in_bps`, `promo_price_rate_bps`, `reconciled` (bool), `assumptions_json`, `verdict` (`checks_out|look_closer|none`), `verdict_ref_id`, `benchmark_at_ts`, `delta_vs_benchmark_bps`
 - banding for cohorts: `price_band`, `term_band`, `down_pct`
-- forage fields, grab if on paper, NEVER require: `brand`, `model_year`, `hours`, `list_price`
+- forage fields, grab if on paper, NEVER require: `brand`, `model_year`, `hours`, `list_price_cents`
 
-`emails` — `email`, `decode_id`, `consented` (bool), `consent_ts`, `consent_text_version`.
+Stamp law is a table constraint, not a convention: `CHECK (verdict = 'none' OR (reconciled = 1 AND verdict_ref_id IS NOT NULL))`. A row cannot claim a verdict it did not earn.
 
-`benchmarks` — published rate rows: `id`, `source`, `source_url`, `as_of_date`, `snapshot_key` (R2 archive of the source page), `amount_band`, `term_band`, `rate`, `tier` (1 = verdict-eligible per §4).
+`emails` — `id`, `email`, `decode_id`, `created_at`, `consented` (bool), `consent_ts`, `consent_text_version`, `unsubscribed_at`. Consent may not be recorded without both a timestamp and the text version, also a `CHECK`.
+
+`benchmarks` — published rate rows: `id`, `source`, `source_url`, `as_of_date`, `snapshot_key` (R2 archive of the source page, in the `loanhank-snapshots` bucket, which has no expiry rule because a past verdict must stay reproducible), `amount_band` + `amount_min_cents` + `amount_max_cents`, `term_band` + `term_min_months` + `term_max_months`, `rate_bps`, `rate_kind` (`fixed|variable`), `tier` (1 = verdict-eligible per §4).
+
+The band columns come in pairs: the label is what the farmer reads, the bounds are what the matcher compares. `rate_kind` exists because a fixed dealer promo compared against a variable benchmark is a wrong comparison, not a close one.
 
 `events` — `id`, `event`, `decode_id` nullable, `ts`, `meta_json`. Event types include `decode`, `email`, `interest_yes`.
 
