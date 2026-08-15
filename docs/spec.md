@@ -364,7 +364,9 @@ Check off before ads spend a dollar.
 
 - [ ] **Migrations.** `migrations/0001_init.sql` implements §5.1: decodes with full ledger + forage fields, emails with `consent_text_version`, benchmarks with `source_url`/`as_of_date`/`snapshot_key`, events.
 - [ ] **Funnel query.** `ops/funnel.sql` — the 10-minute morning ritual is one query, not a dashboard.
-- [ ] **Backups.** Nightly D1 export to R2 (scheduled worker). D1 Time Travel covers ~30 days; the pile must outlive any mistake. Test a restore once before launch.
+- [ ] **Backups.** Nightly D1 export to R2 (scheduled worker). D1 Time Travel covers ~30 days; the pile must outlive any mistake. **Test a restore once before ads run** — an untested backup is a rumour.
+- [x] **Photo retention is code, not a dashboard click.** `infra/r2-lifecycle-quotes.json`, applied by `pnpm infra:r2`, which reads the rule back. R2 lifecycle granularity is one day, so the rule cannot express the ten-second promise: the reaper on the 15-minute cron keeps that promise and this rule caps the worst case at a day. Both halves must be live before a single photo is accepted.
+- [x] **Backup retention.** `infra/r2-lifecycle-backups.json`, 90 days, so `loanhank-backups` does not grow forever.
 - [ ] **CI.** GitHub Actions: typecheck + tests + `test:eval` gate on PR; deploy on merge to main. The eval gate is what lets extraction prompts change safely.
 - [ ] **Cost + abuse protection on `/extract`.** Per-IP rate limit, max upload size (`security.ts` has bones — verify), Turnstile invisible mode on submit, hard monthly spend cap + alert on the LLM provider account. An abuse script hitting `/extract` is a bill, not an outage.
 - [ ] **Email deliverability — start NOW, has lead time.** Pick provider (Decision 10). Send from `mail.loanhank.com`. SPF + DKIM + DMARC; DMARC starts `p=none`, tighten later. Postal address for the CAN-SPAM footer before the first teardown sends.

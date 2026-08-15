@@ -9,6 +9,11 @@ import type {
 import { Hono } from 'hono';
 import { renderPage } from '../web/page.js';
 
+// Must match the crons in wrangler.jsonc. An unrecognized cron logs and does
+// nothing rather than falling into the wrong branch.
+const REAPER_CRON = '*/15 * * * *';
+const BACKUP_CRON = '0 7 * * *';
+
 export interface Env {
   DB: D1Database;
   QUOTES: R2Bucket;
@@ -22,9 +27,19 @@ app.get('/', (c) => c.html(renderPage()));
 export default {
   fetch: app.fetch,
 
-  // The crons in wrangler.jsonc fire here: the quarter-hourly sweep is the
-  // retention reaper (src/api/reaper.ts, waiting on its D1 and R2 stores) and
-  // the 07:00 UTC one is the nightly D1 export to the BACKUPS bucket. Neither
-  // is wired while there is nothing in the pile to reap or back up.
-  scheduled(_event: ScheduledController, _env: Env, _ctx: ExecutionContext) {},
+  // Both crons log on every fire, wired or not. A cron that silently does
+  // nothing and a cron that silently fails look identical in the dashboard,
+  // and the reaper is what keeps the photo-deletion promise.
+  scheduled(event: ScheduledController, _env: Env, _ctx: ExecutionContext) {
+    switch (event.cron) {
+      case REAPER_CRON:
+        console.log('cron reaper: not wired yet, no rows to reap');
+        break;
+      case BACKUP_CRON:
+        console.log('cron backup: not wired yet, no rows to export');
+        break;
+      default:
+        console.log(`cron unrecognized: ${event.cron}, nothing ran`);
+    }
+  },
 };

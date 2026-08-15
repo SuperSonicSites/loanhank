@@ -8,7 +8,9 @@
     "test": "vitest run",
     "test:eval": "vitest run tests/extraction-fixtures.test.ts",
     "typecheck": "tsc --noEmit",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "infra:r2": "wrangler r2 bucket lifecycle set loanhank-quotes --file infra/r2-lifecycle-quotes.json && wrangler r2 bucket lifecycle set loanhank-backups --file infra/r2-lifecycle-backups.json && pnpm infra:verify",
+    "infra:verify": "wrangler r2 bucket lifecycle list loanhank-quotes && wrangler r2 bucket lifecycle list loanhank-backups"
   },
   "dependencies": {
     "decimal.js": "10.6.0",

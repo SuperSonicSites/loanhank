@@ -1,0 +1,11 @@
+{
+  "rules": [
+    {
+      "id": "backups-expire-90-days",
+      "enabled": true,
+      "conditions": { "prefix": "" },
+      "deleteObjectsTransition": { "condition": { "type": "Age", "maxAge": 7776000 } },
+      "abortMultipartUploadsTransition": { "condition": { "type": "Age", "maxAge": 86400 } }
+    }
+  ]
+}
