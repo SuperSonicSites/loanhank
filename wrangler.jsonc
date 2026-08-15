@@ -10,12 +10,21 @@
   // block added here in the same commit that retires the old Worker.
   "workers_dev": true,
 
+  // Self-hosted font subsets only (design.md section 4 allows no third-party
+  // font host). Nothing in public/ answers "/", so the page still comes from
+  // the Worker.
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "html_handling": "none",
+    "not_found_handling": "none"
+  },
+
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "loanhank",
-      // Filled by `wrangler d1 create loanhank`. Deploy fails loudly until then.
-      "database_id": "PLACEHOLDER_RUN_WRANGLER_D1_CREATE",
+      "database_id": "b1a81db8-b810-4c52-9b3e-091bfb1c1e83",
       "migrations_dir": "migrations"
     }
   ],

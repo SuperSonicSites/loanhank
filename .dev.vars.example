@@ -7,6 +7,7 @@ OPENAI_API_KEY=
 
 # Cloudflare Turnstile, invisible mode on submit (spec.md Decision 7).
 # The paired TURNSTILE_SITE_KEY is public and lives in wrangler.jsonc vars.
+TURNSTILE_SITE_KEY=
 TURNSTILE_SECRET_KEY=
 
 # Transactional email for the teardown PDF (spec.md Decision 6 and 10).
