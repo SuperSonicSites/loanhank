@@ -1162,7 +1162,9 @@ export function formatCurrency(valueCents: number, currency: CurrencyCode = 'USD
   return `${sign}$${roundedDollars.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
 }
 
-function formatRate(bps: number): string {
+/** Basis points as a percentage string. Exported because dividing by 100 is
+ * arithmetic, and the UI does none. */
+export function formatRate(bps: number): string {
   return `${new Decimal(bps).div(100).toFixed(2)}%`;
 }
 

@@ -369,7 +369,7 @@ Architectural choices of record. Change one only by editing this table in the sa
 Check off before ads spend a dollar.
 
 - [ ] **Migrations.** `migrations/0001_init.sql` implements §5.1: decodes with full ledger + forage fields, emails with `consent_text_version`, benchmarks with `source_url`/`as_of_date`/`snapshot_key`, events.
-- [ ] **Funnel query.** `ops/funnel.sql` — the 10-minute morning ritual is one query, not a dashboard.
+- [x] **Funnel query.** `ops/funnel.sql`, run by `pnpm funnel`. One query, not a dashboard. The runner exists because `d1 execute --remote --file` silently prints no rows and `--command` rejects newlines and leading comments; the traps are written down in `ops/funnel.mjs`.
 - [ ] **Backups.** Nightly D1 export to R2 (scheduled worker). D1 Time Travel covers ~30 days; the pile must outlive any mistake. **Test a restore once before ads run** — an untested backup is a rumour.
 - [x] **Photo retention is code, not a dashboard click.** `infra/r2-lifecycle-quotes.json`, applied by `pnpm infra:r2`, which reads the rule back. R2 lifecycle granularity is one day, so the rule cannot express the ten-second promise: the reaper on the 15-minute cron keeps that promise and this rule caps the worst case at a day. Both halves must be live before a single photo is accepted.
 - [x] **Backup retention.** `infra/r2-lifecycle-backups.json`, 90 days, so `loanhank-backups` does not grow forever.

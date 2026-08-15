@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculatePaymentCents, promoPriceRate } from '../src/finance/index.js';
+import { calculatePaymentCents, formatRate, promoPriceRate } from '../src/finance/index.js';
 
 // The quick path (spec.md 2.3): four fields off the paper plus a frequency
 // toggle, and the answer is promo_price_rate, the annual cost of giving up the
@@ -137,5 +137,13 @@ describe('promoPriceRate', () => {
     });
     expect(longer.costVersusCashCents).toBeGreaterThan(shorter.costVersusCashCents);
     expect(longer.promoPriceRateBps).toBeGreaterThan(shorter.promoPriceRateBps as number);
+  });
+});
+
+describe('formatRate', () => {
+  it('prints basis points as a percentage so the page never divides', () => {
+    expect(formatRate(294)).toBe('2.94%');
+    expect(formatRate(0)).toBe('0.00%');
+    expect(formatRate(750)).toBe('7.50%');
   });
 });

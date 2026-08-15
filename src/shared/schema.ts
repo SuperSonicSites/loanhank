@@ -356,3 +356,68 @@ export const createAlertRuleSchema = z.object({
     context.addIssue({ code: 'custom', path: ['leadDays'], message: 'A lead time applies to a payment reminder only.' });
   }
 });
+
+// ---------------------------------------------------------------------------
+// QUICK PATH INPUT — spec.md 2.3
+//
+// What the farmer types off the dealer's paper, normalized to the units the
+// engine works in. Dollars become integer cents here and nowhere else: this is
+// the one multiply-by-a-hundred in the product, and getting it wrong is the
+// fatal bug class. Anything that does not parse cleanly is rejected and typed
+// again, never rounded into something plausible.
+// ---------------------------------------------------------------------------
+
+const MAX_MONEY_CENTS = 100_000_000_000; // $1bn, well past any tractor
+
+/** "$84,500", "84500", "84,500.50" -> cents. Anything else fails. */
+export function parseMoneyToCents(raw: string): number | null {
+  const cleaned = raw.trim().replace(/^\$/, '').replace(/\s/g, '');
+  if (cleaned === '') return null;
+  // Grouping is checked before the commas come out. Stripping first would turn
+  // a typo like "1,00,0" into a confident $1,000, and a confidently wrong
+  // number is the one failure this product cannot have.
+  const grouped = /^\d{1,3}(,\d{3})*(\.\d{1,2})?$/.test(cleaned);
+  const plain = /^\d+(\.\d{1,2})?$/.test(cleaned);
+  if (!grouped && !plain) return null;
+  const [whole = '0', fraction = ''] = cleaned.replace(/,/g, '').split('.');
+  const cents = Number(whole) * 100 + Number(fraction.padEnd(2, '0'));
+  if (!Number.isSafeInteger(cents) || cents > MAX_MONEY_CENTS) return null;
+  return cents;
+}
+
+const moneyCentsSchema = z.string().transform((value, context) => {
+  const cents = parseMoneyToCents(value);
+  if (cents === null) {
+    context.addIssue({ code: 'custom', message: 'Enter this as a number, like 84500 or 84,500.00.' });
+    return z.NEVER;
+  }
+  return cents;
+});
+
+/** An empty cash discount means none was offered, which is a real answer. */
+const optionalMoneyCentsSchema = z.string().transform((value, context) => {
+  if (value.trim() === '') return 0;
+  const cents = parseMoneyToCents(value);
+  if (cents === null) {
+    context.addIssue({ code: 'custom', message: 'Enter this as a number, like 6000 or 6,000.00.' });
+    return z.NEVER;
+  }
+  return cents;
+});
+
+export const quickPathFormSchema = z.object({
+  quotedPrice: moneyCentsSchema,
+  cashDiscount: optionalMoneyCentsSchema,
+  paymentCount: z.string().transform((value, context) => {
+    const cleaned = value.trim();
+    if (!/^\d{1,4}$/.test(cleaned) || Number(cleaned) < 1) {
+      context.addIssue({ code: 'custom', message: 'Enter how many payments there are, like 60.' });
+      return z.NEVER;
+    }
+    return Number(cleaned);
+  }),
+  payment: moneyCentsSchema,
+  paymentFrequency: regularPaymentFrequencySchema,
+});
+
+export type QuickPathForm = z.infer<typeof quickPathFormSchema>;
