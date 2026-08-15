@@ -6,10 +6,7 @@ import type { Extraction } from '../src/shared/schema.js';
 const config: AppConfig = {
   OPENAI_API_KEY: 'test', OPENAI_DATA_CONTROLS_VERIFIED: true, EXTRACTION_TIMEOUT_MS: 75_000,
   PRIMARY_EXTRACTION_MODEL: 'test-primary', FALLBACK_EXTRACTION_MODEL: 'test-fallback',
-  DATABASE_URL: 'https://db.test', SUPABASE_URL: 'https://storage.test', SUPABASE_SECRET_KEY: 'test',
-  OBJECT_STORAGE_BUCKET: 'loan-documents', SIGNED_URL_TTL_SECONDS: 600, UPLOAD_SESSION_TTL_SECONDS: 600,
-  RAW_FILE_TTL_SECONDS: 3_600, ANONYMOUS_ANALYSIS_TTL_SECONDS: 86_400, LENDER_INTEREST_ENABLED: false,
-  API_PORT: 8787, ALLOWED_ORIGIN: 'http://localhost:5173', TRUST_PROXY_HOPS: 0,
+  RAW_FILE_TTL_SECONDS: 3_600, TURNSTILE_SITE_KEY: '', TURNSTILE_SECRET_KEY: '',
   RATE_LIMIT_SALT: 'test-rate-limit-salt-1234',
 };
 
