@@ -1,0 +1,82 @@
+<!-- @dsCard group="Forms" viewport="700x1750" name="Buttons and inputs" subtitle="Two buttons, input states, the error pattern." -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoanHank forms</title>
+<link rel="stylesheet" href="../styles.css">
+<style>
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--font-ui);font-size:18px;line-height:1.5}
+main{max-width:640px;margin:0 auto;padding:32px 16px 48px}
+a{color:var(--denim)}a:hover{color:var(--denim)}
+.wmrow{border-bottom:1px solid var(--rule);padding-bottom:12px}
+.wm{font-weight:900;font-size:20px;letter-spacing:-0.02em;text-transform:uppercase}
+.fields{display:flex;gap:24px;flex-wrap:wrap;margin-top:8px}
+.fld{display:flex;align-items:baseline;gap:8px}
+.fld .lab{font-size:14px;color:var(--ink-soft)}
+.fld .val{font-family:var(--font-mono);font-size:16px;border-bottom:1px solid var(--rule);padding:0 8px}
+section{border-top:1px solid var(--rule);margin-top:32px;padding-top:24px}
+h2{margin:0 0 12px;font-size:18px;font-weight:700}
+h2 .n{font-family:var(--font-mono);font-weight:700}
+.row{display:grid;grid-template-columns:148px 1fr;gap:16px;align-items:center;padding:12px 0;border-bottom:1px solid var(--rule)}
+.slab{font-size:14px;color:var(--ink-soft)}
+.btn{height:56px;width:100%;border-radius:2px;font-family:var(--font-ui);font-size:18px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;box-sizing:border-box}
+.b-pri{background:var(--denim);color:var(--paper);border:0}
+.b-sec{background:var(--paper);color:var(--denim);border:1px solid var(--denim)}
+.f-focus{outline:2px solid var(--denim);outline-offset:2px}
+.b-pri.pressed{background:var(--ink)}
+.b-sec.pressed{background:var(--rule);color:var(--ink);border-color:var(--ink)}
+.b-pri.disabled{background:var(--rule);color:var(--ink-soft)}
+.b-sec.disabled{color:var(--ink-soft);border-color:var(--rule)}
+.cam{width:20px;height:20px;flex:none}
+.note{margin:16px 0 0;font-size:18px}
+.fnote{margin:8px 0 0;font-size:14px;color:var(--ink-soft)}
+.ilab{font-weight:500;font-size:16px;display:block;margin-bottom:8px}
+.ilab.amber{color:var(--amber-ink)}
+.input{height:56px;background:#FFFFFF;border:1px solid var(--rule);border-radius:2px;box-sizing:border-box;display:flex;align-items:center;padding:0 16px;font-family:var(--font-mono);font-size:20px;color:var(--ink)}
+.input.focus{border:2px solid var(--denim);padding:0 15px}
+.caret{display:inline-block;width:2px;height:26px;background:var(--ink)}
+.inote{font-size:14px;color:var(--ink-soft);margin-top:4px}
+.err{background:var(--amber-fill);color:var(--ink);border-radius:2px;padding:12px 16px;font-size:18px}
+</style>
+</head>
+<body>
+<main data-screen-label="Forms card">
+<header class="wmrow"><span class="wm">LOANHANK</span>
+<div class="fields">
+<div class="fld"><span class="lab">SHEET</span><span class="val">forms</span></div>
+<div class="fld"><span class="lab">REV</span><span class="val">A</span></div>
+<div class="fld"><span class="lab">DATE</span><span class="val">8/2026</span></div>
+</div>
+</header>
+<section>
+<h2><span class="n">1</span> Buttons. Two exist. There is no third.</h2>
+<div class="row"><span class="slab">primary, default</span><button class="btn b-pri">Run the numbers</button></div>
+<div class="row"><span class="slab">primary, focus</span><button class="btn b-pri f-focus">Run the numbers</button></div>
+<div class="row"><span class="slab">primary, pressed</span><button class="btn b-pri pressed">Run the numbers</button></div>
+<div class="row"><span class="slab">primary, disabled</span><button class="btn b-pri disabled" disabled>Run the numbers</button></div>
+<div class="row"><span class="slab">secondary, default</span><button class="btn b-sec"><svg class="cam" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="5" width="17" height="12" rx="1"></rect><path d="M6.5 5l1.5-2.5h4L13.5 5"></path><circle cx="10" cy="11" r="3.25"></circle></svg>Snap the quote instead</button></div>
+<div class="row"><span class="slab">secondary, focus</span><button class="btn b-sec f-focus"><svg class="cam" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="5" width="17" height="12" rx="1"></rect><path d="M6.5 5l1.5-2.5h4L13.5 5"></path><circle cx="10" cy="11" r="3.25"></circle></svg>Snap the quote instead</button></div>
+<div class="row"><span class="slab">secondary, pressed</span><button class="btn b-sec pressed"><svg class="cam" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="5" width="17" height="12" rx="1"></rect><path d="M6.5 5l1.5-2.5h4L13.5 5"></path><circle cx="10" cy="11" r="3.25"></circle></svg>Snap the quote instead</button></div>
+<div class="row"><span class="slab">secondary, disabled</span><button class="btn b-sec disabled" disabled><svg class="cam" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="5" width="17" height="12" rx="1"></rect><path d="M6.5 5l1.5-2.5h4L13.5 5"></path><circle cx="10" cy="11" r="3.25"></circle></svg>Snap the quote instead</button></div>
+<p class="fnote">56px tall, full width on mobile, 2px corners. State changes are instant. Nothing animates. The camera glyph on the secondary is the only icon in the product.</p>
+</section>
+<section>
+<h2><span class="n">2</span> Inputs</h2>
+<div class="row"><span class="slab">empty, label above</span><div><label class="ilab">Quoted price</label><div class="input"></div></div></div>
+<div class="row"><span class="slab">filled</span><div><label class="ilab">Quoted price</label><div class="input">$84,500</div></div></div>
+<div class="row"><span class="slab">focused</span><div><label class="ilab">Quoted price</label><div class="input focus">$84,5<span class="caret"></span></div></div></div>
+<div class="row"><span class="slab">read from the quote</span><div><label class="ilab">Quoted price</label><div class="input">$84,500</div><div class="inote">read from your paper</div></div></div>
+<div class="row"><span class="slab">could not be read</span><div><label class="ilab amber">couldn't read, enter it</label><div class="input"></div></div></div>
+<p class="note">The empty box in that last row is a correct outcome. This product never shows a guessed number. A plausible wrong number is the one fatal failure, so the box stays empty and the farmer types what the paper says.</p>
+<p class="fnote">56px tall, white fill, 1px rule border, 2px denim border on focus. Courier Prime inside, 20px, ink. Labels above in Libre Franklin Medium 16px. Placeholder text is never used as a label. No steppers, no sliders, no currency dropdowns, no masks that reformat while typing. inputmode="decimal".</p>
+</section>
+<section>
+<h2><span class="n">3</span> Errors</h2>
+<div class="err">Too blurry to read. Try again in better light.</div>
+<p class="fnote">Ink on amber-fill, 2px corners. No icon, no red, no shake, no border flash. The message states what happened and what to do next.</p>
+</section>
+</main>
+</body>
+</html>

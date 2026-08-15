@@ -1,0 +1,76 @@
+<!-- @dsCard group="Comparison" viewport="700x1050" name="Peer comparison" subtitle="The strip, and the n under 20 fallback." -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoanHank comparison</title>
+<link rel="stylesheet" href="../styles.css">
+<style>
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--font-ui);font-size:18px;line-height:1.5}
+main{max-width:640px;margin:0 auto;padding:32px 16px 48px}
+a{color:var(--denim)}a:hover{color:var(--denim)}
+.wmrow{border-bottom:1px solid var(--rule);padding-bottom:12px}
+.wm{font-weight:900;font-size:20px;letter-spacing:-0.02em;text-transform:uppercase}
+.fields{display:flex;gap:24px;flex-wrap:wrap;margin-top:8px}
+.fld{display:flex;align-items:baseline;gap:8px}
+.fld .lab{font-size:14px;color:var(--ink-soft)}
+.fld .val{font-family:var(--font-mono);font-size:16px;border-bottom:1px solid var(--rule);padding:0 8px}
+section{border-top:1px solid var(--rule);margin-top:32px;padding-top:24px}
+h2{margin:0 0 12px;font-size:18px;font-weight:700}
+h2 .n{font-family:var(--font-mono);font-weight:700}
+.strip{position:relative;height:96px;margin-top:16px}
+.base{position:absolute;top:24px;left:0;right:0;height:1px;background:var(--rule)}
+.range{position:absolute;top:18px;left:15.4%;width:69.2%;height:13px;background:var(--rule);border-radius:2px}
+.tick{position:absolute;top:12px;left:38.5%;width:2px;height:25px;background:var(--ink)}
+.dot{position:absolute;top:19px;left:57.7%;width:11px;height:11px;margin-left:-5px;background:var(--ink);border-radius:50%}
+.slab{position:absolute;top:48px;font-size:16px;white-space:nowrap}
+.slab .num{font-family:var(--font-mono)}
+.fnote{margin:16px 0 0;font-size:14px;color:var(--ink-soft)}
+.lead{margin:0 0 4px;font-size:18px}
+.rows{width:100%;border-collapse:collapse;margin-top:12px}
+.rows td{padding:8px 0;border-bottom:1px solid var(--rule);font-size:16px;vertical-align:baseline}
+.rows td.v{font-family:var(--font-mono);text-align:right}
+.rows .src{display:block;font-size:14px;color:var(--ink-soft)}
+.nline{margin:12px 0 0;font-size:16px}
+.nline .num{font-family:var(--font-mono)}
+</style>
+</head>
+<body>
+<main data-screen-label="Comparison card">
+<header class="wmrow"><span class="wm">LOANHANK</span>
+<div class="fields">
+<div class="fld"><span class="lab">SHEET</span><span class="val">comparison</span></div>
+<div class="fld"><span class="lab">REV</span><span class="val">A</span></div>
+<div class="fld"><span class="lab">DATE</span><span class="val">8/2026</span></div>
+</div>
+</header>
+<section>
+<h2><span class="n">1</span> The strip. n of 20 or more.</h2>
+<div class="strip">
+<div class="base"></div>
+<div class="range"></div>
+<div class="tick"></div>
+<div class="dot"></div>
+<div class="slab" style="left:38.5%;transform:translateX(-50%)">median <span class="num">7.4%</span></div>
+<div class="slab" style="left:57.7%;transform:translateX(-50%);top:72px">you <span class="num">7.9%</span></div>
+<div class="slab" style="right:0"><span class="num">n=143</span></div>
+</div>
+<p class="fnote">The shaded band is p25 <span style="font-family:var(--font-mono)">6.8%</span> to p75 <span style="font-family:var(--font-mono)">8.6%</span> in the rule colour. The median tick and the you dot are ink. Words label the marks, not symbols. No axis, no gridline, no legend, no tooltip, no hover, no animation on load. Not a bar chart, not a donut, not a gauge, not a score, not a ring, not a sparkline.</p>
+</section>
+<section>
+<h2><span class="n">2</span> n under 20. The strip does not render.</h2>
+<p class="lead">Not enough quotes like yours yet, so here are the published rates instead.</p>
+<table class="rows">
+<tbody>
+<tr><td>AgDirect equipment, 60-month term<span class="src">published rate card, as of 2026-07-01</span></td><td class="v">6.5%</td></tr>
+<tr><td>Farm Credit Services equipment loan<span class="src">published rate sheet, as of 2026-06-15</span></td><td class="v">7.1%</td></tr>
+<tr><td>Compeer Financial equipment rate<span class="src">published rate sheet, as of 2026-06-01</span></td><td class="v">6.9%</td></tr>
+</tbody>
+</table>
+<p class="nline">Quotes like yours so far: <span class="num">n=7</span>. The strip renders at <span class="num">n=20</span>.</p>
+<p class="fnote">The n prints in both states. Under 20 there is no strip, no partial strip, no faded strip. Published rows with a source and an as-of date, and a line that says so out loud.</p>
+</section>
+</main>
+</body>
+</html>

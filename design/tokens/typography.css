@@ -1,0 +1,2 @@
+@import url('https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&family=Libre+Franklin:wght@400;500;600;700;900&display=swap');
+:root{--font-ui:"Libre Franklin","Franklin Gothic Medium","Segoe UI",Arial,sans-serif;--font-mono:"Courier Prime","Courier New",monospace;--text-apr:48px;--text-apr-desktop:56px;--text-verdict:24px;--text-h1:28px;--text-body:18px;--text-receipt:16px;--text-label:16px;--text-footnote:14px;--lh-body:1.5/* @kind other */}

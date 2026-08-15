@@ -1,0 +1,122 @@
+{
+  "plugins": [
+    "react",
+    "import"
+  ],
+  "rules": {
+    "react/forbid-elements": [
+      "warn",
+      {
+        "forbid": []
+      }
+    ],
+    "no-restricted-imports": [
+      "warn",
+      {
+        "patterns": []
+      }
+    ],
+    "no-restricted-syntax": [
+      "warn",
+      {
+        "selector": "Literal[value=/#[0-9a-fA-F]{3,8}\\b/]",
+        "message": "Raw hex color — use a design-system color token via var()."
+      },
+      {
+        "selector": "Literal[value=/\\b\\d+px\\b/]",
+        "message": "Raw px value — use a design-system spacing token via var()."
+      },
+      {
+        "selector": "Literal[value=/font-family\\s*:\\s*(?!['\\\"]?(?:Courier Prime|Libre Franklin))/i]",
+        "message": "Font not provided by the design system. Available: Courier Prime, Libre Franklin."
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": [
+        "**/index.js"
+      ],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
+  ],
+  "x-omelette": {
+    "components": {},
+    "tokens": [
+      "--amber-fill",
+      "--amber-ink",
+      "--col-max",
+      "--control-h",
+      "--denim",
+      "--field",
+      "--field-fill",
+      "--font-mono",
+      "--font-ui",
+      "--hairline",
+      "--ink",
+      "--ink-soft",
+      "--input-white",
+      "--lh-body",
+      "--paper",
+      "--radius",
+      "--rule",
+      "--s-12",
+      "--s-16",
+      "--s-24",
+      "--s-32",
+      "--s-4",
+      "--s-48",
+      "--s-8",
+      "--tap-min",
+      "--text-apr",
+      "--text-apr-desktop",
+      "--text-body",
+      "--text-footnote",
+      "--text-h1",
+      "--text-label",
+      "--text-receipt",
+      "--text-verdict"
+    ],
+    "tokenKinds": {
+      "--paper": "color",
+      "--ink": "color",
+      "--ink-soft": "color",
+      "--rule": "color",
+      "--denim": "color",
+      "--field": "color",
+      "--field-fill": "color",
+      "--amber-ink": "color",
+      "--amber-fill": "color",
+      "--input-white": "color",
+      "--font-ui": "font",
+      "--font-mono": "font",
+      "--text-apr": "font",
+      "--text-apr-desktop": "font",
+      "--text-verdict": "font",
+      "--text-h1": "font",
+      "--text-body": "font",
+      "--text-receipt": "font",
+      "--text-label": "font",
+      "--text-footnote": "font",
+      "--lh-body": "other",
+      "--s-4": "spacing",
+      "--s-8": "spacing",
+      "--s-12": "spacing",
+      "--s-16": "spacing",
+      "--s-24": "spacing",
+      "--s-32": "spacing",
+      "--s-48": "spacing",
+      "--radius": "radius",
+      "--col-max": "spacing",
+      "--control-h": "spacing",
+      "--tap-min": "spacing",
+      "--hairline": "color"
+    },
+    "fontFamilies": [
+      "Courier Prime",
+      "Libre Franklin"
+    ]
+  }
+}

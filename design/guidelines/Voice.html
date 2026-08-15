@@ -1,0 +1,100 @@
+<!-- @dsCard group="Voice" viewport="700x2100" name="Voice" subtitle="Canonical microcopy, rules, tells." -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoanHank voice</title>
+<link rel="stylesheet" href="../styles.css">
+<style>
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--font-ui);font-size:18px;line-height:1.5}
+main{max-width:640px;margin:0 auto;padding:32px 16px 48px}
+a{color:var(--denim)}a:hover{color:var(--denim)}
+.wmrow{border-bottom:1px solid var(--rule);padding-bottom:12px}
+.wm{font-weight:900;font-size:20px;letter-spacing:-0.02em;text-transform:uppercase}
+.fields{display:flex;gap:24px;flex-wrap:wrap;margin-top:8px}
+.fld{display:flex;align-items:baseline;gap:8px}
+.fld .lab{font-size:14px;color:var(--ink-soft)}
+.fld .val{font-family:var(--font-mono);font-size:16px;border-bottom:1px solid var(--rule);padding:0 8px}
+section{border-top:1px solid var(--rule);margin-top:32px;padding-top:24px}
+h2{margin:0 0 12px;font-size:18px;font-weight:700}
+h2 .n{font-family:var(--font-mono);font-weight:700}
+table{width:100%;border-collapse:collapse}
+th{font-size:14px;color:var(--ink-soft);font-weight:400;text-align:left;padding:0 12px 8px 0;border-bottom:1px solid var(--rule)}
+td{padding:8px 12px 8px 0;border-bottom:1px solid var(--rule);font-size:16px;vertical-align:baseline}
+td:last-child,th:last-child{padding-right:0}
+.k{color:var(--ink-soft);font-size:14px;white-space:nowrap}
+.num{font-family:var(--font-mono)}
+.btnrow{display:flex;gap:8px;margin-top:12px}
+.btn{height:56px;flex:1;border-radius:2px;font-family:var(--font-ui);font-size:18px;font-weight:600;display:flex;align-items:center;justify-content:center;box-sizing:border-box;background:var(--paper);color:var(--denim);border:1px solid var(--denim);text-align:center}
+.fnote{margin:8px 0 0;font-size:14px;color:var(--ink-soft)}
+.rules div{padding:8px 0;border-bottom:1px solid var(--rule);font-size:16px}
+.wrong{color:var(--ink-soft);font-size:14px}
+.one{font-weight:600;font-size:24px;line-height:1.3;margin:0}
+</style>
+</head>
+<body>
+<main data-screen-label="Voice card">
+<header class="wmrow"><span class="wm">LOANHANK</span>
+<div class="fields">
+<div class="fld"><span class="lab">SHEET</span><span class="val">voice</span></div>
+<div class="fld"><span class="lab">REV</span><span class="val">A</span></div>
+<div class="fld"><span class="lab">DATE</span><span class="val">8/2026</span></div>
+</div>
+</header>
+<section>
+<h2><span class="n">1</span> Canonical microcopy. Never paraphrased.</h2>
+<table>
+<thead><tr><th>moment</th><th>the exact words</th></tr></thead>
+<tbody>
+<tr><td class="k">primary button</td><td>Run the numbers</td></tr>
+<tr><td class="k">photo button</td><td>Snap the quote instead</td></tr>
+<tr><td class="k">extraction wait</td><td>Reading your paper... about <span class="num">10</span> seconds.</td></tr>
+<tr><td class="k">confirm header</td><td>Check these against your paper. Fix anything we got wrong.</td></tr>
+<tr><td class="k">good verdict</td><td>This deal checks out. We'd take it.</td></tr>
+<tr><td class="k">amber verdict</td><td>Look closer. The <span class="num">0%</span> costs you <span class="num">$2,347</span> more than the cash price.</td></tr>
+<tr><td class="k">email gate</td><td>Want the full teardown as a PDF? We'll email it. That's all we use your email for.</td></tr>
+<tr><td class="k">consent gate</td><td>Want lenders to compete for this deal? You say go. Nothing moves without you.</td></tr>
+<tr><td class="k">consent decline</td><td>No thanks, my numbers stay here.</td></tr>
+<tr><td class="k">blurry photo</td><td>Too blurry to read. Try again in better light.</td></tr>
+<tr><td class="k">footer trust line</td><td>Free tool. Photo deleted after reading. Nothing leaves here unless you say go.</td></tr>
+</tbody>
+</table>
+<div class="btnrow">
+<button class="btn">Yes, let them compete</button>
+<button class="btn">No thanks, my numbers stay here</button>
+</div>
+<p class="fnote">The decline is an equal-weight button, not grey shame text. Same size, same weight, same style, side by side.</p>
+</section>
+<section>
+<h2><span class="n">2</span> Rules</h2>
+<div class="rules">
+<div>Short sentences. Plain words. Sixth-grade reading with expert-grade numbers.</div>
+<div>Money to the dollar. <span class="num">$2,347</span> and never ~<span class="num">$2.3K</span>.</div>
+<div>Second person. Your real rate, never "users".</div>
+<div>Every figure carries a source and a date.</div>
+<div>Say "we don't know" when we don't know.</div>
+<div>Show the n or show nothing.</div>
+</div>
+</section>
+<section>
+<h2><span class="n">3</span> Tells</h2>
+<table>
+<thead><tr><th>never</th><th>instead</th></tr></thead>
+<tbody>
+<tr><td class="wrong">Your rate — the real one — is 7.9%</td><td>Your real rate is <span class="num">7.9%</span>.</td></tr>
+<tr><td class="wrong">Free. Fast. Private.</td><td>Free, takes about a minute, and your numbers stay here unless you say otherwise.</td></tr>
+<tr><td class="wrong">It's not a loan. It's a markup.</td><td>The <span class="num">0%</span> is a markup on the price.</td></tr>
+<tr><td class="wrong">Check Your Real Rate Today</td><td>Check your real rate.</td></tr>
+<tr><td class="wrong">We read your paper. We run your numbers.</td><td>We read your paper and run the numbers, which takes about a minute.</td></tr>
+</tbody>
+</table>
+<p class="fnote">The left column is the only place banned copy ever renders in this system, and it renders as a specimen of what never ships.</p>
+</section>
+<section>
+<h2><span class="n">4</span> The most important sentence</h2>
+<p class="one">Sometimes the dealer's deal is good, and we say so.</p>
+</section>
+</main>
+</body>
+</html>

@@ -1,0 +1,93 @@
+<!-- @dsCard group="Verdict" viewport="700x1800" name="The verdict" subtitle="Two stamps, and the abstention." -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoanHank verdict</title>
+<link rel="stylesheet" href="../styles.css">
+<style>
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--font-ui);font-size:18px;line-height:1.5}
+main{max-width:640px;margin:0 auto;padding:32px 16px 48px}
+a{color:var(--denim)}a:hover{color:var(--denim)}
+.wmrow{border-bottom:1px solid var(--rule);padding-bottom:12px}
+.wm{font-weight:900;font-size:20px;letter-spacing:-0.02em;text-transform:uppercase}
+.fields{display:flex;gap:24px;flex-wrap:wrap;margin-top:8px}
+.fld{display:flex;align-items:baseline;gap:8px}
+.fld .lab{font-size:14px;color:var(--ink-soft)}
+.fld .val{font-family:var(--font-mono);font-size:16px;border-bottom:1px solid var(--rule);padding:0 8px}
+section{border-top:1px solid var(--rule);margin-top:32px;padding-top:24px}
+h2{margin:0 0 12px;font-size:18px;font-weight:700}
+h2 .n{font-family:var(--font-mono);font-weight:700}
+.stamp{display:inline-block;font-family:var(--font-mono);font-weight:700;font-size:24px;letter-spacing:0.08em;padding:8px 16px;border-radius:2px;border:3px solid;transform:rotate(-1.5deg);margin:4px 0 12px}
+.st-good{color:var(--field);border-color:var(--field);background:var(--field-fill)}
+.st-caution{color:var(--amber-ink);border-color:var(--amber-ink);background:var(--amber-fill)}
+.verdict{font-weight:600;font-size:24px;line-height:1.3;margin:0 0 12px}
+.verdict .num{font-family:var(--font-mono)}
+.ref{font-size:14px;color:var(--ink-soft);margin:0;border-top:1px solid var(--rule);padding-top:8px}
+.ref .num{font-family:var(--font-mono);color:var(--ink)}
+.fnote{margin:16px 0 0;font-size:14px;color:var(--ink-soft)}
+.hl-lab{font-size:18px;margin-top:16px}
+.hl-rate{font-family:var(--font-mono);font-weight:700;font-size:48px;line-height:1.1}
+.missing{margin-top:12px}
+.missing div{padding:8px 0;border-bottom:1px solid var(--rule);font-size:16px}
+.missing .num{font-family:var(--font-mono)}
+.rcpt{width:100%;border-collapse:collapse;margin-top:16px}
+.rcpt td{padding:8px 0;border-bottom:1px solid var(--rule);font-size:16px;vertical-align:baseline}
+.rcpt td.v{font-family:var(--font-mono);text-align:right;white-space:pre}
+.rcpt tr.total td{border-top:3px double var(--ink);border-bottom:0;font-weight:600}
+.rcpt tr.total td.v{font-weight:700}
+</style>
+</head>
+<body>
+<main data-screen-label="Verdict card">
+<header class="wmrow"><span class="wm">LOANHANK</span>
+<div class="fields">
+<div class="fld"><span class="lab">SHEET</span><span class="val">verdict</span></div>
+<div class="fld"><span class="lab">REV</span><span class="val">A</span></div>
+<div class="fld"><span class="lab">DATE</span><span class="val">8/2026</span></div>
+</div>
+</header>
+<section>
+<h2><span class="n">1</span> CHECKS OUT</h2>
+<div><span class="stamp st-good">CHECKS OUT</span></div>
+<p class="verdict">This deal checks out. We'd take it.</p>
+<p class="ref">Comparable published equipment rate <span class="num">6.5%</span>, subject to approval. You are <span class="num">40</span> basis points over. AgDirect published card, as of 2026-07-01.</p>
+</section>
+<section>
+<h2><span class="n">2</span> LOOK CLOSER</h2>
+<div><span class="stamp st-caution">LOOK CLOSER</span></div>
+<p class="verdict">Look closer. The <span class="num">0%</span> costs you <span class="num">$2,347</span> more than the cash price.</p>
+<p class="ref">Comparable published equipment rate <span class="num">6.5%</span>, subject to approval. You are <span class="num">140</span> basis points over. AgDirect published card, as of 2026-07-01.</p>
+</section>
+<section>
+<h2><span class="n">3</span> No verdict. No stamp.</h2>
+<p class="verdict">No verdict yet. Here's what's missing.</p>
+<div class="missing">
+<div>Term on your quote: <span class="num">84</span> months.</div>
+<div>Published rate cards for this equipment stop at <span class="num">72</span> months. There is no comparable rate, and we won't guess one.</div>
+</div>
+<div class="hl-lab">Your real rate</div>
+<div class="hl-rate">7.9%</div>
+<table class="rcpt">
+<tbody>
+<tr><td>Quoted price</td><td class="v">$84,500</td></tr>
+<tr><td>Cash discount</td><td class="v">− $6,000</td></tr>
+<tr><td>True amount financed</td><td class="v">$78,500</td></tr>
+<tr><td>Total of payments</td><td class="v">$86,847</td></tr>
+<tr class="total"><td>Cost of the "0%"</td><td class="v">$2,347</td></tr>
+</tbody>
+</table>
+<p class="fnote">This is an abstention, not a judgment. No stamp, no grey badge, no outline stamp, no pending chip. The rate and the receipt still print in full. Only the stamp is absent, and the absence is the message.</p>
+</section>
+<section>
+<h2><span class="n">4</span> Stamp rules</h2>
+<div class="missing">
+<div>Two stamps exist and there will never be a third. Courier Prime Bold caps, <span class="num">24px</span>, <span class="num">3px</span> border, <span class="num">2px</span> corners, rotated <span class="num">-1.5</span> degrees.</div>
+<div>A verdict is three things at once, never colour alone: the colour, the stamp shape, and the words. About <span class="num">8</span> percent of this audience is colourblind, and green against amber alone fails exactly them.</div>
+<div>This plain box is the standing render. A real rubber stamp impression gets scanned and dropped in later. No vector distressing, no fake ink bleed, no torn edge. Fake antique is worse than plain.</div>
+</div>
+</section>
+</main>
+</body>
+</html>

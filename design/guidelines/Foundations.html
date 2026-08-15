@@ -1,0 +1,128 @@
+<!-- @dsCard group="Foundations" viewport="700x1800" name="Foundations sheet" subtitle="Colour, type, spacing, shape." -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoanHank foundations</title>
+<link rel="stylesheet" href="../styles.css">
+<style>
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--font-ui);font-size:18px;line-height:1.5}
+main{max-width:640px;margin:0 auto;padding:32px 16px 48px}
+a{color:var(--denim)}a:hover{color:var(--denim)}
+.wmrow{border-bottom:1px solid var(--rule);padding-bottom:12px}
+.wm{font-weight:900;font-size:28px;letter-spacing:-0.02em;line-height:1.1}
+.fields{display:flex;gap:24px;flex-wrap:wrap;margin-top:12px}
+.fld{display:flex;align-items:baseline;gap:8px}
+.fld .lab{font-size:14px;color:var(--ink-soft)}
+.fld .val{font-family:var(--font-mono);font-size:16px;border-bottom:1px solid var(--rule);padding:0 8px}
+section{border-top:1px solid var(--rule);margin-top:24px;padding-top:24px}
+h2{margin:0 0 12px;font-size:18px;font-weight:700;line-height:1.5}
+h2 .n{font-family:var(--font-mono);font-weight:700}
+table{width:100%;border-collapse:collapse}
+th{font-size:14px;color:var(--ink-soft);font-weight:400;text-align:left;padding:0 12px 8px 0;border-bottom:1px solid var(--rule)}
+td{padding:8px 12px 8px 0;border-bottom:1px solid var(--rule);vertical-align:baseline}
+th:last-child,td:last-child{padding-right:0}
+.tk{display:flex;align-items:center;gap:8px;font-size:16px}
+.cs{width:16px;height:16px;border-radius:2px;border:1px solid var(--rule);flex:none}
+.hex{font-family:var(--font-mono);font-size:16px}
+.job{font-size:14px;color:var(--ink-soft)}
+.use{font-size:14px;color:var(--ink-soft)}
+.spec{font-size:14px;color:var(--ink-soft)}
+.note{margin:16px 0 0}
+.fnote{margin:8px 0 0;font-size:14px;color:var(--ink-soft)}
+.x-apr{font-family:var(--font-mono);font-weight:700;font-size:48px;line-height:1.1}
+.x-verdict{font-weight:600;font-size:24px;line-height:1.3}
+.x-h1{font-weight:700;font-size:28px;line-height:1.3}
+.x-body{font-size:18px;line-height:1.5}
+.x-receipt{font-family:var(--font-mono);font-size:16px;display:flex;justify-content:space-between;gap:16px}
+.x-src{font-size:14px;color:var(--ink-soft)}
+.x-label{font-weight:500;font-size:16px}
+.numrow{display:flex;align-items:baseline;gap:16px;padding:8px 0}
+.numrow+.numrow{border-top:1px solid var(--rule)}
+.numrow .lab{width:80px;flex:none;font-size:14px;color:var(--ink-soft)}
+.dig-mono{font-family:var(--font-mono);font-weight:700;font-size:48px;line-height:1.1}
+.dig-ui{font-weight:700;font-size:48px;line-height:1.1}
+.nums{margin-top:24px}
+.srow{display:grid;grid-template-columns:48px 1fr;gap:16px;align-items:center;padding:4px 0}
+.slab{font-family:var(--font-mono);font-size:14px;color:var(--ink-soft)}
+.sbar{height:12px;background:var(--ink);border-radius:2px}
+.shapes{display:flex;gap:24px;flex-wrap:wrap}
+.box{width:96px;height:96px;background:var(--rule)}
+.r2{border-radius:2px}.r8{border-radius:8px}.r12{border-radius:12px}
+.blab{margin-top:8px;font-size:14px;color:var(--ink-soft)}
+.blab .mono{font-family:var(--font-mono)}
+</style>
+</head>
+<body>
+<main data-screen-label="Foundations sheet">
+<header>
+<div class="wmrow"><span class="wm">LOANHANK</span></div>
+<div class="fields">
+<div class="fld"><span class="lab">SHEET</span><span class="val">foundations</span></div>
+<div class="fld"><span class="lab">REV</span><span class="val">A</span></div>
+<div class="fld"><span class="lab">DATE</span><span class="val">8/2026</span></div>
+</div>
+</header>
+<section>
+<h2><span class="n">1</span> Colour</h2>
+<table>
+<thead><tr><th>token</th><th>hex</th><th>job</th></tr></thead>
+<tbody>
+<tr><td><span class="tk"><span class="cs" style="background:#F7F5EF"></span>paper</span></td><td class="hex">#F7F5EF</td><td class="job">page background. warm off-white. kills glare, feels print</td></tr>
+<tr><td><span class="tk"><span class="cs" style="background:#191813"></span>ink</span></td><td class="hex">#191813</td><td class="job">all body text, all numbers. warm near-black</td></tr>
+<tr><td><span class="tk"><span class="cs" style="background:#57534A"></span>ink-soft</span></td><td class="hex">#57534A</td><td class="job">secondary text, sources, dates</td></tr>
+<tr><td><span class="tk"><span class="cs" style="background:#D8D4C8"></span>rule</span></td><td class="hex">#D8D4C8</td><td class="job">hairlines, borders, receipt rules</td></tr>
+<tr><td><span class="tk"><span class="cs" style="background:#2F5D8A"></span>denim</span></td><td class="hex">#2F5D8A</td><td class="job">primary buttons, links. desaturated steel blue — chore coat, not SaaS</td></tr>
+<tr><td><span class="tk"><span class="cs" style="background:#3F7A34"></span>field</span></td><td class="hex">#3F7A34</td><td class="job">good-verdict stamp + chip only</td></tr>
+<tr><td><span class="tk"><span class="cs" style="background:#E4EDDC"></span>field-fill</span></td><td class="hex">#E4EDDC</td><td class="job">good-verdict chip background</td></tr>
+<tr><td><span class="tk"><span class="cs" style="background:#8A5A00"></span>amber-ink</span></td><td class="hex">#8A5A00</td><td class="job">caution-verdict text (AA-safe)</td></tr>
+<tr><td><span class="tk"><span class="cs" style="background:#F2E4C2"></span>amber-fill</span></td><td class="hex">#F2E4C2</td><td class="job">caution chip background</td></tr>
+</tbody>
+</table>
+<p class="note">Warm paper only works when the page is dense with ink. The same hex reads as newsprint when dense and as an AI startup when airy.</p>
+<p class="fnote">No red exists in this product. Errors are ink on amber-fill.</p>
+</section>
+<section>
+<h2><span class="n">2</span> Type</h2>
+<table>
+<thead><tr><th>use</th><th>spec</th><th>specimen</th></tr></thead>
+<tbody>
+<tr><td class="use">the big APR</td><td class="spec">Courier Prime Bold, 48px mobile / 56px desktop</td><td><span class="x-apr">7.9%</span></td></tr>
+<tr><td class="use">verdict line</td><td class="spec">Libre Franklin SemiBold, 24px</td><td><span class="x-verdict">This deal checks out. We'd take it.</span></td></tr>
+<tr><td class="use">h1 (page headline)</td><td class="spec">Libre Franklin Bold, 28px</td><td><span class="x-h1">Point your phone at the dealer's quote.</span></td></tr>
+<tr><td class="use">body</td><td class="spec">Libre Franklin, 18px, line-height 1.5</td><td><span class="x-body">Free, takes about a minute, and your numbers stay here unless you say otherwise.</span></td></tr>
+<tr><td class="use">receipt line items</td><td class="spec">Courier Prime, 16px</td><td><span class="x-receipt"><span>Quoted price</span><span>$84,500</span></span></td></tr>
+<tr><td class="use">sources/footnotes</td><td class="spec">Libre Franklin, 14px, ink-soft. NEVER smaller than 14</td><td><span class="x-src">¹ Chicago Fed AgLetter, Q1 2026</span></td></tr>
+<tr><td class="use">labels above inputs</td><td class="spec">Libre Franklin Medium 16px. labels ABOVE, never placeholder-as-label</td><td><span class="x-label">Cash discount</span></td></tr>
+</tbody>
+</table>
+<div class="nums">
+<div class="numrow"><span class="lab">correct</span><span class="dig-mono">0123456789</span></div>
+<div class="numrow"><span class="lab">never</span><span class="dig-ui">0123456789</span></div>
+</div>
+<p class="note">Every number a farmer ever sees is Courier Prime, set in ink.</p>
+</section>
+<section>
+<h2><span class="n">3</span> Spacing</h2>
+<div class="srow"><span class="slab">4</span><div class="sbar" style="width:4px"></div></div>
+<div class="srow"><span class="slab">8</span><div class="sbar" style="width:8px"></div></div>
+<div class="srow"><span class="slab">12</span><div class="sbar" style="width:12px"></div></div>
+<div class="srow"><span class="slab">16</span><div class="sbar" style="width:16px"></div></div>
+<div class="srow"><span class="slab">24</span><div class="sbar" style="width:24px"></div></div>
+<div class="srow"><span class="slab">32</span><div class="sbar" style="width:32px"></div></div>
+<div class="srow"><span class="slab">48</span><div class="sbar" style="width:48px"></div></div>
+<p class="note">Section gaps are 32 to 48, nothing is cramped and nothing floats. The scale has no other values in it.</p>
+</section>
+<section>
+<h2><span class="n">4</span> Shape</h2>
+<div class="shapes">
+<div><div class="box r2"></div><div class="blab"><span class="mono">2px</span> ours</div></div>
+<div><div class="box r8"></div><div class="blab"><span class="mono">8px</span> never</div></div>
+<div><div class="box r12"></div><div class="blab"><span class="mono">12px</span> never</div></div>
+</div>
+<p class="note">Square shoulders, like a toolbox drawer.</p>
+</section>
+</main>
+</body>
+</html>

@@ -1,0 +1,74 @@
+<!-- @dsCard group="Brand" viewport="700x1250" name="Wordmark" subtitle="LOANHANK lockup, variants, clear space." -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoanHank wordmark</title>
+<link rel="stylesheet" href="../styles.css">
+<style>
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--font-ui);font-size:18px;line-height:1.5}
+main{max-width:640px;margin:0 auto;padding:32px 16px 48px}
+a{color:var(--denim)}a:hover{color:var(--denim)}
+.wm{font-weight:900;letter-spacing:-0.02em;line-height:1.1;text-transform:uppercase;display:inline-block}
+.wmrule{height:1px;background:var(--rule)}
+.tag{font-size:14px;color:var(--ink-soft);margin-top:4px}
+.vrow{display:grid;grid-template-columns:200px 1fr;gap:16px;align-items:center;padding:12px 0;border-bottom:1px solid var(--rule)}
+.vlab{font-size:14px;color:var(--ink-soft)}
+.vlab .n{font-family:var(--font-mono)}
+.onink{background:var(--ink);color:var(--paper);padding:16px}
+.onink .wmrule{background:var(--paper)}
+.onink .tag{color:var(--rule)}
+.print{background:#FFFFFF;color:#000000;padding:16px;border:1px solid var(--rule)}
+.favrow{display:flex;align-items:flex-end;gap:24px}
+.fav{flex:none;width:128px;height:128px;background:var(--ink);color:var(--paper);display:flex;align-items:center;overflow:hidden;border-radius:2px}
+.fav .wm{font-size:54px;padding-left:8px;white-space:nowrap}
+.fav32{flex:none;width:32px;height:32px;background:var(--ink);color:var(--paper);display:flex;align-items:center;overflow:hidden;border-radius:2px}
+.fav32 .wm{font-size:14px;padding-left:2px;white-space:nowrap}
+.favnote{font-size:14px;color:var(--ink-soft);padding-bottom:4px}
+section{border-top:1px solid var(--rule);margin-top:32px;padding-top:24px}
+h2{margin:0 0 12px;font-size:18px;font-weight:700}
+.rulesrow{display:grid;grid-template-columns:200px 1fr;gap:16px;padding:8px 0;border-bottom:1px solid var(--rule)}
+.rulesrow .k{font-size:14px;color:var(--ink-soft)}
+.rulesrow .v{font-size:16px}
+.rulesrow .v .num{font-family:var(--font-mono)}
+.clearbox{border:1px solid var(--rule);display:inline-block;padding:14px;margin-top:8px}
+.clearbox .wm{font-size:20px}
+</style>
+</head>
+<body>
+<main data-screen-label="Brand card">
+<div class="vrow" style="padding-top:0">
+<div class="vlab"><span class="n">1</span> full lockup, 28px, ink on paper</div>
+<div><span class="wm" style="font-size:28px">LOANHANK</span><div class="wmrule" style="width:172px"></div><div class="tag">Runs the numbers. Takes no side.</div></div>
+</div>
+<div class="vrow">
+<div class="vlab"><span class="n">2</span> full lockup, 28px, paper on ink</div>
+<div class="onink"><span class="wm" style="font-size:28px">LOANHANK</span><div class="wmrule" style="width:172px"></div><div class="tag">Runs the numbers. Takes no side.</div></div>
+</div>
+<div class="vrow">
+<div class="vlab"><span class="n">3</span> wordmark and rule, 20px, ticket header</div>
+<div><span class="wm" style="font-size:20px">LOANHANK</span><div class="wmrule" style="width:123px"></div></div>
+</div>
+<div class="vrow">
+<div class="vlab"><span class="n">4</span> wordmark only, 16px, document footer</div>
+<div><span class="wm" style="font-size:16px">LOANHANK</span></div>
+</div>
+<div class="vrow">
+<div class="vlab"><span class="n">5</span> print stylesheet, black on white</div>
+<div class="print"><span class="wm" style="font-size:28px">LOANHANK</span></div>
+</div>
+<div class="vrow">
+<div class="vlab"><span class="n">6</span> favicon, 512px square crop, shown at 128 beside its 32px rendering</div>
+<div class="favrow"><div class="fav"><span class="wm">LOANHANK</span></div><div class="fav32"><span class="wm">LOANHANK</span></div><div class="favnote">a straight crop of the set wordmark, left-aligned, as much of the word as the square holds. Not a monogram. No letters are re-set or re-spaced for the crop</div></div>
+</div>
+<section>
+<h2>Use</h2>
+<div class="rulesrow"><div class="k">clear space</div><div class="v">Keep <span class="num">16px</span> clear on all sides at text sizes, or the height of the letter N at larger sizes. The rule beneath sits <span class="num">4px</span> under the baseline and runs the width of the word.</div></div>
+<div class="rulesrow"><div class="k">minimum size</div><div class="v"><span class="num">14px</span>. Below that, set the name in body type instead: LoanHank.</div></div>
+<div class="rulesrow"><div class="k">register</div><div class="v">Feed sack and grain elevator lettering, and the lettering on a 1970s implement dealer's invoice. Not a startup logo.</div></div>
+<div class="rulesrow" style="border-bottom:0"><div class="k">the only mark</div><div class="v">No symbol, no monogram, no icon, no drawn mark of any kind, now or ever. If a mark is ever needed, it is the CHECKS OUT stamp.</div></div>
+</section>
+</main>
+</body>
+</html>
