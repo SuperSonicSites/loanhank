@@ -572,6 +572,69 @@ ${view.rows.map(field).join('\n')}
 `);
 }
 
+export interface EmailGate {
+  decodeId: string;
+}
+
+/**
+ * Gate 1, rendered under the ticket as its own quiet block. Never a modal,
+ * never a popup, and never before the farmer has his answer: value before
+ * email is the whole religion.
+ *
+ * It renders only when a teardown can actually be sent. The copy promises a
+ * PDF, and promising one we cannot deliver is the same class of error as
+ * printing a number we cannot stand behind.
+ */
+function emailGateBlock(gate: EmailGate | null): string {
+  if (gate === null) return '';
+  return `
+  <div class="gate no-print">
+    <h2>Want the full teardown as a PDF?</h2>
+    <p>We'll email it. That's all we use your email for.</p>
+    <form method="post" action="/email">
+      <input type="hidden" name="decodeId" value="${escapeHtml(gate.decodeId)}">
+      <div class="field">
+        <label for="email">Your email</label>
+        <input type="email" id="email" name="email" inputmode="email" autocomplete="email" required>
+      </div>
+      <button type="submit">Send me the teardown</button>
+    </form>
+  </div>
+`;
+}
+
+/**
+ * Gate 2, Phase A (spec.md §8). A NON-BINDING interest question, and nothing
+ * else.
+ *
+ * The wording is spec's, verbatim, and it is not paraphrasable. Read what it
+ * carefully is not: it does not ask permission, it does not mention consent,
+ * it does not say a lender will call, and answering Yes moves nothing
+ * anywhere. It measures intent, not permission, and it is not brokering
+ * because nothing moves.
+ *
+ * The real consent button ships only after the lawyer stones clear (Phase C).
+ * Until then the word consent appears nowhere near this, because a farmer who
+ * thought he had consented to something would have been misled by us.
+ *
+ * Both answers are equal-weight buttons. No gray shame text on the decline.
+ */
+function interestBlock(gate: EmailGate | null): string {
+  if (gate === null) return '';
+  return `
+  <div class="gate no-print">
+    <h2>If an independent equipment lender could quote this deal, would you want to hear from one?</h2>
+    <p class="note">Nothing moves either way. We are asking whether this would be worth building. Your numbers stay here regardless of which button you press.</p>
+    <form method="post" action="/interest">
+      <input type="hidden" name="decodeId" value="${escapeHtml(gate.decodeId)}">
+      <button type="submit" name="answer" value="yes">Yes</button>
+      <button type="submit" name="answer" value="not_now" class="secondary">Not now</button>
+    </form>
+    <p class="note"><a href="/how-we-make-money">How we make money</a></p>
+  </div>
+`;
+}
+
 export interface VerdictTicketView {
   rate: string;
   verdict: 'checks_out' | 'look_closer' | 'none';
@@ -581,6 +644,7 @@ export interface VerdictTicketView {
   footnote: string | null;
   missing: string[];
   assumption: string | null;
+  gate: EmailGate | null;
 }
 
 /**
@@ -621,6 +685,14 @@ ${view.reference ? `    <p class="reference">${escapeHtml(view.reference)}</p>\n
 
 ${view.assumption ? `  <p class="assumption">${escapeHtml(view.assumption)}</p>\n` : ''}${abstention}${
     view.footnote ? `  <p class="footnote">${escapeHtml(view.footnote)}</p>\n` : ''
-  }  <p class="no-print"><a href="/">Run another quote</a></p>
+  }${emailGateBlock(view.gate)}${interestBlock(view.gate)}  <p class="no-print"><a href="/">Run another quote</a></p>
+`);
+}
+
+/** Plain confirmations. One line, on voice, nothing to click. */
+export function renderNotice(heading: string, body: string): string {
+  return shell(`${heading} — LoanHank`, `  <h1>${escapeHtml(heading)}</h1>
+  <p>${escapeHtml(body)}</p>
+  <p class="no-print"><a href="/">Back to the tool</a></p>
 `);
 }

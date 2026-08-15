@@ -306,3 +306,28 @@ describe('the design bundle carries no arithmetic of its own', () => {
     expect(names).toEqual([]);
   });
 });
+
+describe('the interest question is spec wording, verbatim', () => {
+  // spec.md §8 Phase A. This is the sentence a lawyer will read first, and
+  // paraphrasing it is how a demand test quietly becomes a consent flow.
+  it('asks exactly what spec says to ask', async () => {
+    const spec = await readFile(new URL('../docs/spec.md', import.meta.url), 'utf8');
+    const page = await readFile(new URL('../src/web/page.ts', import.meta.url), 'utf8');
+    const question = 'If an independent equipment lender could quote this deal, '
+      + 'would you want to hear from one?';
+    expect(spec).toContain(question);
+    expect(page).toContain(question);
+  });
+
+  it('keeps consent language away from it entirely', async () => {
+    const page = await readFile(new URL('../src/web/page.ts', import.meta.url), 'utf8');
+    const block = page.slice(page.indexOf('function interestBlock'), page.indexOf('export interface VerdictTicketView'));
+    expect(block.length).toBeGreaterThan(0);
+    // The word appears once, in a comment explaining why it must not appear in
+    // the copy. It must never reach a farmer's screen from here.
+    const rendered = block.slice(block.indexOf('return `'));
+    for (const forbidden of ['consent', 'agree', 'authorise', 'authorize', 'permission to']) {
+      expect(rendered.toLowerCase(), `the interest block says "${forbidden}"`).not.toContain(forbidden);
+    }
+  });
+});

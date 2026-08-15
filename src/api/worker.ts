@@ -15,15 +15,16 @@ import {
 } from '../finance/index.js';
 import { hashAccessKey } from './security.js';
 import {
-  centsToInput, confirmableField, ledgerFormSchema, quickPathFormSchema,
+  centsToInput, confirmableField, emailGateSchema, ledgerFormSchema, quickPathFormSchema,
   type ConfirmableField, type QuoteExtraction,
 } from '../shared/schema.js';
 import {
-  renderConfirm, renderForm, renderTicket, renderUnpriceable, renderVerdictTicket,
+  renderConfirm, renderForm, renderNotice, renderTicket, renderUnpriceable, renderVerdictTicket,
   type ConfirmRow, type FormValues,
 } from '../web/page.js';
 import { assertUploadAllowed, PublicApiError } from './security.js';
 import { OpenAIQuoteExtractor } from './extractor.js';
+import { renderTeardownPdf, type TeardownLine } from './teardown-pdf.js';
 import { getConfig } from './env.js';
 
 // Must match the crons in wrangler.jsonc. An unrecognized cron logs and does
@@ -188,6 +189,74 @@ function extractionDiff(
     if (!same) diff.push({ field, read: readValue, confirmed: confirmedValue.slice(0, 40) });
   }
   return diff;
+}
+
+
+/**
+ * Can we actually send a teardown?
+ *
+ * CAN-SPAM requires a real postal address in every commercial email, and there
+ * is no inventing one. Without it the gate does not render at all: a farmer
+ * with no gate got his answer and lost nothing, whereas a farmer who typed his
+ * address into a promise we cannot legally keep lost something real.
+ */
+function emailSendable(env: Env): { from: string; postalAddress: string; apiKey: string } | null {
+  const apiKey = typeof env.RESEND_API_KEY === 'string' ? env.RESEND_API_KEY : '';
+  const from = typeof env.EMAIL_FROM === 'string' ? env.EMAIL_FROM : '';
+  const postalAddress = typeof env.POSTAL_ADDRESS === 'string' ? env.POSTAL_ADDRESS : '';
+  if (apiKey === '' || from === '' || postalAddress === '') return null;
+  return { from, postalAddress, apiKey };
+}
+
+/** A stored decode row, rebuilt into the teardown it produced. */
+function teardownFromRow(row: Record<string, unknown>, postalAddress: string) {
+  const cents = (key: string) => Number(row[key] ?? 0);
+  const verdict = String(row.verdict ?? 'none') as 'checks_out' | 'look_closer' | 'none';
+  const rateBps = row.real_rate_all_in_bps === null || row.real_rate_all_in_bps === undefined
+    ? null
+    : Number(row.real_rate_all_in_bps);
+
+  const lines: TeardownLine[] = [
+    { label: 'Quoted price', amount: formatCurrency(cents('finance_price_cents')) },
+    { label: 'Cash discount', amount: `- ${formatCurrency(cents('cash_discount_cents'))}` },
+    { label: 'Cash price today', amount: formatCurrency(cents('cash_price_cents')) },
+    { label: 'Amount financed', amount: formatCurrency(cents('amount_financed_cents')) },
+    {
+      label: 'Total of payments',
+      amount: formatCurrency(cents('payment_amount_cents') * Number(row.payment_count ?? 0)),
+    },
+  ];
+
+  const verdictLine = verdict === 'checks_out'
+    ? "This deal checks out. We'd take it."
+    : verdict === 'look_closer'
+      ? 'Look closer. This deal prices above the comparable published rate.'
+      : 'We can show you the rate. We are not rating this deal yet.';
+
+  return {
+    rate: rateBps === null ? 'no rate yet' : formatRate(rateBps),
+    rateLabel: 'Your real rate',
+    verdict,
+    verdictLine,
+    lines,
+    reference: row.verdict_ref_id === null || row.verdict_ref_id === undefined
+      ? null
+      : `Matched published equipment rate card ${String(row.verdict_ref_id)}, as of ${String(row.benchmark_at_ts)}, subject to approval.`,
+    assumption: null,
+    missing: verdict === 'none'
+      ? ['Confirm the whole deal, including any trade, anything due at signing, and any finance-only fee.']
+      : [],
+    footnote: 'This is not the legal APR. It is the annual cost of this deal against its cash '
+      + `alternative, using the costs we can verify. Buffer policy ${VERDICT_BUFFER_VERSION}.`,
+    postalAddress,
+    generatedOn: String(row.ts ?? '').slice(0, 10),
+  };
+}
+
+function base64(bytes: Uint8Array): string {
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
 }
 
 const app = new Hono<{ Bindings: Env }>();
@@ -598,6 +667,7 @@ async function decodeFullLedger(c: {
       : `This is not the legal APR. It is the annual cost of this deal against its cash alternative, `
         + `using the costs we can verify. Buffer policy ${VERDICT_BUFFER_VERSION}.`,
     assumption: null,
+    gate: emailSendable(c.env) === null ? null : { decodeId },
     missing: missingForVerdict(verdict.noVerdictReason, decoded.reconciliation.differenceCents, country),
     lines: [
       { label: 'Quoted price', amount: formatCurrency(form.quotedPrice) },
@@ -636,6 +706,134 @@ function missingForVerdict(reason: string | null, differenceCents: number, count
   }
   return MISSING_FOR_VERDICT;
 }
+
+
+app.post('/email', async (c) => {
+  if (!(await withinRateLimit(c, 'email'))) {
+    return c.html(renderNotice('Give it a minute', 'That is a lot of requests in one minute. Try again shortly.'), 429);
+  }
+
+  const sendable = emailSendable(c.env);
+  if (sendable === null) {
+    return c.html(renderNotice(
+      'Not switched on yet',
+      'The teardown email is not running yet, so we have not kept your address. Your numbers are on the screen behind this.',
+    ), 503);
+  }
+
+  const body = await c.req.parseBody();
+  const parsed = emailGateSchema.safeParse({
+    email: String(body.email ?? ''),
+    decodeId: String(body.decodeId ?? ''),
+  });
+  if (!parsed.success) {
+    return c.html(renderNotice(
+      'Check that address',
+      parsed.error.issues.map((issue) => issue.message).join(' '),
+    ), 422);
+  }
+
+  const row = await c.env.DB.prepare('SELECT * FROM decodes WHERE id = ?')
+    .bind(parsed.data.decodeId)
+    .first<Record<string, unknown>>();
+  if (row === null) {
+    return c.html(renderNotice('We lost that one', 'Run your quote again and the teardown will follow.'), 404);
+  }
+
+  const emailId = crypto.randomUUID();
+  await c.env.DB.prepare(
+    'INSERT INTO emails (id, email, decode_id, created_at) VALUES (?, ?, ?, ?)',
+  ).bind(emailId, parsed.data.email, parsed.data.decodeId, new Date().toISOString()).run();
+
+  const origin = new URL(c.req.url).origin;
+  const unsubscribe = `${origin}/unsubscribe/${emailId}`;
+  const pdf = await renderTeardownPdf(teardownFromRow(row, sendable.postalAddress));
+
+  const sent = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${sendable.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: `Hank <${sendable.from}>`,
+      to: [parsed.data.email],
+      subject: 'Your teardown',
+      text: [
+        'Your teardown is attached. It is one page: the real rate, what the financing',
+        'costs against paying cash, and where the comparison came from.',
+        '',
+        'Print it and take it to the desk. That is what it is for.',
+        '',
+        `P.S. If the deal checks out, go sign it. We will say so when it does.`,
+        '',
+        `Unsubscribe: ${unsubscribe}`,
+        `LoanHank, ${sendable.postalAddress}`,
+      ].join('\n'),
+      attachments: [{ filename: 'loanhank-teardown.pdf', content: base64(pdf) }],
+      headers: {
+        // RFC 8058 one-click, plus the plain link in the body. CAN-SPAM, no
+        // exceptions, and it works before anybody opens the attachment.
+        'List-Unsubscribe': `<${unsubscribe}>`,
+        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+      },
+    }),
+  });
+
+  if (!sent.ok) {
+    c.executionCtx.waitUntil(recordEvent(c.env, 'email_failed', parsed.data.decodeId, { status: sent.status }));
+    return c.html(renderNotice(
+      'That did not send',
+      'We kept your address and will send the teardown shortly. Your numbers are on the screen behind this.',
+    ), 502);
+  }
+
+  await recordEvent(c.env, 'email', parsed.data.decodeId, {});
+  return c.html(renderNotice(
+    'On its way',
+    'Check your inbox in a minute. That is all we use your email for.',
+  ));
+});
+
+// One click, both ways: the RFC 8058 POST and a plain link somebody can click.
+// The row id is the token, so no address is ever put in a URL.
+app.all('/unsubscribe/:id', async (c) => {
+  const result = await c.env.DB.prepare(
+    'UPDATE emails SET unsubscribed_at = ? WHERE id = ? AND unsubscribed_at IS NULL',
+  ).bind(new Date().toISOString(), c.req.param('id')).run();
+  c.executionCtx.waitUntil(recordEvent(c.env, 'unsubscribe', null, {
+    changed: result.meta.changes,
+  }));
+  return c.html(renderNotice(
+    'Done',
+    'You are off the list. We will not email you again.',
+  ));
+});
+
+
+// Phase A, spec.md §8. Records intent and moves nothing.
+//
+// There is no lead here, no forwarding, no lender contact, and no PII beyond
+// the decode row that already existed. The event is the entire product of this
+// route, and the funnel number it feeds is the honest rung: interest-yes is
+// directional intent, not permission and not a sale.
+app.post('/interest', async (c) => {
+  if (!(await withinRateLimit(c, 'interest'))) {
+    return c.html(renderNotice('Give it a minute', 'That is a lot of requests in one minute.'), 429);
+  }
+  const body = await c.req.parseBody();
+  const decodeId = String(body.decodeId ?? '');
+  const answer = String(body.answer ?? '') === 'yes' ? 'yes' : 'not_now';
+
+  await recordEvent(c.env, answer === 'yes' ? 'interest_yes' : 'interest_not_now', decodeId || null, {});
+
+  return c.html(renderNotice(
+    answer === 'yes' ? 'Noted' : 'Understood',
+    answer === 'yes'
+      ? 'Nothing has moved and nobody has your numbers. We are counting how many farmers would want that, and you are counted.'
+      : 'Nothing moves. Your numbers stay here.',
+  ));
+});
 
 export default {
   fetch: app.fetch,

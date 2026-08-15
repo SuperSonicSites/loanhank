@@ -671,3 +671,18 @@ export const ledgerFormSchema = z.object({
 });
 
 export type LedgerForm = z.infer<typeof ledgerFormSchema>;
+
+
+/**
+ * Gate 1. One field, and it is the only personal thing this product ever asks
+ * for. Deliberately permissive on shape: a farmer who typos his own address
+ * gets no teardown and that is his to notice, but a working address we refuse
+ * on a clever regex is our fault.
+ */
+export const emailGateSchema = z.object({
+  email: z.string().trim().min(3).max(254).refine(
+    (value) => /^[^@\s]+@[^@\s.]+\.[^@\s]+$/.test(value),
+    'That does not look like an email address. Check it and try again.',
+  ),
+  decodeId: z.string().uuid(),
+});

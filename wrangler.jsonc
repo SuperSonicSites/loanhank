@@ -69,6 +69,13 @@
     "RAW_FILE_TTL_SECONDS": "3600",
     // Turnstile site key is public by design; TURNSTILE_SECRET_KEY is a secret.
     // Empty = upload protection off.
-    "TURNSTILE_SITE_KEY": "0x4AAAAAAEQrCZAfzTs3XiRr"
+    "TURNSTILE_SITE_KEY": "0x4AAAAAAEQrCZAfzTs3XiRr",
+    // Sender for the teardown. The domain is verified at Resend and DMARC is
+    // inherited from loanhank.com at p=none.
+    "EMAIL_FROM": "hank@mail.loanhank.com",
+    // CAN-SPAM requires a real postal address in every commercial email, and
+    // there is no inventing one. While this is empty the email gate does not
+    // render and nothing sends. A PO box is fine.
+    "POSTAL_ADDRESS": ""
   }
 }
