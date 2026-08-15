@@ -40,10 +40,11 @@ Hank = the neighbor who's good with numbers. Not mascot. Not cartoon. A voice.
 
 **Anti-robot writing stones (AI copy has a rhythm; break it):**
 - **No em dashes in product copy.** Comma, period, or new sentence.
-- **No staccato triads** ("Free. Fast. Private."). Robot drumbeat. Write like talking: "Free, takes about a minute, and your numbers stay here unless you say otherwise."
+- **No staccato triads** ("Free. Fast. Private."). Robot drumbeat. Write like talking: "Free, takes about a minute, and your numbers stay here unless you say otherwise." Ban is on prose rhythm, not on enumeration. A spec table cell is a list of jobs, not a sentence read aloud, so cells are exempt.
 - **No "It's not X. It's Y."** No "Here's the thing." No "Let's be honest." All robot tells.
 - **Sentence case everywhere.** Title Case Headlines Are A Tell.
 - Perfectly parallel sentence pairs sparingly. A little lopsidedness reads human.
+- **Never improve this doc's own wording.** Where a line here is clipped, lopsided, or ungrammatical, copy it verbatim. The awkwardness is the texture. "page background. warm off-white. kills glare, feels print" is correct; "Warm off-white, kills glare, feels like print" is the same content smoothed into a triad, and the smoothing is the drift. Anything building from this doc will feel the pull to tidy. Tidy is the tell.
 
 **Microcopy (canonical, use these):**
 
@@ -125,7 +126,9 @@ Warm paper + ink + workwear. No gradient anywhere, ever.
 - **No red exists in this product.** Not in errors, not in charts, not in icons. Errors are ink on amber-fill.
 - Color NEVER carries meaning alone: verdict = color + stamp shape + words. (~8% of your male audience is colorblind. Green/amber alone fails exactly them.)
 - Numbers always `ink`. Never colored numbers.
+- **`ink-soft` never draws a line.** Every hairline, border, and rule in this product is `rule`. No exception, no component. If a border is too faint for its job, fill the shape with `rule` instead of darkening the border. A filled block shows a corner radius better than an outline anyway.
 - Contrast: body 7:1 target, 4.5:1 floor, everything AA at minimum.
+- **No hex is ever adjusted to buy contrast margin.** The nine above are fixed values, not starting points. `ink-soft` on `paper` sits at 7.0:1, which meets the target with no room to spare. That is correct as specified and needs no help.
 - No pure white `#FFF` backgrounds except inside input fields (slight lift off paper).
 - Not John Deere green, not Case red, not brand-anything green. We are nobody's dealer.
 
@@ -149,6 +152,13 @@ Two families, both free, both fast. Subset, woff2, preload. Nothing else ever.
 | receipt line items | Courier Prime, 16px |
 | sources/footnotes | Libre Franklin, 14px, `ink-soft`. NEVER smaller than 14 |
 | labels above inputs | Libre Franklin Medium 16px. labels ABOVE, never placeholder-as-label |
+
+**Which face carries a number.** The prose above says Courier carries every number and the table says footnotes are Franklin. Both stand. The split is by job, not by character class, and Courier's own stated reason settles it: monospaced so receipt columns align. Alignment decides.
+
+- **Courier** carries any figure the farmer can check, compare, or carry back to the dealer's desk. Money, rates, terms, counts, the n. Anything sitting in a column beside another number.
+- **Franklin** carries prose, labels, and provenance, including the dates inside a citation. A citation is a sentence, not a column. `¹ Chicago Fed AgLetter, Q1 2026` is Franklin.
+- **Figure inside a sentence:** figure is Courier, words around it are Franklin. `median 7.4% · you 7.9% · n=143` mixes both faces on one line. The seam is correct, not a defect to clean up. A real work order has typed figures in a different face than its printed labels, and that is the register.
+- Spec values that describe the system rather than the product stay Franklin. Notes to us, not figures for a farmer.
 
 Fallback stack: `"Libre Franklin", "Franklin Gothic Medium", "Segoe UI", Arial, sans-serif` / `"Courier Prime", "Courier New", monospace`.
 
@@ -268,7 +278,9 @@ Format that fits the psychology (suspicion-confirmation, native to feed):
 **Anti-robot stones (the tells, carved so nobody re-introduces them):**
 - No AI-generated images anywhere, product or ads. Real photos, phone camera, or nothing.
 - No default-AI fonts: Inter, Space Grotesk, Poppins, Manrope, Plex, Roboto. Franklin + Courier only.
-- No em dashes, no staccato triads, no Title Case, no "It's not X, it's Y."
+- No em dashes, no staccato triads in prose (spec table cells are enumeration, exempt), no Title Case, no "It's not X, it's Y."
+- Never improve this doc's own wording. Clipped and lopsided lines get copied verbatim. Tidying is the drift.
 - No friendly rounded corners. 2px shoulders everywhere.
+- `ink-soft` never draws a line. Borders are `rule`, always.
 - No airy minimalism. Dense like newsprint. Whitespace is not a virtue here; clarity is.
 - Perfect consistency is itself a tell. If a screen looks like a beautiful mock, it fails the made-by-a-guy test. Add a rule, add a sourced number, tighten a gap.
