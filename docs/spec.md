@@ -97,7 +97,7 @@ Value in sixty seconds. Rigor before judgment. Both, no compromise between.
 **Always show beside any verdict:** the delta, the reference source + as-of date, and the caveat "subject to approval."
 > "Your real rate: 5.2%. Comparable published equipment rate: 6.5%, subject to approval. This deal checks out."
 
-**The 100 bps buffer is policy, not discovered truth.** Version it in `/how-we-figure-it`. Revisit only when the pile has real cohort data. Explicit, symmetric, reproducible beats falsely precise.
+**The 100 bps buffer is policy, not discovered truth.** It is versioned in the engine as `VERDICT_BUFFER_BPS` and `VERDICT_BUFFER_VERSION`, and `/how-we-figure-it` prints that version. Revisit only when the pile has real cohort data. Explicit, symmetric, reproducible beats falsely precise.
 
 Note the credibility feature: this rule will frequently bless captive 0% promos. Good. A tool that sometimes says "take the dealer's deal" is the only tool anyone believes.
 
@@ -221,6 +221,16 @@ Value before email. Email before interest. Interest before consent. Consent befo
 (garbage form-fill industry sell junk leads at $600/mo minimums. our lead = verified quote, real intent, this-week buyer. worth multiples. 2-3 broker calls confirm price.)
 
 One week data > one month opinion. If numbers good → scale spend. If bad twice → THEN rethink. No new strategy hunts between tests. **No more cave-painting. Throw spear.**
+
+---
+
+### 7.2 The pile is production, and production is not a test bed
+
+The pile is the company. These rules exist so nobody has to be individually correct about it.
+
+- **Test rows never enter production.** Exercise the funnel against the local database (`wrangler dev`, `pnpm funnel --local`). If a row must be written against production to prove something, it carries `meta_json.synthetic = true` on the event and is excluded from `ops/funnel.sql` and from every cohort statistic, the same way `reconciled = 0` rows are.
+- **Production deletes require owner sign-off.** Any `DELETE` or `UPDATE` against `decodes`, `emails` or `events` on the remote database is an owner decision, asked for and answered in writing before it runs. This includes cleaning up a mess the agent itself made. On 2026-08-15 a session cleared 24 self-created rows on its own judgment. The judgment was right and the precedent is not.
+- **Benchmarks are the exception, and only through a migration.** Corrections to published-rate rows ship as a new numbered migration, never as an ad-hoc statement, because a verdict has to stay reproducible against what the table said on the day.
 
 ---
 

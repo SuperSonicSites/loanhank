@@ -31,6 +31,8 @@ const query = readFileSync(sqlPath, 'utf8')
 const require = createRequire(import.meta.url);
 const wranglerBin = join(dirname(require.resolve('wrangler/package.json')), 'bin', 'wrangler.js');
 
+// spec.md 7.2: exercising the funnel is a local job. --local is the one you
+// want unless you are actually reading production.
 const local = process.argv.includes('--local');
 const result = spawnSync(
   process.execPath,

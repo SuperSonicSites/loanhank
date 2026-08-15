@@ -1286,3 +1286,260 @@ export function promoPriceRate(quote: QuickPathQuote): PromoPriceRate {
     unavailableReason: null,
   };
 }
+
+// ---------------------------------------------------------------------------
+// VERDICT PATH — spec.md sections 2.1, 2.2, 3 and 4.
+//
+// A stamp is a judgment and this is where it is earned. Three separate things
+// must all hold before one is issued: the ledger reconciles, every amount on
+// it is confirmed, and a tier-1 published rate actually matches the deal. Any
+// one of them missing is an abstention, which renders as plain words and no
+// stamp. The database refuses an unearned verdict too; this is the other half.
+// ---------------------------------------------------------------------------
+
+export interface BenchmarkRow {
+  id: string;
+  source: string;
+  sourceUrl: string;
+  asOfDate: string;
+  amountBand: string;
+  amountMinCents: number;
+  amountMaxCents: number | null;
+  termBand: string;
+  termMinMonths: number;
+  termMaxMonths: number;
+  rateBps: number;
+  rateKind: 'fixed' | 'variable';
+  tier: number;
+}
+
+export interface BenchmarkCriteria {
+  amountCents: number;
+  termMonths: number;
+  rateKind: 'fixed' | 'variable';
+}
+
+/**
+ * The matched published rate for a deal, or null.
+ *
+ * Only tier 1 may back a verdict (spec.md section 4): a survey average and a
+ * posted equipment rate answer different questions, and mixing them is how the
+ * receipt test dies. A fixed quote never matches a variable card rate.
+ *
+ * The term snaps to the nearest supported band, but only inside the card. Past
+ * the end of it we abstain rather than stretch the top band over a longer
+ * deal. On a tie the lower published rate wins, so a coin-flip can never be
+ * the reason a deal got blessed.
+ */
+export function matchBenchmark(rows: BenchmarkRow[], criteria: BenchmarkCriteria): BenchmarkRow | null {
+  const candidates = rows.filter((candidate) =>
+    candidate.tier === 1
+    && candidate.rateKind === criteria.rateKind
+    && criteria.amountCents >= candidate.amountMinCents
+    && (candidate.amountMaxCents === null || criteria.amountCents <= candidate.amountMaxCents));
+  if (candidates.length === 0) return null;
+
+  const shortest = Math.min(...candidates.map((candidate) => candidate.termMinMonths));
+  const longest = Math.max(...candidates.map((candidate) => candidate.termMaxMonths));
+  if (criteria.termMonths < shortest || criteria.termMonths > longest) return null;
+
+  const distance = (candidate: BenchmarkRow) => {
+    if (criteria.termMonths < candidate.termMinMonths) return candidate.termMinMonths - criteria.termMonths;
+    if (criteria.termMonths > candidate.termMaxMonths) return criteria.termMonths - candidate.termMaxMonths;
+    return 0;
+  };
+  return candidates.reduce((best, candidate) => {
+    const difference = distance(candidate) - distance(best);
+    if (difference < 0) return candidate;
+    if (difference > 0) return best;
+    return candidate.rateBps < best.rateBps ? candidate : best;
+  });
+}
+
+/**
+ * Dealer rounding we forgive on the payment. A fee small enough to hide inside
+ * a dollar a payment is below this product's resolution, and saying so out
+ * loud is better than implying a precision the arithmetic does not have.
+ */
+export const RECONCILE_TOLERANCE_CENTS = 100;
+
+export interface LedgerReconciliation {
+  reconciled: boolean;
+  expectedPaymentCents: number;
+  differenceCents: number;
+}
+
+/**
+ * Does the quoted payment match what the quoted ledger and rate produce?
+ *
+ * When it does not, something is missing from the ledger: a trade, a down
+ * payment, a tax, a fee, an add-on. We never name it a junk fee. We say the
+ * numbers do not meet and ask the farmer to confirm what is missing.
+ */
+export function reconcileLedger(input: {
+  amountFinancedCents: number;
+  statedRateBps: number;
+  paymentAmountCents: number;
+  paymentCount: number;
+  paymentFrequency: RegularFrequency;
+}): LedgerReconciliation {
+  const expectedPaymentCents = calculatePaymentCents(
+    input.amountFinancedCents,
+    input.statedRateBps,
+    input.paymentFrequency,
+    input.paymentCount,
+  );
+  const differenceCents = Math.abs(input.paymentAmountCents - expectedPaymentCents);
+  return {
+    expectedPaymentCents,
+    differenceCents,
+    reconciled: differenceCents <= RECONCILE_TOLERANCE_CENTS,
+  };
+}
+
+/** One line of `fees_json` (spec.md section 2.1). */
+export interface LedgerFee {
+  name: string;
+  amountCents: number;
+  required: boolean;
+  financeOnly: boolean;
+  rolledIntoFinance: boolean;
+  status: 'confirmed' | 'unknown';
+}
+
+export interface RealRateAllIn extends PromoPriceRate {
+  realRateAllInBps: number | null;
+  /** Mandatory finance-only money due at signing, priced into the rate. */
+  upfrontFinanceOnlyFeesCents: number;
+  hasUnknownFee: boolean;
+}
+
+/**
+ * The headline number (spec.md section 2). Same difference-of-cash-flows as
+ * the promo price rate, with every mandatory finance-only cost included.
+ *
+ * A fee charged either way is not the cost of financing and is excluded from
+ * the rate; it belongs on the receipt as its own line. An optional add-on is
+ * excluded by default and the farmer can toggle it in. A fee rolled into the
+ * payments is already inside the payment stream, so it needs no adjustment
+ * here and raises the rate on its own.
+ *
+ * Any unconfirmed amount abstains outright rather than pricing a guess.
+ */
+export function realRateAllIn(input: QuickPathQuote & { fees: LedgerFee[] }): RealRateAllIn {
+  const promo = promoPriceRate(input);
+  const hasUnknownFee = input.fees.some((fee) => fee.status === 'unknown');
+
+  const upfrontFinanceOnlyFeesCents = input.fees
+    .filter((fee) => fee.status === 'confirmed' && fee.required && fee.financeOnly && !fee.rolledIntoFinance)
+    .reduce((total, fee) => total + fee.amountCents, 0);
+
+  if (hasUnknownFee) {
+    return {
+      ...promo,
+      realRateAllInBps: null,
+      upfrontFinanceOnlyFeesCents,
+      hasUnknownFee: true,
+    };
+  }
+
+  // Paying a finance-only fee at signing leaves less of the cash price in the
+  // farmer's pocket, so the same payment stream is being bought with less.
+  const withFees = promoPriceRate({
+    ...input,
+    quotedPriceCents: input.quotedPriceCents - upfrontFinanceOnlyFeesCents,
+  });
+
+  return {
+    ...promo,
+    realRateAllInBps: withFees.promoPriceRateBps,
+    upfrontFinanceOnlyFeesCents,
+    hasUnknownFee: false,
+  };
+}
+
+/** The buffer is policy, not discovered truth (spec.md section 3). Versioned. */
+export const VERDICT_BUFFER_BPS = 100;
+export const VERDICT_BUFFER_VERSION = 'v1 (2026-08-15)';
+
+export type Verdict = 'checks_out' | 'look_closer' | 'none';
+export type NoVerdictReason =
+  | 'no_rate'
+  | 'unreconciled_ledger'
+  | 'unknown_fee'
+  | 'no_matched_benchmark';
+
+export interface VerdictResult {
+  verdict: Verdict;
+  bufferBps: number;
+  bufferVersion: string;
+  deltaBps: number | null;
+  benchmark: BenchmarkRow | null;
+  noVerdictReason: NoVerdictReason | null;
+}
+
+export function decideVerdict(input: {
+  realRateAllInBps: number | null;
+  reconciled: boolean;
+  benchmark: BenchmarkRow | null;
+  hasUnknownFee: boolean;
+}): VerdictResult {
+  const base = {
+    bufferBps: VERDICT_BUFFER_BPS,
+    bufferVersion: VERDICT_BUFFER_VERSION,
+    benchmark: input.benchmark,
+  };
+  const abstain = (noVerdictReason: NoVerdictReason): VerdictResult => ({
+    ...base, verdict: 'none', deltaBps: null, noVerdictReason,
+  });
+
+  if (input.realRateAllInBps === null) return abstain('no_rate');
+  if (input.hasUnknownFee) return abstain('unknown_fee');
+  if (!input.reconciled) return abstain('unreconciled_ledger');
+  if (input.benchmark === null) return abstain('no_matched_benchmark');
+
+  return {
+    ...base,
+    verdict: input.realRateAllInBps <= input.benchmark.rateBps + VERDICT_BUFFER_BPS
+      ? 'checks_out'
+      : 'look_closer',
+    deltaBps: input.realRateAllInBps - input.benchmark.rateBps,
+    noVerdictReason: null,
+  };
+}
+
+export interface BenchmarkCostComparison {
+  benchmarkPaymentCents: number;
+  benchmarkTotalCents: number;
+  dealTotalCents: number;
+  /** What the deal costs over the published rate across the whole term. */
+  differenceCents: number;
+}
+
+/**
+ * The same money, the same term, at the published rate instead. This is the
+ * dollar figure beside a LOOK CLOSER, and it is what makes the verdict
+ * checkable rather than an opinion.
+ */
+export function costAgainstBenchmark(input: {
+  amountFinancedCents: number;
+  paymentAmountCents: number;
+  paymentCount: number;
+  paymentFrequency: RegularFrequency;
+  benchmarkRateBps: number;
+}): BenchmarkCostComparison {
+  const benchmarkPaymentCents = calculatePaymentCents(
+    input.amountFinancedCents,
+    input.benchmarkRateBps,
+    input.paymentFrequency,
+    input.paymentCount,
+  );
+  const benchmarkTotalCents = benchmarkPaymentCents * input.paymentCount;
+  const dealTotalCents = input.paymentAmountCents * input.paymentCount;
+  return {
+    benchmarkPaymentCents,
+    benchmarkTotalCents,
+    dealTotalCents,
+    differenceCents: dealTotalCents - benchmarkTotalCents,
+  };
+}

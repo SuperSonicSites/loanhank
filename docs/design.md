@@ -55,7 +55,7 @@ Hank = the neighbor who's good with numbers. Not mascot. Not cartoon. A voice.
 | extraction wait | `Reading your paper… about 10 seconds.` |
 | confirm screen header | `Check these against your paper. Fix anything we got wrong.` |
 | good verdict | `This deal checks out. We'd take it.` |
-| amber verdict | `Look closer. The 0% costs you $2,347 more than the cash price.` |
+| amber verdict | `Look closer. This deal prices at X%. The comparable published rate is Y%. The difference costs you $Z over the term.` (figures from the engine, never typed; see §2¾) |
 | email gate | `Want the full teardown as a PDF? We'll email it. That's all we use your email for.` |
 | consent gate | `Want lenders to compete for this deal? You say go. Nothing moves without you.` |
 | consent decline | `No thanks — my numbers stay here.` (equal-weight button, not gray shame text) |
@@ -101,6 +101,62 @@ Dan Kennedy rules, spoken through Hank's mouth. Direct response only. Every word
 - Headline: `0% financing isn't 0%.`
 - Body: `That $3,000 "cash discount" you give up? That's the interest, wearing a different hat. Free tool reads your quote and shows the real rate. Takes about a minute. If the deal's good, we'll tell you that too.`
 - CTA: `Run the numbers`
+
+---
+
+---
+
+## 2¾. CANONICAL EXAMPLES
+
+Every figure below is engine output. **None of it may be typed by hand, including by the owner of this document.** The first version of the amber verdict line in §2 was written by hand and was wrong: it printed the total of payments minus the *quoted* price and called it the cost against the *cash* price. Against the cash price the same deal is $8,347, not $2,347. A wrong number in canon propagates into every ticket, ad and email that copies it.
+
+`tests/design-canon.test.ts` runs these two deals through `src/finance/` and fails if anything below drifts from what the engine says. Change a figure here and the test breaks. Change the engine and the test tells you which line of this document to update.
+
+<!-- canon:start -->
+
+### Example A — CHECKS OUT
+
+An $84,500 quote with a $6,000 cash discount, taken at the dealer's "0%" over 60 monthly payments. The ledger is complete: no trade, no down payment, no fees, all confirmed by the farmer, and the payments reconcile against the financed amount.
+
+- `a.quoted_price`: $84,500
+- `a.cash_discount`: $6,000
+- `a.payment`: $1,408.33
+- `a.payment_count`: 60
+- `a.payment_frequency`: monthly
+- `a.cash_price`: $78,500
+- `a.total_of_payments`: $84,500
+- `a.cost_versus_cash`: $6,000
+- `a.real_rate`: 2.94%
+- `a.published_rate`: 7.25%
+- `a.published_band`: 5 years
+- `a.published_source`: AgDirect
+- `a.published_as_of`: 2026-08-01
+- `a.verdict`: CHECKS OUT
+- `a.line`: This deal checks out. We'd take it.
+
+**This example blesses the dealer's promo, and it stays canonical for that reason.** The 0% costs $6,000 against paying cash, and 2.94% is still far under the 7.25% an independent lender publishes for this size and term. A farmer reading it should go sign. A tool that never says that is a tool nobody believes, so the neutrality proof lives here in permanent view rather than in a promise about our intentions.
+
+### Example B — LOOK CLOSER
+
+Used equipment, $62,000 financed at a stated 9.9% over 48 monthly payments, no cash discount offered.
+
+- `b.amount_financed`: $62,000
+- `b.stated_rate`: 9.90%
+- `b.payment`: $1,569.50
+- `b.payment_count`: 48
+- `b.payment_frequency`: monthly
+- `b.total_of_payments`: $75,336
+- `b.real_rate`: 9.90%
+- `b.published_rate`: 7.25%
+- `b.published_band`: 4 years
+- `b.published_total`: $71,610
+- `b.difference`: $3,726
+- `b.verdict`: LOOK CLOSER
+- `b.line`: Look closer. This deal prices at 9.90%. The comparable published rate is 7.25%. The difference costs you $3,726 over the term.
+
+<!-- canon:end -->
+
+Both examples carry "subject to approval" beside the published rate wherever they appear in product, per spec.md §3. Neither is a promise of a rate any farmer will be offered.
 
 ---
 
@@ -195,23 +251,30 @@ Above the fold on an iPhone SE. Everything below fold is footnotes.
 **Screen 3 — THE TICKET (result):** receipt layout, hairline rules between lines, mono everything:
 ```
 ────────────────────────────────
- YOUR REAL RATE          7.9%      ← 48px mono bold
- [ STAMP: LOOK CLOSER ]            ← amber stamp, rotated ~2°
- The 0% costs you $2,347 more
- than paying cash.
+ YOUR REAL RATE         2.94%      ← 48px mono bold
+ [ STAMP: CHECKS OUT ]             ← field-green stamp, rotated ~2°
+ This deal checks out.
+ We'd take it.
 ────────────────────────────────
  Quoted price          $84,500
  Cash discount        − $6,000
- True amount financed  $78,500
- Total of payments     $86,847
- Cost of the "0%"       $2,347
+ Cash price today      $78,500
+ Total of payments     $84,500
+ What financing costs   $6,000
 ════════════════════════════════   ← double rule = total, like a receipt
- vs. quotes like yours:
- [ p25──●median────you──p75 ]      ← one strip, direct labels, no legend
- median 7.4% · you 7.9% · n=143
- (under n=20: "vs. published rates" rows instead, say so plainly)
+ vs. published rates:
+ AgDirect, $25,000-$99,999,
+ 5 years, fixed: 7.25%
+ subject to approval
 ────────────────────────────────
- ¹ Chicago Fed AgLetter, Q1 2026
+ ¹ AgDirect published equipment
+   rates, as of 2026-08-01
+
+(The peer strip replaces the published rows only once the cohort reaches
+n≥20, and it prints n. Shape, with numbers that are illustrative and are
+NOT canon because no pile exists yet:
+ [ p25──●median────you──p75 ]      ← one strip, direct labels, no legend
+ median 7.4% · you 7.9% · n=143 )
 ```
 Then email gate, then consent gate, in that order, each its own quiet block. Never a modal. Never a popup.
 
