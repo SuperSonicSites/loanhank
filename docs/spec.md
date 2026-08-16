@@ -433,7 +433,11 @@ All footer-linked. All Hank voice: plain-words summary box on top, lawyer text u
 8. `404` — one line, go-home link, on voice.
 
 **Email plumbing (law, not pages):**
-- **Every send this product makes is a send that was requested.** The teardown is asked for. The expiry reminder is opted into on a second screen, after the teardown, and only when the farmer's own paper carried a date. Nothing is sent because we decided he might like it. That posture is what satisfies CAN-SPAM and Canada's CASL at the same time, and CASL is the stricter of the two: it wants consent, not merely an exit. Counsel confirms the details.
+- **Every send is either requested or disclosed at capture.** Requested: the teardown is asked for, the expiry reminder is opted into on a second screen. Disclosed at capture: the day 4 and day 30 follow-ups, named in one plain line beside the email box **before the address is typed**, which is the only moment a disclosure can honestly be made. The line and its version are stored on the row (`followup_text_version`), because a follow-up sent against a row with no version recorded is one we cannot prove was disclosed.
+
+  **CASL sets the floor, being the stricter regime.** Asking for a teardown is an inquiry, and an inquiry carries six months of implied consent. Day 4 and day 30 sit well inside it and both sweeps refuse anything older. **Nothing past six months sends without express consent, which does not exist and is not built.** The "quarterly, forever" cadence in design.md §2½ is therefore not shippable as-is for Canadian addresses and is not built either.
+
+- **Every send this product makes is a send that was requested or disclosed.** The teardown is asked for. The expiry reminder is opted into on a second screen, after the teardown, and only when the farmer's own paper carried a date. Nothing is sent because we decided he might like it. That posture is what satisfies CAN-SPAM and Canada's CASL at the same time, and CASL is the stricter of the two: it wants consent, not merely an exit. Counsel confirms the details.
 - Every email: one-click unsubscribe + postal address. CAN-SPAM, no exceptions.
 - No SMS v1. TCPA is a swamp; enter only with lawyer.
 - Log consent forever: timestamp + exact text version farmer saw (`consent_text_version`). Receipts protect cave too.

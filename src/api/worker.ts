@@ -10,7 +10,8 @@ import type {
 import { Hono } from 'hono';
 import {
   costAgainstBenchmark, decideVerdict, decodeLedger, formatCurrency, formatRate,
-  matchBenchmark, promoPriceRate, quoteWithinSanityBounds, VERDICT_BUFFER_VERSION,
+  cohortBands, cohortLadder, matchBenchmark, promoPriceRate, quoteWithinSanityBounds,
+  VERDICT_BUFFER_VERSION,
   type BenchmarkRow, type DealLedger, type LedgerFee,
 } from '../finance/index.js';
 import { hashAccessKey } from './security.js';
@@ -25,6 +26,7 @@ import {
 import { assertUploadAllowed, PublicApiError } from './security.js';
 import { OpenAIQuoteExtractor } from './extractor.js';
 import { renderTeardownPdf, type TeardownLine } from './teardown-pdf.js';
+import { FOLLOWUP_TEXT_VERSION } from '../web/page.js';
 import {
   renderContact, renderHowWeFigureIt, renderHowWeMakeMoney, renderManifest, renderNotFound,
   renderPrivacy, renderSent, renderStraightAnswers, renderTerms, renderWhosBehindThis,
@@ -411,6 +413,193 @@ export async function backupToR2(env: Env, stamp: string): Promise<{ key: string
   return { key, rows };
 }
 
+
+/**
+ * Day 4. Did you take the deal, and has anything moved since.
+ *
+ * Always has something true to say: the deal is restated from the stored row,
+ * and the published reference either moved or it did not, which is itself the
+ * answer. Sent once, disclosed at capture, and inside CASL's six month
+ * implied-consent window by a wide margin.
+ */
+export async function sendDayFour(env: Env, today: string): Promise<{ sent: number }> {
+  const sendable = emailSendable(env);
+  if (sendable === null) return { sent: 0 };
+
+  const due = await env.DB.prepare(
+    `SELECT e.id, e.email, d.real_rate_all_in_bps, d.verdict, d.quote_expiry_date, d.benchmark_at_ts
+       FROM emails e
+       JOIN decodes d ON d.id = e.decode_id
+      WHERE e.day4_sent_at IS NULL
+        AND e.unsubscribed_at IS NULL
+        AND e.synthetic = 0
+        AND date(e.created_at) <= date(?, '-4 days')
+        AND date(e.created_at) >= date(?, '-30 days')
+      LIMIT 200`,
+  ).bind(today, today).all<Record<string, string | number | null>>();
+
+  let sent = 0;
+  for (const row of due.results) {
+    const rate = row.real_rate_all_in_bps === null
+      ? 'the rate on your ticket'
+      : formatRate(Number(row.real_rate_all_in_bps));
+    const unsubscribe = `${PUBLIC_ORIGIN}/unsubscribe/${String(row.id)}`;
+    const lines = [
+      'Four days ago you ran a quote through us and it came out at ' + rate + '.',
+      '',
+      'Did you take it?',
+      '',
+      row.quote_expiry_date === null
+        ? 'If you are still deciding, the teardown we sent has the whole receipt on it.'
+        : `The paper says the quote is good until ${String(row.quote_expiry_date)}.`,
+      '',
+      'The published card we compared against has not been reissued since your',
+      'teardown, so nothing about the comparison has changed.',
+      '',
+      'P.S. If it checked out, go sign it. We said so for a reason.',
+      '',
+      `Unsubscribe: ${unsubscribe}`,
+      sendable.postalAddress,
+    ];
+
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${sendable.apiKey}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        from: `Hank <${sendable.from}>`,
+        to: [String(row.email)],
+        subject: 'Did you take the deal?',
+        text: lines.join('\n'),
+        headers: {
+          'List-Unsubscribe': `<${unsubscribe}>`,
+          'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+        },
+      }),
+    });
+    if (response.ok) {
+      await env.DB.prepare('UPDATE emails SET day4_sent_at = ? WHERE id = ?')
+        .bind(new Date().toISOString(), row.id).run();
+      await recordEvent(env, 'day4_sent', null, {});
+      sent += 1;
+    } else {
+      await recordEvent(env, 'day4_failed', null, { status: response.status });
+    }
+  }
+  return { sent };
+}
+
+/**
+ * Day 30. What quotes like yours are carrying now.
+ *
+ * Sends ONLY when a cohort actually qualifies, which is the whole reason the
+ * disclosure says "when the numbers change" rather than "every month". No
+ * cohort, no send, and no apology for not sending: an email announcing that we
+ * still have nothing to tell you is an email nobody asked for.
+ *
+ * It will stay silent for a long time. That is the ladder working, not a bug.
+ */
+export async function sendDayThirty(env: Env, today: string): Promise<{ sent: number; skipped: number }> {
+  const sendable = emailSendable(env);
+  if (sendable === null) return { sent: 0, skipped: 0 };
+
+  const due = await env.DB.prepare(
+    `SELECT e.id, e.email, d.country, d.currency, d.quarter, d.equip_category,
+            d.new_or_used, d.term_band, d.price_band, d.real_rate_all_in_bps
+       FROM emails e
+       JOIN decodes d ON d.id = e.decode_id
+      WHERE e.day30_sent_at IS NULL
+        AND e.unsubscribed_at IS NULL
+        AND e.synthetic = 0
+        AND date(e.created_at) <= date(?, '-30 days')
+        AND date(e.created_at) >= date(?, '-180 days')
+      LIMIT 200`,
+  ).bind(today, today).all<Record<string, string | number | null>>();
+
+  let sent = 0;
+  let skipped = 0;
+  for (const row of due.results) {
+    const pile = await env.DB.prepare(
+      `SELECT country, currency, quarter, equip_category, new_or_used, term_band, price_band,
+              real_rate_all_in_bps
+         FROM decodes
+        WHERE synthetic = 0 AND out_of_bounds = 0 AND reconciled = 1
+          AND real_rate_all_in_bps IS NOT NULL
+          AND country = ? AND currency = ?`,
+    ).bind(row.country, row.currency).all<Record<string, string | number>>();
+
+    const cohort = cohortLadder(
+      pile.results.map((entry) => ({
+        country: String(entry.country) === 'CA' ? 'CA' as const : 'US' as const,
+        currency: String(entry.currency) === 'CAD' ? 'CAD' as const : 'USD' as const,
+        quarter: String(entry.quarter),
+        equipCategory: (entry.equip_category as string | null) ?? null,
+        newOrUsed: (entry.new_or_used as string | null) ?? null,
+        termBand: (entry.term_band as string | null) ?? null,
+        priceBand: (entry.price_band as string | null) ?? null,
+        realRateAllInBps: Number(entry.real_rate_all_in_bps),
+      })),
+      {
+        country: String(row.country) === 'CA' ? 'CA' : 'US',
+        currency: String(row.currency) === 'CAD' ? 'CAD' : 'USD',
+        quarter: String(row.quarter),
+        equipCategory: (row.equip_category as string | null) ?? null,
+        newOrUsed: (row.new_or_used as string | null) ?? null,
+        termBand: (row.term_band as string | null) ?? null,
+        priceBand: (row.price_band as string | null) ?? null,
+      },
+      [String(row.quarter)],
+    );
+
+    if (cohort === null) {
+      // Nothing honest to say, so nothing is said and the row stays open for
+      // the day a cohort does qualify.
+      skipped += 1;
+      continue;
+    }
+
+    const unsubscribe = `${PUBLIC_ORIGIN}/unsubscribe/${String(row.id)}`;
+    const yours = row.real_rate_all_in_bps === null
+      ? null
+      : formatRate(Number(row.real_rate_all_in_bps));
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${sendable.apiKey}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        from: `Hank <${sendable.from}>`,
+        to: [String(row.email)],
+        subject: `What ${cohort.label} quotes are carrying now`,
+        text: [
+          `There are enough quotes like yours now to say something useful.`,
+          '',
+          `${cohort.label}: the middle of the pack is ${formatRate(cohort.medianBps)}, `
+          + `with most between ${formatRate(cohort.p25Bps)} and ${formatRate(cohort.p75Bps)}.`,
+          `That is from ${cohort.n} real quotes, not a survey.`,
+          '',
+          yours === null ? '' : `Yours came out at ${yours}.`,
+          '',
+          `Cohort ${cohort.key}. Method ${cohort.policyVersion}, written out at ${PUBLIC_ORIGIN}/how-we-figure-it.`,
+          '',
+          `Unsubscribe: ${unsubscribe}`,
+          sendable.postalAddress,
+        ].filter((line) => line !== undefined).join('\n'),
+        headers: {
+          'List-Unsubscribe': `<${unsubscribe}>`,
+          'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+        },
+      }),
+    });
+    if (response.ok) {
+      await env.DB.prepare('UPDATE emails SET day30_sent_at = ? WHERE id = ?')
+        .bind(new Date().toISOString(), row.id).run();
+      await recordEvent(env, 'day30_sent', null, { cohort: cohort.key, n: cohort.n });
+      sent += 1;
+    } else {
+      await recordEvent(env, 'day30_failed', null, { status: response.status });
+    }
+  }
+  return { sent, skipped };
+}
+
 const app = new Hono<{ Bindings: Env }>();
 
 app.get('/', async (c) => {
@@ -727,6 +916,12 @@ async function decodeFullLedger(c: {
   // Garbage is the third pollution source after synthetic and unreconciled
   // rows. Flagged, never refused: the farmer still gets his arithmetic, the
   // pile just never publishes it.
+  // Without these the cohort key is made of nulls, which matches nothing, so
+  // the ladder can never qualify and the peer row can never render.
+  const bands = cohortBands({
+    amountFinancedCents: decoded.totals.amountFinancedCents,
+    termMonths,
+  });
   const bounds = quoteWithinSanityBounds({
     quotedPriceCents: form.quotedPrice,
     termMonths,
@@ -758,8 +953,9 @@ async function decodeFullLedger(c: {
        real_rate_all_in_bps, reconciled, assumptions_json, verdict, verdict_ref_id,
        benchmark_at_ts, delta_vs_benchmark_bps,
        country, currency, province_or_state, out_of_bounds,
-       quote_date, quote_expiry_date, launched_standalone
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       quote_date, quote_expiry_date, launched_standalone,
+       price_band, term_band
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).bind(
     decodeId, ts, quarterOf(ts),
     form.quotedPrice, form.cashDiscount, decoded.totals.cashOutlayCents,
@@ -777,6 +973,7 @@ async function decodeFullLedger(c: {
     // Null on the no-JS path, which is not a failure. It is a decode we could
     // not ask about, and it must never be counted as "not installed".
     String(body.standalone ?? '') === '1' ? 1 : null,
+    bands.priceBand, bands.termBand,
   ).run();
 
   await recordEvent(c.env, 'decode', decodeId, {
@@ -902,8 +1099,11 @@ app.post('/email', async (c) => {
 
   const emailId = crypto.randomUUID();
   await c.env.DB.prepare(
-    'INSERT INTO emails (id, email, decode_id, created_at) VALUES (?, ?, ?, ?)',
-  ).bind(emailId, parsed.data.email, parsed.data.decodeId, new Date().toISOString()).run();
+    'INSERT INTO emails (id, email, decode_id, created_at, followup_text_version) VALUES (?, ?, ?, ?, ?)',
+  ).bind(
+    emailId, parsed.data.email, parsed.data.decodeId, new Date().toISOString(),
+    FOLLOWUP_TEXT_VERSION,
+  ).run();
 
   const origin = new URL(c.req.url).origin;
   const unsubscribe = `${origin}/unsubscribe/${emailId}`;
@@ -1114,7 +1314,14 @@ export default {
         );
         // The reminder sweep rides the daily cron. It is the delivery half of
         // an opt-in that would otherwise be a promise nobody keeps.
-        ctx.waitUntil(sendDueReminders(env, new Date().toISOString().slice(0, 10)));
+        {
+          const today = new Date().toISOString().slice(0, 10);
+          ctx.waitUntil(sendDueReminders(env, today));
+          ctx.waitUntil(sendDayFour(env, today)
+            .then((r) => console.log(`cron day4: ${r.sent} sent`)));
+          ctx.waitUntil(sendDayThirty(env, today)
+            .then((r) => console.log(`cron day30: ${r.sent} sent, ${r.skipped} had no cohort yet`)));
+        }
         break;
       default:
         console.log(`cron unrecognized: ${event.cron}, nothing ran`);

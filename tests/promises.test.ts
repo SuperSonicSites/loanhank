@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
-import { sendDueReminders } from '../src/api/worker.js';
+import { sendDayFour, sendDayThirty, sendDueReminders } from '../src/api/worker.js';
 import { migratedDatabase } from './helpers/d1-sqlite.js';
 
 // NO PROMISE WITHOUT A SENDER — spec.md §7.3.
@@ -34,6 +34,15 @@ const PROMISES: Promised[] = [
   { phrase: 'We will not send another about this quote.', keptBy: 'a reminder is never sent twice' },
   { phrase: 'We will not email you again.', keptBy: 'an unsubscribed address is refused' },
   { phrase: 'We will say so when it does.', keptBy: 'the canary proves a CHECKS OUT is reachable' },
+
+  // The follow-up sequence: disclosed at capture rather than requested, which
+  // is the other half of the posture in spec.md §10.
+  { phrase: "We'll follow up once about your deal", keptBy: 'day four goes out once and only once' },
+  {
+    phrase: 'when the numbers for deals like yours change',
+    keptBy: 'day thirty stays silent until a cohort qualifies',
+  },
+  { phrase: 'Unsubscribe anytime.', keptBy: 'an unsubscribed address is refused' },
 
   // Refusals, kept by the verdict engine rather than by a sender.
   {
@@ -235,5 +244,142 @@ describe('the teardown send posts to the provider', () => {
     expect(String(body.text)).toContain('LoanHank, somewhere');
     expect((body.headers as Record<string, string>)['List-Unsubscribe-Post'])
       .toBe('List-Unsubscribe=One-Click');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The follow-up sequence. Disclosed at capture rather than requested, so the
+// mechanism has to match the disclosure exactly: once about the deal, and the
+// cohort only when there actually is a cohort.
+// ---------------------------------------------------------------------------
+
+async function sequenceFixture(rows: Array<Record<string, unknown>>, pile = 0) {
+  const { db, d1 } = await migratedDatabase();
+  // The verdict needs a benchmark to point at. The stamp-law CHECK refused an
+  // earlier version of this fixture that claimed checks_out with a null
+  // verdict_ref_id, which is the constraint doing exactly its job on the person
+  // who wrote it.
+  db.exec(
+    `INSERT INTO decodes (id, ts, quarter, country, currency, reconciled, synthetic,
+                          out_of_bounds, real_rate_all_in_bps, verdict, verdict_ref_id,
+                          term_band, price_band, equip_category, new_or_used, quote_expiry_date)
+     VALUES ('d1', '2026-07-01T00:00:00Z', '2026Q3', 'US', 'USD', 1, 0, 0, 294,
+             'checks_out', 'agdirect-2026-08-01-25k-5y-fixed',
+             '49-72', '25k-100k', 'tractor', 'used', '2026-09-30')`,
+  );
+  for (let index = 0; index < pile; index += 1) {
+    db.prepare(
+      `INSERT INTO decodes (id, ts, quarter, country, currency, reconciled, synthetic,
+                            out_of_bounds, real_rate_all_in_bps, term_band, price_band,
+                            equip_category, new_or_used)
+       VALUES (?, '2026-07-01T00:00:00Z', '2026Q3', 'US', 'USD', 1, 0, 0, ?, '49-72',
+               '25k-100k', 'tractor', 'used')`,
+    ).run(`peer${index}`, 300 + index * 10);
+  }
+
+  for (const row of rows) {
+    db.prepare(
+      `INSERT INTO emails (id, email, decode_id, created_at, synthetic, unsubscribed_at,
+                           day4_sent_at, day30_sent_at)
+       VALUES (?, ?, 'd1', ?, 0, ?, ?, ?)`,
+    ).run(
+      row.id as string, `${row.id}@example.test`, row.createdAt as string,
+      (row.unsubscribedAt ?? null) as string | null,
+      (row.day4 ?? null) as string | null, (row.day30 ?? null) as string | null,
+    );
+  }
+
+  const posted: Array<Record<string, unknown>> = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (_url: string, init: { body: string }) => {
+    posted.push(JSON.parse(init.body));
+    return { ok: true, status: 200 } as Response;
+  }) as never;
+  const env = {
+    DB: d1, RESEND_API_KEY: 'test', EMAIL_FROM: 'hank@mail.test', POSTAL_ADDRESS: 'LoanHank, somewhere',
+  } as never;
+
+  return {
+    async run(fn: (env: never, today: string) => Promise<unknown>, today: string) {
+      try {
+        return { result: await fn(env, today), posted, db };
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    },
+  };
+}
+
+describe('day four goes out once and only once', () => {
+  it('sends four days after the address was given', async () => {
+    const fixture = await sequenceFixture([{ id: 'due', createdAt: '2026-08-01T00:00:00Z' }]);
+    const { result, posted, db } = await fixture.run(sendDayFour, '2026-08-05');
+    expect((result as { sent: number }).sent).toBe(1);
+    expect(String(posted[0]?.subject)).toContain('Did you take the deal');
+    const row = db.prepare('SELECT day4_sent_at FROM emails WHERE id = ?').get('due') as { day4_sent_at: string };
+    expect(row.day4_sent_at).not.toBeNull();
+  });
+
+  it('does not send on day three', async () => {
+    const fixture = await sequenceFixture([{ id: 'early', createdAt: '2026-08-03T00:00:00Z' }]);
+    const { result } = await fixture.run(sendDayFour, '2026-08-05');
+    expect((result as { sent: number }).sent).toBe(0);
+  });
+
+  it('never sends twice', async () => {
+    const fixture = await sequenceFixture([
+      { id: 'done', createdAt: '2026-08-01T00:00:00Z', day4: '2026-08-05T00:00:00Z' },
+    ]);
+    const { result } = await fixture.run(sendDayFour, '2026-08-06');
+    expect((result as { sent: number }).sent).toBe(0);
+  });
+
+  it('refuses an unsubscribed address', async () => {
+    const fixture = await sequenceFixture([
+      { id: 'gone', createdAt: '2026-08-01T00:00:00Z', unsubscribedAt: '2026-08-02T00:00:00Z' },
+    ]);
+    const { result, posted } = await fixture.run(sendDayFour, '2026-08-05');
+    expect((result as { sent: number }).sent).toBe(0);
+    expect(posted).toEqual([]);
+  });
+
+  it('stays inside the implied-consent window', async () => {
+    // CASL gives six months on an inquiry. A row that has sat unsent for a
+    // year does not get a surprise note now.
+    const fixture = await sequenceFixture([{ id: 'ancient', createdAt: '2025-08-01T00:00:00Z' }]);
+    const { result } = await fixture.run(sendDayFour, '2026-08-05');
+    expect((result as { sent: number }).sent).toBe(0);
+  });
+});
+
+describe('day thirty stays silent until a cohort qualifies', () => {
+  it('sends nothing when no cohort has reached twenty', async () => {
+    // The disclosure says "when the numbers change", not "every month". No
+    // cohort means nothing changed that we can honestly report.
+    const fixture = await sequenceFixture([{ id: 'thin', createdAt: '2026-07-01T00:00:00Z' }], 5);
+    const { result, posted } = await fixture.run(sendDayThirty, '2026-08-05');
+    expect((result as { sent: number; skipped: number }).sent).toBe(0);
+    expect((result as { sent: number; skipped: number }).skipped).toBe(1);
+    expect(posted).toEqual([]);
+  });
+
+  it('sends the moment a cohort does qualify, and prints its n', async () => {
+    const fixture = await sequenceFixture([{ id: 'ready', createdAt: '2026-07-01T00:00:00Z' }], 25);
+    const { result, posted, db } = await fixture.run(sendDayThirty, '2026-08-05');
+    expect((result as { sent: number }).sent).toBe(1);
+    const body = String(posted[0]?.text);
+    expect(body).toMatch(/from \d+ real quotes/);
+    expect(body).toContain('Unsubscribe: ');
+    const row = db.prepare('SELECT day30_sent_at FROM emails WHERE id = ?').get('ready') as { day30_sent_at: string };
+    expect(row.day30_sent_at).not.toBeNull();
+  });
+
+  it('refuses an unsubscribed address even with a qualifying cohort', async () => {
+    const fixture = await sequenceFixture([
+      { id: 'gone', createdAt: '2026-07-01T00:00:00Z', unsubscribedAt: '2026-07-02T00:00:00Z' },
+    ], 25);
+    const { result, posted } = await fixture.run(sendDayThirty, '2026-08-05');
+    expect((result as { sent: number }).sent).toBe(0);
+    expect(posted).toEqual([]);
   });
 });

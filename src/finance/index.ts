@@ -1852,3 +1852,26 @@ export function quoteWithinSanityBounds(input: {
   if (input.paymentAmountCents <= 0) reasons.push('nonpositive_payment');
   return { outOfBounds: reasons.length > 0, reasons };
 }
+
+/**
+ * Cohort banding, spec.md section 9.
+ *
+ * Price edges are the rate card's own edges on purpose. A cohort that splits
+ * at $100,000 while the benchmark splits at $99,999 would give two different
+ * answers about one deal, and the farmer holding it would be right to ask
+ * which one we meant.
+ */
+export function cohortBands(input: { amountFinancedCents: number; termMonths: number }): {
+  priceBand: string;
+  termBand: string;
+} {
+  const termBand = input.termMonths <= 48 ? '0-48' : input.termMonths <= 72 ? '49-72' : '73+';
+  const priceBand = input.amountFinancedCents < 2_500_000
+    ? 'under-25k'
+    : input.amountFinancedCents < 10_000_000
+      ? '25k-100k'
+      : input.amountFinancedCents < 25_000_000
+        ? '100k-250k'
+        : '250k+';
+  return { priceBand, termBand };
+}

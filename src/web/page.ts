@@ -618,6 +618,17 @@ ${view.rows.map(field).join('\n')}
 `);
 }
 
+/**
+ * Disclosed before the address is typed, which is the only moment a
+ * disclosure can honestly be made. Versioned, and stored on the row, because a
+ * follow-up sent against a row with no version recorded is a follow-up we
+ * cannot prove was disclosed.
+ */
+export const FOLLOWUP_DISCLOSURE =
+  "We'll follow up once about your deal, and when the numbers for deals like yours change. "
+  + 'Unsubscribe anytime.';
+export const FOLLOWUP_TEXT_VERSION = 'v1 (2026-08-16)';
+
 export interface EmailGate {
   decodeId: string;
 }
@@ -637,6 +648,7 @@ function emailGateBlock(gate: EmailGate | null): string {
   <div class="gate no-print">
     <h2>Want the full teardown as a PDF?</h2>
     <p>We'll email it. That's all we use your email for.</p>
+    <p class="note">${escapeHtml(FOLLOWUP_DISCLOSURE)}</p>
     <form method="post" action="/email">
       <input type="hidden" name="decodeId" value="${escapeHtml(gate.decodeId)}">
       <div class="field">
