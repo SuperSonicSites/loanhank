@@ -462,6 +462,15 @@ All footer-linked. All Hank voice: plain-words summary box on top, lawyer text u
 
 ---
 
+### 11.1 Session discipline
+
+- Typecheck + full tests before every commit. Main is always deployable.
+- **Every session ends with `git push` and a green CI run, and the session report cites that run.** Local-only history is not history: it is one machine's opinion, invisible to review, and lost with the machine. It is also how eleven verification rows sat unflagged across a session boundary, each session assuming the other could see what the first had done.
+
+  A session that cannot push says so in its report rather than ending quietly.
+
+---
+
 ## 12. DO-NOT LIST (carve in stone)
 
 - No app store. No native app. Web only.

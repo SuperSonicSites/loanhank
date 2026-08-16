@@ -358,6 +358,59 @@ export async function sendDueReminders(env: Env, today: string): Promise<{ sent:
   return { sent, failed };
 }
 
+
+/** Tables in dependency order, so a restore can replay the dump top to bottom. */
+const BACKUP_TABLES = ['benchmarks', 'decodes', 'emails', 'events'];
+
+function sqlLiteral(value: unknown): string {
+  if (value === null || value === undefined) return 'NULL';
+  if (typeof value === 'number') return String(value);
+  return `'${String(value).replace(/'/g, "''")}'`;
+}
+
+/**
+ * Nightly export of the whole pile to R2, as replayable SQL.
+ *
+ * The pile is the company. D1 Time Travel covers about thirty days, which
+ * covers a mistake noticed quickly and nothing else; this is what outlives a
+ * mistake nobody noticed, an account problem, or a database deleted by
+ * somebody who meant to delete a different one.
+ *
+ * A plain INSERT dump on purpose. It restores with `wrangler d1 execute --file`
+ * and it can be read with an eye, which matters at three in the morning when
+ * the clever format turns out to need the tool that is also broken.
+ */
+export async function backupToR2(env: Env, stamp: string): Promise<{ key: string; rows: number }> {
+  const parts: string[] = [
+    `-- LoanHank pile export ${stamp}`,
+    '-- Restore: wrangler d1 execute <database> --file <this file>',
+    '-- Schema is NOT included. Apply migrations first, then replay this.',
+    'PRAGMA defer_foreign_keys = true;',
+  ];
+  let rows = 0;
+
+  for (const table of BACKUP_TABLES) {
+    const result = await env.DB.prepare(`SELECT * FROM ${table}`).all<Record<string, unknown>>();
+    if (result.results.length === 0) {
+      parts.push(`-- ${table}: empty`);
+      continue;
+    }
+    const columns = Object.keys(result.results[0] as Record<string, unknown>);
+    parts.push(`DELETE FROM ${table};`);
+    for (const row of result.results) {
+      const values = columns.map((column) => sqlLiteral(row[column])).join(', ');
+      parts.push(`INSERT INTO ${table} (${columns.join(', ')}) VALUES (${values});`);
+      rows += 1;
+    }
+  }
+
+  const key = `d1/loanhank-${stamp}.sql`;
+  await env.BACKUPS.put(key, parts.join('\n'), {
+    httpMetadata: { contentType: 'application/sql' },
+  });
+  return { key, rows };
+}
+
 const app = new Hono<{ Bindings: Env }>();
 
 app.get('/', async (c) => {
@@ -705,8 +758,8 @@ async function decodeFullLedger(c: {
        real_rate_all_in_bps, reconciled, assumptions_json, verdict, verdict_ref_id,
        benchmark_at_ts, delta_vs_benchmark_bps,
        country, currency, province_or_state, out_of_bounds,
-       quote_date, quote_expiry_date
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       quote_date, quote_expiry_date, launched_standalone
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).bind(
     decodeId, ts, quarterOf(ts),
     form.quotedPrice, form.cashDiscount, decoded.totals.cashOutlayCents,
@@ -721,6 +774,9 @@ async function decodeFullLedger(c: {
     country, form.currency, form.region, bounds.outOfBounds ? 1 : 0,
     form.quoteDate === '' ? null : form.quoteDate,
     form.quoteExpiryDate === '' ? null : form.quoteExpiryDate,
+    // Null on the no-JS path, which is not a failure. It is a decode we could
+    // not ask about, and it must never be counted as "not installed".
+    String(body.standalone ?? '') === '1' ? 1 : null,
   ).run();
 
   await recordEvent(c.env, 'decode', decodeId, {
@@ -1019,6 +1075,26 @@ app.post('/remind', async (c) => {
   ));
 });
 
+
+/**
+ * First-party beacons from the one script in the product.
+ *
+ * An allowlist, not a free-text sink: an events table anybody can write
+ * anything into is an events table nobody can trust. No body beyond the name,
+ * no identifier, and nothing that could carry a farmer with it.
+ */
+const BEACON_EVENTS = new Set([
+  'standalone_launch', 'install_prompt_shown', 'install_accepted', 'install_dismissed',
+]);
+
+app.post('/event', async (c) => {
+  if (!(await withinRateLimit(c, 'event'))) return c.body(null, 429);
+  const name = (await c.req.text()).trim().slice(0, 40);
+  if (!BEACON_EVENTS.has(name)) return c.body(null, 422);
+  await recordEvent(c.env, name);
+  return c.body(null, 204);
+});
+
 export default {
   fetch: app.fetch,
 
@@ -1031,7 +1107,11 @@ export default {
         console.log('cron reaper: nothing to reap, photos are never written down');
         break;
       case BACKUP_CRON:
-        console.log('cron backup: not wired yet, no rows to export');
+        ctx.waitUntil(
+          backupToR2(env, new Date().toISOString().slice(0, 10))
+            .then((result) => console.log(`cron backup: ${result.rows} rows to ${result.key}`))
+            .catch((error) => console.log(`cron backup FAILED: ${String(error)}`)),
+        );
         // The reminder sweep rides the daily cron. It is the delivery half of
         // an opt-in that would otherwise be a promise nobody keeps.
         ctx.waitUntil(sendDueReminders(env, new Date().toISOString().slice(0, 10)));

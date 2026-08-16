@@ -1,5 +1,5 @@
-// SHARED PRODUCTION CODE: imported directly by the standalone Worker
-// (see AGENTS.md "Shared production code"). A change here ships.
+// Upload gates and extraction sanitising, carried from the ancestor with its
+// tests. security.ts is what stands between /extract and a bill.
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import Decimal from 'decimal.js';
 import type { Extraction, ExtractionWarningCode, UploadContentType } from '../shared/schema.js';

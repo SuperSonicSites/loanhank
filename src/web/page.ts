@@ -270,6 +270,36 @@ a { color: var(--denim); }
 }
 `;
 
+export /**
+ * The only script in the product, and it is entirely optional.
+ *
+ * Everything the tool does works with JavaScript switched off: the form is a
+ * plain POST and always will be (design.md §9). This adds three things that
+ * only exist when a browser offers them.
+ *
+ * It never calls prompt() on its own. Chrome's beforeinstallprompt is caught
+ * and held, and the install dialog opens only when a farmer clicks the one
+ * line inviting him to. That is the difference between an invitation and an
+ * interruption, and design.md §10 only forbids the second one.
+ */
+const script = `(function(){
+var d=null;
+addEventListener('beforeinstallprompt',function(e){e.preventDefault();d=e;
+var b=document.getElementById('install');if(b)b.hidden=false;});
+function beacon(n){try{navigator.sendBeacon&&navigator.sendBeacon('/event',n)}catch(e){}}
+if(matchMedia('(display-mode: standalone)').matches){
+var f=document.querySelectorAll('input[name="standalone"]');
+for(var i=0;i<f.length;i++)f[i].value='1';
+if(location.pathname==='/')beacon('standalone_launch');}
+addEventListener('click',function(ev){
+var b=ev.target&&ev.target.closest&&ev.target.closest('#install');
+if(!b)return;ev.preventDefault();if(!d)return;
+beacon('install_prompt_shown');d.prompt();
+d.userChoice.then(function(c){
+beacon(c.outcome==='accepted'?'install_accepted':'install_dismissed');d=null;
+b.hidden=true;});});
+})();`;
+
 export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
@@ -302,6 +332,7 @@ export function shell(title: string, body: string): string {
 <link rel="preload" as="font" type="font/woff2" href="/fonts/courier-prime-latin-400-normal.woff2" crossorigin>
 <link rel="manifest" href="/manifest.webmanifest">
 <style>${styles}</style>
+<script>${script}</script>
 </head>
 <body>
 <main>
@@ -408,6 +439,7 @@ export function renderForm(
       <label for="paymentCount">How many payments</label>
       <input type="text" id="paymentCount" name="paymentCount" inputmode="numeric" value="${escapeHtml(values.paymentCount)}" required>
     </div>
+    <input type="hidden" name="standalone" value="">
     <button type="submit">Run the numbers</button>
   </form>
 ${photoBlock(photo)}`);
@@ -580,6 +612,7 @@ ${view.rows.map(field).join('\n')}
       </label>
       <p class="note">Tick this and we will show your rate but hold the verdict. We will not rate a deal with money in it that nobody can explain.</p>
     </div>
+    <input type="hidden" name="standalone" value="">
     <button type="submit">Looks right — run it</button>
   </form>
 `);

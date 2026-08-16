@@ -1,5 +1,6 @@
-// SHARED PRODUCTION CODE: imported directly by the standalone Worker
-// (see AGENTS.md "Shared production code"). A change here ships.
+// THE ENGINE. Every money figure a farmer ever sees is computed here and
+// nowhere else. Pure functions only: no fetch, no database, no clock. A change
+// here starts with a failing test (CLAUDE.md, money-math rules).
 import Decimal from 'decimal.js';
 import type { ConfirmedLoan, CountryCode, CurrencyCode, DecisionState, InterestRateConvention, ScenarioRequest } from '../shared/schema.js';
 
@@ -767,7 +768,7 @@ function daysInUtcMonth(year: number, monthIndex: number): number {
  * `2028-03-31`, not `2028-02-29` carried forward to `2028-03-29`.
  *
  * PARALLEL, NOT DUPLICATE — this must not be merged with the private
- * `subtractUtcMonths` in `standalone/src/alert-schedule.ts`. That helper works
+ * the ancestor's alert scheduler. That helper works
  * on `Date` objects pinned at `T12:00:00Z`, because an alert is an instant
  * that has to survive a timezone shift; this one works on date-only strings at
  * `T00:00:00Z`, because a payment date is a calendar fact with no time of day.

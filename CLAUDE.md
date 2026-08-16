@@ -60,6 +60,7 @@ Keep these true in package.json; if you rename a script, update this file in the
 ## Workflow
 
 - Typecheck + full tests before every commit. Main is always deployable.
+- Every session ends with `git push` and a green CI run, and the session report cites that run. Local-only history is one machine's opinion (spec.md §11.1).
 - A farmer photo never becomes a fixture; it is never stored in the first place. Extraction improvement comes from the extracted-versus-confirmed field diff, text only. New quote shapes get a synthetic fixture via `tests/fixtures/make-synthetic-quote.py`.
 - Do not add: accounts/login, native app, CMS, hosted forms, tracking cookies, third fonts, new colors, SMS. These are carved in the docs; a feature idea that needs one goes back to the docs first.
 

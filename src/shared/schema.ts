@@ -1,5 +1,5 @@
-// SHARED PRODUCTION CODE: imported directly by the standalone Worker
-// (see AGENTS.md "Shared production code"). A change here ships.
+// Types and validation, the single source of truth for field shapes.
+// Names here are contracts: see spec.md 5.1 before renaming anything.
 import { z } from 'zod';
 
 export const analysisStatuses = [

@@ -265,6 +265,7 @@ export function renderSent(emailId: string, expiry: string | null): string {
   return shell('On its way · LoanHank', `  <h1>On its way</h1>
   <p>Check your inbox in a minute. That is all we use your email for.</p>
 ${offer}  <p class="note">You can add LoanHank to your phone home screen from your browser menu, if you would rather not go looking for it next time.</p>
+  <p class="no-print"><button type="button" id="install" class="secondary" hidden>Add it to my home screen</button></p>
   <p class="no-print"><a href="/">Run another quote</a></p>
 `);
 }
