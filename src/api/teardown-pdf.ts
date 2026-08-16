@@ -172,7 +172,10 @@ export async function renderTeardownPdf(input: TeardownInput): Promise<Uint8Arra
     thickness: 0.75, color: RULE,
   });
   footnote(input.footnote);
-  footnote(`Run on ${input.generatedOn}. LoanHank, ${input.postalAddress}`);
+  // Printed verbatim. The configured form already carries the name, so adding
+  // one here would read "LoanHank, LoanHank ...".
+  footnote(`Run on ${input.generatedOn}.`);
+  footnote(input.postalAddress);
 
   return pdf.save();
 }

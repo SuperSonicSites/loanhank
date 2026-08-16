@@ -212,12 +212,16 @@ Value before email. Email before interest. Interest before consent. Consent befo
 
 ### 7.1 Wall numbers — write on cave wall BEFORE spend $500
 
-| step | good | bad = stop, fix, retest |
-|---|---|---|
-| click → completed decode | ≥ 25% | < 10% |
-| decode → email | ≥ 20% | < 8% |
-| email → **interest-yes** | ≥ 10% | < 3% |
-| $ per interested decode | ≤ $50 | > $150 |
+| step | good | workable | broken = stop, fix, retest |
+|---|---|---|---|
+| click → completed decode | ≥ 25% | | < 10% |
+| decode → email | ≥ 20% | | < 8% |
+| email → **interest-yes** | ≥ 10% | | < 3% |
+| **$ per completed decode** | **≤ $12** | **≤ $25** | **> $40** |
+
+**Round one is judged at the decode, not at the lead.** The gate above is cost per *completed decode*, because that is the only number a first week of spend can measure honestly. A few hundred dollars buys enough decodes to know whether the top of the funnel works; it does not buy enough interest-yes answers to say anything about lead economics without fooling yourself with a denominator of nine.
+
+**Cost per lead is not judged until $2,000 to $3,000 of spend has run.** Before that the figure exists but means nothing, and acting on it means killing a funnel on noise or scaling one on luck.
 
 (garbage form-fill industry sell junk leads at $600/mo minimums. our lead = verified quote, real intent, this-week buyer. worth multiples. 2-3 broker calls confirm price.)
 
@@ -439,9 +443,9 @@ Check off before ads spend a dollar.
 - [ ] **Cost + abuse protection on `/extract`.** Max upload size (`security.ts` has bones — verify), Turnstile invisible mode on submit, hard monthly spend cap + alert on the LLM provider account. An abuse script hitting `/extract` is a bill, not an outage. Turnstile belongs on the photo path only: it needs JS, and the typed form must keep working without any (design.md §9).
 - [x] **Per-IP rate limit.** Native Workers rate limiting binding, 20 a minute per route per hashed IP, on `GET /` and `POST /decode`. Verified live: the twenty-first decode gets a 429. The form still renders when the page-view limit trips, because an undercounted funnel beats a farmer who cannot see the tool.
 - [x] **Email deliverability.** Resend, sending from `hank@mail.loanhank.com`, domain verified. DMARC is inherited from `loanhank.com` at `p=none`; tighten later.
-- [ ] **Tighten DMARC to `p=quarantine`** after the first few weeks of clean sending. `p=none` is right while nothing has sent; leaving it there once mail is flowing is leaving the door open.
+- [ ] **Tighten DMARC to `p=quarantine`** after the first few weeks of clean sending. **The clean-send clock starts 2026-08-16**, the first real delivery from `mail.loanhank.com`. `p=none` is right while nothing has sent; leaving it there once mail is flowing is leaving the door open.
 - [ ] **Real name and photograph for `/whos-behind-this`.** The page currently admits it is unfinished rather than inventing a byline. An anonymous site about money is a fair thing to distrust, and this is the biggest trust page there is.
-- [ ] **Postal address for the CAN-SPAM footer.** A PO box is fine. **This blocks the email gate**, which does not render and does not send while `POSTAL_ADDRESS` is empty. Nothing is stored either: a farmer who typed his address into a promise we cannot legally keep would have lost something real.
+- [x] **Postal address for the CAN-SPAM footer.** `LoanHank · 109b - 1917 Peninsula Rd, Ucluelet, BC V0R 3A0, Canada`, versioned in `wrangler.jsonc` and printed verbatim on `/contact`, in every email footer, and in the teardown PDF. The country is included because most recipients are American.
 - [ ] ~~Pick provider (Decision 10).~~ Send from `mail.loanhank.com`. SPF + DKIM + DMARC; DMARC starts `p=none`, tighten later. Postal address for the CAN-SPAM footer before the first teardown sends.
 - [ ] **Meta Business setup — start NOW, has lead time.** Business Manager + business verification + domain verification on loanhank.com + Conversions API token. Verification can take days-to-weeks.
 - [ ] **Eval samples.** Mystery-shop 12-15 dealers + forum-posted quote photos + synthetic print-and-photograph pipeline (20 docs × 5 conditions). Golden holdout of 5, never tuned against. Metric #1: false-confidence rate = 0.

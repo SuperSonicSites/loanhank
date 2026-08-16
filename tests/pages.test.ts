@@ -14,13 +14,16 @@ import {
   renderWhosBehindThis,
 } from '../src/web/pages.js';
 
+/** The configured footer form, exactly as wrangler.jsonc carries it. */
+const POSTAL = 'LoanHank · 109b - 1917 Peninsula Rd, Ucluelet, BC V0R 3A0, Canada';
+
 const PAGES: Array<[string, string]> = [
   ['privacy', renderPrivacy()],
   ['terms', renderTerms()],
   ['how-we-make-money', renderHowWeMakeMoney()],
   ['how-we-figure-it', renderHowWeFigureIt()],
   ['straight-answers', renderStraightAnswers()],
-  ['contact', renderContact()],
+  ['contact', renderContact(POSTAL)],
   ['whos-behind-this', renderWhosBehindThis()],
   ['404', renderNotFound()],
 ];
@@ -147,9 +150,13 @@ describe('how we figure it shows the work', () => {
 });
 
 describe('the pages that depend on facts we do not have yet', () => {
-  it('contact refuses to print a placeholder postal address', () => {
-    const html = prose(renderContact());
-    expect(html).toContain('not going to put a placeholder address');
+  it('contact prints the real postal address, verbatim', () => {
+    // CAN-SPAM wants a valid physical address, and the same string has to
+    // appear here and in every email footer, so it is printed and never
+    // reformatted.
+    const html = prose(renderContact(POSTAL));
+    expect(html).toContain(POSTAL);
+    expect(html).not.toContain('not going to put a placeholder address');
   });
 
   it("who's behind this admits it is unfinished rather than inventing a person", () => {
@@ -194,9 +201,19 @@ describe('the manifest installs the tool and nothing more', () => {
     expect(Object.keys(manifest)).not.toContain('gcm_sender_id');
   });
 
-  it('does not ask to be installed as a standalone app', () => {
-    // design.md §10: no app-store badges, nothing that interrupts.
-    expect(manifest.display).toBe('browser');
+  it('is installable for real, and standalone once installed', () => {
+    // Chrome dropped the service-worker requirement for installability, so
+    // standalone costs nothing and buys the metric that matters: decodes
+    // launched from the icon rather than from an ad every time.
+    expect(manifest.display).toBe('standalone');
+  });
+
+  it('invites without interrupting', () => {
+    // design.md §10: nothing interrupts. The invitation is one line on the
+    // confirmation screen and one line in the delivery email. There is no
+    // install banner and no prompt anywhere in the decode flow.
+    expect(prose(renderNotFound())).not.toContain('Install');
+    expect(prose(renderPrivacy())).not.toContain('Install');
   });
 
   it('uses the paper colour so the phone chrome matches the page', () => {

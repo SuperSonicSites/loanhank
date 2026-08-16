@@ -11,7 +11,7 @@
 // distinguishable later rather than blurred into one living document.
 
 import { PEER_POLICY_VERSION, VERDICT_BUFFER_VERSION, COHORT_MIN_N } from '../finance/index.js';
-import { shell } from './page.js';
+import { escapeHtml, shell } from './page.js';
 
 export const TERMS_VERSION = 'v1 (2026-08-15, pre-counsel)';
 export const PRIVACY_VERSION = 'v1 (2026-08-15)';
@@ -172,7 +172,7 @@ export function renderStraightAnswers(): string {
 `);
 }
 
-export function renderContact(): string {
+export function renderContact(postalAddress: string): string {
   return shell('Contact · LoanHank', `  <h1>Contact</h1>
 ${plain('Email us. A person reads it.')}
 
@@ -180,7 +180,8 @@ ${plain('Email us. A person reads it.')}
   <p><a href="mailto:hank@mail.loanhank.com">hank@mail.loanhank.com</a></p>
 
   <h2>Post</h2>
-  <p>Our postal address is being registered and will be printed here, and in the footer of every email we send, before we send any. We are not going to put a placeholder address on this page.</p>
+  <address>${escapeHtml(postalAddress)}</address>
+  <p class="note">The same address is in the footer of every email we send.</p>
 
   <h2>Data requests</h2>
   <p>Ask us what we hold about you, or ask us to delete it, at the address above. If you only ran numbers and never gave us an email, there is nothing attached to you to find.</p>
@@ -220,6 +221,13 @@ export function renderNotFound(): string {
  * No push: design.md §9 bans the push permission prompt outright, and §10 bans
  * anything that interrupts. The expiry reminder is an email the farmer opts
  * into, which is a thing he asked for rather than a thing that interrupts him.
+ *
+ * display is standalone, not browser. Chrome dropped the service-worker
+ * requirement for installability, so standalone costs nothing and buys the
+ * metric that matters: decodes launched from the icon rather than from an ad
+ * every time. The invitation to install is one line on the confirmation screen
+ * and one line in the delivery email. There is no install banner, no prompt,
+ * and nothing that interrupts a farmer mid-decode.
  */
 export function renderManifest(): string {
   return JSON.stringify({
@@ -227,7 +235,7 @@ export function renderManifest(): string {
     short_name: 'LoanHank',
     description: 'See what dealer financing really costs.',
     start_url: '/',
-    display: 'browser',
+    display: 'standalone',
     background_color: '#F7F5EF',
     theme_color: '#F7F5EF',
   });
@@ -256,6 +264,7 @@ export function renderSent(emailId: string, expiry: string | null): string {
 `;
   return shell('On its way · LoanHank', `  <h1>On its way</h1>
   <p>Check your inbox in a minute. That is all we use your email for.</p>
-${offer}  <p class="no-print"><a href="/">Run another quote</a></p>
+${offer}  <p class="note">You can add LoanHank to your phone home screen from your browser menu, if you would rather not go looking for it next time.</p>
+  <p class="no-print"><a href="/">Run another quote</a></p>
 `);
 }

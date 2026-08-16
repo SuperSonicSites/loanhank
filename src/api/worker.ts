@@ -33,6 +33,8 @@ import { getConfig } from './env.js';
 
 // Must match the crons in wrangler.jsonc. An unrecognized cron logs and does
 // nothing rather than falling into the wrong branch.
+const PUBLIC_ORIGIN = 'https://loanhank-decoder.supersonicworkers.workers.dev';
+
 const REAPER_CRON = '*/15 * * * *';
 const BACKUP_CRON = '0 7 * * *';
 
@@ -270,6 +272,90 @@ function base64(bytes: Uint8Array): string {
   let binary = '';
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary);
+}
+
+
+/** How long before the quote expires the one note goes out. */
+const REMINDER_LEAD_DAYS = 7;
+
+/**
+ * Send the expiry reminders that are due, and mark them sent.
+ *
+ * One note per opt-in, ever. `reminded_at` is set in the same sweep, and the
+ * query refuses any address that has unsubscribed since opting in, because an
+ * unsubscribe has to beat an earlier yes.
+ *
+ * This exists because the opt-in without it is a promise with no delivery. A
+ * farmer told "we will remind you" who then hears nothing has been lied to by
+ * a system that meant well, which is the same failure as a number that is
+ * confidently wrong.
+ */
+async function sendDueReminders(env: Env, today: string): Promise<{ sent: number; failed: number }> {
+  const sendable = emailSendable(env);
+  if (sendable === null) {
+    console.log('cron reminders: sending is not configured, nothing sent');
+    return { sent: 0, failed: 0 };
+  }
+
+  const due = await env.DB.prepare(
+    `SELECT e.id, e.email, e.remind_on, d.quote_expiry_date
+       FROM emails e
+       LEFT JOIN decodes d ON d.id = e.decode_id
+      WHERE e.reminder_opt_in = 1
+        AND e.reminded_at IS NULL
+        AND e.unsubscribed_at IS NULL
+        AND e.remind_on IS NOT NULL
+        AND e.remind_on >= ?
+        AND date(e.remind_on, ?) <= ?
+      LIMIT 200`,
+  ).bind(today, `-${REMINDER_LEAD_DAYS} days`, today).all<Record<string, string>>();
+
+  let sent = 0;
+  let failed = 0;
+  for (const row of due.results) {
+    const unsubscribe = `${PUBLIC_ORIGIN}/unsubscribe/${row.id}`;
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${sendable.apiKey}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        from: `Hank <${sendable.from}>`,
+        to: [row.email],
+        subject: `Your quote expires ${row.remind_on}`,
+        text: [
+          `The quote you ran through us is good until ${row.remind_on}.`,
+          '',
+          'That is the date printed on the dealer\'s own paper, not one we made up.',
+          'If you are still deciding, it is worth knowing what the financing costs',
+          'before the paper goes stale.',
+          '',
+          'This is the one note. We will not send another about this quote.',
+          '',
+          `P.S. If the deal checked out, go sign it. We said so for a reason.`,
+          '',
+          `Unsubscribe: ${unsubscribe}`,
+          sendable.postalAddress,
+        ].join('\n'),
+        headers: {
+          'List-Unsubscribe': `<${unsubscribe}>`,
+          'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+        },
+      }),
+    });
+
+    if (response.ok) {
+      await env.DB.prepare('UPDATE emails SET reminded_at = ? WHERE id = ?')
+        .bind(new Date().toISOString(), row.id).run();
+      await recordEvent(env, 'reminder_sent', null, {});
+      sent += 1;
+    } else {
+      // Left unmarked on purpose: tomorrow's sweep tries again, and the
+      // remind_on window is what stops it retrying past the expiry date.
+      await recordEvent(env, 'reminder_failed', null, { status: response.status });
+      failed += 1;
+    }
+  }
+  console.log(`cron reminders: ${sent} sent, ${failed} failed, ${due.results.length} due`);
+  return { sent, failed };
 }
 
 const app = new Hono<{ Bindings: Env }>();
@@ -785,8 +871,11 @@ app.post('/email', async (c) => {
         '',
         `P.S. If the deal checks out, go sign it. We will say so when it does.`,
         '',
+        'You can add LoanHank to your phone home screen from the site, if you would',
+        'rather not go looking for it next time.',
+        '',
         `Unsubscribe: ${unsubscribe}`,
-        `LoanHank, ${sendable.postalAddress}`,
+        sendable.postalAddress,
       ].join('\n'),
       attachments: [{ filename: 'loanhank-teardown.pdf', content: base64(pdf) }],
       headers: {
@@ -863,7 +952,6 @@ const STATIC_PAGES: Array<[string, () => string]> = [
   ['/how-we-make-money', renderHowWeMakeMoney],
   ['/how-we-figure-it', renderHowWeFigureIt],
   ['/straight-answers', renderStraightAnswers],
-  ['/contact', renderContact],
   ['/whos-behind-this', renderWhosBehindThis],
 ];
 for (const [path, render] of STATIC_PAGES) {
@@ -872,6 +960,12 @@ for (const [path, render] of STATIC_PAGES) {
     return c.html(render());
   });
 }
+
+app.get('/contact', (c) => {
+  c.header('cache-control', 'public, max-age=600');
+  const postal = typeof c.env.POSTAL_ADDRESS === 'string' ? c.env.POSTAL_ADDRESS : '';
+  return c.html(renderContact(postal));
+});
 
 app.get('/manifest.webmanifest', (c) => {
   c.header('content-type', 'application/manifest+json');
@@ -896,9 +990,22 @@ app.post('/remind', async (c) => {
     return c.html(renderNotice('No date to work from', 'That quote did not carry an expiry date we could read.'), 422);
   }
 
-  await c.env.DB.prepare(
+  const result = await c.env.DB.prepare(
     'UPDATE emails SET reminder_opt_in = 1, remind_on = ? WHERE id = ? AND unsubscribed_at IS NULL',
   ).bind(remindOn, emailId).run();
+
+  // Nothing was recorded, so nothing may be promised. This route used to say
+  // "we will remind you" whatever happened, including for an id that matched
+  // no row and for an address that had already unsubscribed. A promise made to
+  // a farmer we cannot keep is the same failure as a number we cannot stand
+  // behind, and it is worse for being reassuring.
+  if (result.meta.changes === 0) {
+    return c.html(renderNotice(
+      'We could not set that up',
+      'We have no record to attach a reminder to, or that address has already been unsubscribed. Nothing has been scheduled.',
+    ), 422);
+  }
+
   c.executionCtx.waitUntil(recordEvent(c.env, 'reminder_opt_in', null, { remind_on: remindOn }));
 
   return c.html(renderNotice(
@@ -913,13 +1020,16 @@ export default {
   // Both crons log on every fire, wired or not. A cron that silently does
   // nothing and a cron that silently fails look identical in the dashboard,
   // and the reaper is what keeps the photo-deletion promise.
-  scheduled(event: ScheduledController, _env: Env, _ctx: ExecutionContext) {
+  scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext) {
     switch (event.cron) {
       case REAPER_CRON:
-        console.log('cron reaper: not wired yet, no photos to reap');
+        console.log('cron reaper: nothing to reap, photos are never written down');
         break;
       case BACKUP_CRON:
         console.log('cron backup: not wired yet, no rows to export');
+        // The reminder sweep rides the daily cron. It is the delivery half of
+        // an opt-in that would otherwise be a promise nobody keeps.
+        ctx.waitUntil(sendDueReminders(env, new Date().toISOString().slice(0, 10)));
         break;
       default:
         console.log(`cron unrecognized: ${event.cron}, nothing ran`);
