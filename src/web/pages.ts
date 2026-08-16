@@ -46,10 +46,10 @@ ${plain('We keep the numbers off your quote, and your email if you hand it over.
   <p>If that ever changes, it changes with a button you press, with the exact wording recorded beside your answer, and after a lawyer has been through it.</p>
 
   <h2>California</h2>
-  <p>If we ever begin passing a farmer's details to a lender for money, California law treats that as selling or sharing personal information, and you get a right to say no to it. That is not happening today, and this page will say so plainly on the day it does, with a <span class="ui">Do Not Sell or Share My Personal Information</span> link beside it.</p>
+  <p>If we ever begin passing a farmer's details to a lender for money, California law treats that as selling or sharing personal information, and you get a right to say no to it. That is not happening today. On the day it does, this page carries a <span class="ui">Do Not Sell or Share My Personal Information</span> link and a rights process, and its version number at the top changes to say so.</p>
 
   <h2>Measurement</h2>
-  <p>No tracking cookies. No third-party pixel. No advertising script. There is no cookie banner on this site because there is nothing to ask you about. We count how many people reached each step, on our own server, without identifying anybody.</p>
+  <p>There are no tracking cookies here, no third-party pixel and no advertising script, which is why there is no cookie banner on this site: there is nothing to ask you about. We count how many people reached each step, on our own server, without identifying anybody.</p>
 
   <h2>Asking us</h2>
   <p>Write to us at the address on the <a href="/contact">contact page</a> and ask what we hold about you, or ask us to delete it. If you gave us an email we can find it. If you only ran numbers, there is nothing attached to you to find.</p>
@@ -65,7 +65,7 @@ ${plain('Free tool. It does arithmetic on numbers you give it. It is not advice,
   <p>A calculator with an opinion about its own limits. You give it the numbers off a dealer quote. It works out what the financing costs against paying cash, and it compares that to a published rate card when one honestly matches. That is the whole product.</p>
 
   <h2>What we are not</h2>
-  <p>We are not a lender. We do not lend money, and we never will.</p>
+  <p>We are not a lender. We do not lend money. If that ever changes, these terms are replaced by a version that says so, and the version number at the top is how you tell which text you agreed to.</p>
   <p>We do not arrange, broker or place financing. We do not introduce you to anybody. Nothing about you moves to any lender, dealer or broker, because no such handoff exists in this product today.</p>
   <p>That is a description of what this tool does right now, not a promise about every future version. If we ever build a way for lenders to compete for your deal, it will be something you switch on deliberately, the wording will be recorded, and these terms will be replaced by a version that describes it. The version number at the top is how you tell which text you agreed to.</p>
 
@@ -304,7 +304,7 @@ const COMING = [
 
 export function renderNotesIndex(): string {
   const shelf = NOTES.length === 0
-    ? `  <p>There is nothing here yet. Four papers are being written, and they will appear here when they are worth reading rather than when a schedule says so.</p>
+    ? `  <p>There is nothing here yet. Four papers are planned. They appear here once they are worth reading, and not on a schedule.</p>
   <ul>${COMING.map((title) => `<li>${escapeHtml(title)}</li>`).join('')}</ul>
   <p class="note">No feed, no comments, no newsletter. The notes sit here when they are written, and you can come back and look.</p>
 `

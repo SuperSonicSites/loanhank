@@ -66,7 +66,11 @@ function verdictHalf(html: string): string {
 function businessHalf(html: string): string {
   const start = html.indexOf('<div class="gate');
   expect(start, 'the ticket rendered no gate block to test').toBeGreaterThan(-1);
-  return html.slice(start)
+  // Stops at the footer. The footer is site chrome that appears on every page
+  // including pages with no gate at all, so counting it as "the business half"
+  // made the canonical trust line look like the gates were quoting the verdict.
+  const end = html.indexOf('<footer', start);
+  return html.slice(start, end === -1 ? undefined : end)
     .replace(/<style[\s\S]*?<\/style>/g, '')
     .replace(/<[^>]+>/g, ' ')
     .toLowerCase();
@@ -148,5 +152,36 @@ describe('the question does not move with the answer', () => {
     const html = renderVerdictTicket(view('checks_out'));
     expect(businessHalf(html)).toContain('how we make money');
     expect(verdictHalf(html)).not.toContain('how we make money');
+  });
+});
+
+
+describe('the firewall is wired in production, not only in the template', () => {
+  // renderVerdictTicket obeys the firewall, but the route decides what it is
+  // handed. Everything above tests the template; this tests the wiring, which
+  // is the part that could quietly start passing a verdict into the gate.
+  it('hands the gate a decode id and nothing about the verdict', async () => {
+    const worker = await readFile(new URL('../src/api/worker.ts', import.meta.url), 'utf8');
+    const wiring = /gate:\s*emailSendable\(c\.env\)\s*===\s*null\s*\?\s*null\s*:\s*\{([^}]*)\}/
+      .exec(worker);
+    expect(wiring, 'the verdict route no longer wires the gate the way this test expects').not.toBeNull();
+
+    const handed = (wiring as RegExpExecArray)[1] as string;
+    // Exactly the decode id. Not the verdict, not the rate, not the delta.
+    expect(handed.trim()).toBe('decodeId');
+    for (const leak of ['verdict', 'rate', 'delta', 'benchmark', 'cohort']) {
+      expect(handed.toLowerCase(), `the route hands "${leak}" to the gate`).not.toContain(leak);
+    }
+  });
+
+  it('renders the same gate whatever verdict the route computed', async () => {
+    const worker = await readFile(new URL('../src/api/worker.ts', import.meta.url), 'utf8');
+    // A conditional on verdict anywhere near the gate wiring would be steering
+    // by omission, which is the sin spec.md §3.1 names.
+    const around = worker.slice(
+      Math.max(0, worker.indexOf('gate: emailSendable') - 400),
+      worker.indexOf('gate: emailSendable') + 200,
+    );
+    expect(around).not.toMatch(/verdict\s*===\s*'(checks_out|look_closer|none)'[^;]*gate/);
   });
 });

@@ -1,7 +1,13 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
-import { sendDayFour, sendDayThirty, sendDueReminders } from '../src/api/worker.js';
+import { sendDayFour, sendDayThirty, sendDueReminders, sendTeardown } from '../src/api/worker.js';
 import { migratedDatabase } from './helpers/d1-sqlite.js';
+import { collectTestNames, unresolvedCitations } from './helpers/test-names.js';
+
+const NEWLINE = String.fromCharCode(10);
+
+/** Whole block comments, so a continuation line cannot pose as product copy. */
+const BLOCK_COMMENT = /\/\*[\s\S]*?\*\//g;
 
 // NO PROMISE WITHOUT A SENDER — spec.md §7.3.
 //
@@ -33,11 +39,49 @@ const PROMISES: Promised[] = [
   { phrase: 'We will send one note before', keptBy: 'a due reminder is sent and marked' },
   { phrase: 'We will not send another about this quote.', keptBy: 'a reminder is never sent twice' },
   { phrase: 'We will not email you again.', keptBy: 'an unsubscribed address is refused' },
-  { phrase: 'We will say so when it does.', keptBy: 'the canary proves a CHECKS OUT is reachable' },
+  { phrase: 'We will say so when it does.', keptBy: 'produces a CHECKS OUT stamp from the shipped benchmark table' },
 
   // The follow-up sequence: disclosed at capture rather than requested, which
   // is the other half of the posture in spec.md §10.
   { phrase: "We'll follow up once about your deal", keptBy: 'day four goes out once and only once' },
+
+  // The 404 on /email. It promises a teardown follows a fresh run, and fix 2
+  // is what makes that true.
+  {
+    phrase: 'Run your quote again and the teardown will follow.',
+    keptBy: 'sends the teardown with the PDF attached',
+  },
+
+  // Caught by the broader sweep and genuinely not commitments. Each names why
+  // rather than being hidden behind a narrower pattern.
+  {
+    phrase: 'not a promise about every future version',
+    notADelivery: 'says out loud that it is NOT a promise, which is the opposite of one',
+  },
+  {
+    phrase: 'We do not guarantee any saving',
+    notADelivery: 'a refusal to promise, kept by refusing rather than by a mechanism',
+  },
+  {
+    phrase: 'will want an independent lender to quote the same deal',
+    notADelivery: 'a prediction about what farmers want, not something we undertake to do',
+  },
+  {
+    phrase: 'some farmers will later want an independent lender',
+    notADelivery: 'the same prediction, restated on the FAQ',
+  },
+  {
+    phrase: 'Because you were going to wonder',
+    notADelivery: 'describes the reader, promises nothing',
+  },
+  {
+    phrase: 'If a dealer will take six thousand dollars off for cash',
+    notADelivery: 'describes what a dealer does, and dealers are not ours to promise for',
+  },
+  {
+    phrase: 'Will you tell my dealer?',
+    notADelivery: 'a question the reader asks us, answered immediately underneath',
+  },
   {
     phrase: 'when the numbers for deals like yours change',
     keptBy: 'day thirty stays silent until a cohort qualifies',
@@ -47,17 +91,17 @@ const PROMISES: Promised[] = [
   // Refusals, kept by the verdict engine rather than by a sender.
   {
     phrase: 'We will not rate a deal against published rates until the whole deal is on the table',
-    keptBy: 'the verdict abstains without a reconciled ledger',
+    keptBy: 'abstains on an unreconciled ledger however good the rate looks',
   },
   {
     phrase: 'We will not rate a deal with money in it that nobody can explain.',
-    keptBy: 'the verdict abstains on an unknown amount',
+    keptBy: 'abstains while any amount is unconfirmed',
   },
   {
     phrase: 'we will show your rate but hold the verdict',
-    keptBy: 'the verdict abstains on an unknown amount',
+    keptBy: 'abstains while any amount is unconfirmed',
   },
-  { phrase: 'When we will not give a verdict', keptBy: 'the verdict abstains on an unknown amount' },
+  { phrase: 'When we will not give a verdict', keptBy: 'abstains while any amount is unconfirmed' },
 
   // Not deliveries.
   {
@@ -78,17 +122,30 @@ const PROMISES: Promised[] = [
   },
 ];
 
-/** Future-tense shapes worth catching. Deliberately broad. */
-const FUTURE = /\b(we will|we'll|we are going to|will send|will email|will remind|you will get|we can find)\b/gi;
+/**
+ * Future-tense shapes worth catching.
+ *
+ * A bare "will", not just "we will". The narrow version missed "they will
+ * appear here", "the teardown will follow" and "this page will say so plainly",
+ * every one of which is a commitment somebody has to keep. It catches ordinary
+ * descriptive sentences too, and those are registered with a reason rather
+ * than hidden behind a narrower pattern.
+ */
+const FUTURE = /\b(will|we'll|going to|we can find)\b/gi;
 
 async function productCopy(): Promise<string[]> {
   const found: string[] = [];
   for (const file of SOURCES) {
-    const text = await readFile(new URL(`../${file}`, import.meta.url), 'utf8');
+    const raw = await readFile(new URL(`../${file}`, import.meta.url), 'utf8');
+    // Block comments come out WHOLE first. Skipping only lines that OPEN a
+    // comment left every continuation line looking like product copy, which
+    // is how a CSS comment about print styling arrived here claiming to be a
+    // promise. Same failure shape as the sweep that could not see past a '<'.
+    const text = raw.replace(BLOCK_COMMENT, ' ');
     for (const line of text.split('\n')) {
       const trimmed = line.trim();
-      // Comments explain the rules and are allowed to quote them.
-      if (trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*')) continue;
+      // Line comments explain the rules and are allowed to quote them.
+      if (trimmed.startsWith('//')) continue;
       if (FUTURE.test(line)) found.push(line.trim());
       FUTURE.lastIndex = 0;
     }
@@ -115,22 +172,42 @@ describe('no promise without a sender', () => {
     }
   });
 
-  it('resolves every named keeper to a test that exists', async () => {
-    // The whole point. A keptBy that names nothing is a promise with no sender
-    // wearing a citation.
-    const suite = [
-      await readFile(new URL('./promises.test.ts', import.meta.url), 'utf8'),
-      await readFile(new URL('./canary.test.ts', import.meta.url), 'utf8'),
-      await readFile(new URL('./finance.verdict.test.ts', import.meta.url), 'utf8'),
-    ].join('\n');
+  it('resolves every named keeper to a test that really exists', async () => {
+    // The keystone. A keptBy that names nothing is a promise with no sender
+    // wearing a citation, and a resolver that cannot tell the difference is
+    // decoration.
+    // The whole suite, this file included. Excluding it would also exclude the
+    // delivery tests that live here, which is a gate that fails for the wrong
+    // reason. Self-matching is already impossible: names come from call sites,
+    // and `keptBy: 'x'` is not a call site.
+    const names = await collectTestNames();
+    const unresolved = unresolvedCitations(PROMISES, names);
+    expect(unresolved, unresolved.join(NEWLINE)).toEqual([]);
+  });
 
-    for (const promise of PROMISES) {
-      if (!promise.keptBy) continue;
-      expect(
-        suite.includes(`'${promise.keptBy}'`),
-        `"${promise.phrase}" is kept by "${promise.keptBy}", and no test by that name exists`,
-      ).toBe(true);
-    }
+  it('rejects a citation that names a guard which does not exist', async () => {
+    // The tamper test. Everything above only means something if this fails
+    // when it should, so the fabricated citation is planted here rather than
+    // trusted to a human remembering to try it once.
+    const names = await collectTestNames();
+    const planted = unresolvedCitations(
+      [{ phrase: "We'll do a thing.", keptBy: 'a guard that was never written' }],
+      names,
+    );
+    expect(planted).toHaveLength(1);
+    expect(planted[0]).toContain('a guard that was never written');
+  });
+
+  it('cannot be satisfied by the registry quoting itself', async () => {
+    // The exact defect being fixed. The old resolver searched raw file text,
+    // and the registry file was in the corpus, so `keptBy: 'x'` matched its
+    // own registration line. Names now come from describe/it call sites only,
+    // so a registry line can never look like a test.
+    const names = await collectTestNames();
+    expect(names.has('a guard that was never written')).toBe(false);
+    // Proof the parser is reading call sites and not just any quoted string:
+    // this very test's own title is present, and a keptBy value is not.
+    expect(names.has('cannot be satisfied by the registry quoting itself')).toBe(true);
   });
 });
 
@@ -232,18 +309,82 @@ describe('an unsubscribed address is refused', () => {
 });
 
 describe('the teardown send posts to the provider', () => {
-  it('is exercised by the reminder harness sharing the same sender path', async () => {
-    // The teardown and the reminder both post to the same provider endpoint
-    // with the same unsubscribe headers. This asserts the shape the provider
-    // is actually handed, which is the part that silently breaks.
-    const fixture = await reminderFixture([{ id: 'shape', remindOn: '2026-08-20' }]);
-    const { posted } = await fixture.run('2026-08-16');
-    const body = posted[0] as unknown as Record<string, unknown>;
-    expect(body.from).toContain('hank@mail.test');
-    expect(String(body.text)).toContain('Unsubscribe: ');
+  // The send this whole law was written to protect, and the one thing that had
+  // no test. The previous version of this block asserted the reminder harness
+  // covered "the same sender path", which was false: there were four separate
+  // fetch calls and this was the unguarded one. There is one send path now and
+  // this drives it.
+  async function teardownFixture() {
+    const { db, d1 } = await migratedDatabase();
+    db.exec(
+      `INSERT INTO decodes (id, ts, quarter, finance_price_cents, cash_discount_cents,
+                            cash_price_cents, amount_financed_cents, payment_amount_cents,
+                            payment_count, real_rate_all_in_bps, reconciled, verdict,
+                            verdict_ref_id, benchmark_at_ts)
+       VALUES ('d1', '2026-08-16T00:00:00Z', '2026Q3', 8450000, 600000, 7850000, 8450000,
+               140833, 60, 294, 1, 'checks_out', 'agdirect-2026-08-01-25k-5y-fixed',
+               '2026-08-01')`,
+    );
+    const row = db.prepare('SELECT * FROM decodes WHERE id = ?').get('d1') as Record<string, unknown>;
+    const env = {
+      DB: d1, RESEND_API_KEY: 'test', EMAIL_FROM: 'hank@mail.test',
+      POSTAL_ADDRESS: 'LoanHank, somewhere',
+    } as never;
+    const posted: Array<Record<string, unknown>> = [];
+    const transport = async (_url: string, init: { body: string }) => {
+      posted.push(JSON.parse(init.body));
+      return { ok: true, status: 200 };
+    };
+    return { env, row, posted, transport };
+  }
+
+  it('sends the teardown with the PDF attached', async () => {
+    const { env, row, posted, transport } = await teardownFixture();
+    const result = await sendTeardown(
+      env,
+      { emailId: 'e1', to: 'farmer@example.test', row, origin: 'https://example.test' },
+      transport as never,
+    );
+    expect(result.ok).toBe(true);
+    const body = posted[0] as Record<string, unknown>;
+    expect(body.to).toEqual(['farmer@example.test']);
+    expect(body.subject).toBe('Your teardown');
+
+    const attachments = body.attachments as Array<{ filename: string; content: string }>;
+    expect(attachments).toHaveLength(1);
+    expect(attachments[0]?.filename).toBe('loanhank-teardown.pdf');
+    // Base64 of a real PDF, so a silently empty attachment fails here rather
+    // than in somebody's inbox.
+    const decoded = Buffer.from(attachments[0]?.content ?? '', 'base64');
+    expect(decoded.subarray(0, 5).toString()).toBe('%PDF-');
+    expect(decoded.byteLength).toBeGreaterThan(1_000);
+  });
+
+  it('carries the postal address and a one-click unsubscribe', async () => {
+    const { env, row, posted, transport } = await teardownFixture();
+    await sendTeardown(
+      env,
+      { emailId: 'e1', to: 'farmer@example.test', row, origin: 'https://example.test' },
+      transport as never,
+    );
+    const body = posted[0] as Record<string, unknown>;
     expect(String(body.text)).toContain('LoanHank, somewhere');
-    expect((body.headers as Record<string, string>)['List-Unsubscribe-Post'])
-      .toBe('List-Unsubscribe=One-Click');
+    expect(String(body.text)).toContain('Unsubscribe: https://example.test/unsubscribe/e1');
+    const headers = body.headers as Record<string, string>;
+    expect(headers['List-Unsubscribe']).toBe('<https://example.test/unsubscribe/e1>');
+    expect(headers['List-Unsubscribe-Post']).toBe('List-Unsubscribe=One-Click');
+  });
+
+  it('refuses to send when sending is not configured', async () => {
+    const { row, posted, transport } = await teardownFixture();
+    const bare = { RESEND_API_KEY: '', EMAIL_FROM: '', POSTAL_ADDRESS: '' } as never;
+    const result = await sendTeardown(
+      bare,
+      { emailId: 'e1', to: 'farmer@example.test', row, origin: 'https://example.test' },
+      transport as never,
+    );
+    expect(result.ok).toBe(false);
+    expect(posted).toEqual([]);
   });
 });
 

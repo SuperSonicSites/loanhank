@@ -16,7 +16,7 @@ Keep these true in package.json; if you rename a script, update this file in the
 - `pnpm test` — vitest, full suite
 - `pnpm test:eval` — extraction eval against golden fixtures (must pass before deploy)
 - `pnpm typecheck` — tsc --noEmit
-- `pnpm deploy` — wrangler deploy; only from main with tests green
+- `pnpm deploy` — wrangler deploy via `ops/deploy.mjs`, which stamps the running worker with the git sha; only from main with tests green
 - `pnpm infra:r2` — apply the R2 lifecycle rules from `infra/*.json` and read them back
 - `pnpm funnel` — the morning ritual, one query against production (`--local` for the dev database)
 

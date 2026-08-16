@@ -331,3 +331,45 @@ describe('the interest question is spec wording, verbatim', () => {
     }
   });
 });
+
+
+describe('rendered microcopy matches the canon table', () => {
+  // design.md §2 holds the canonical microcopy table and CLAUDE.md says it is
+  // the source of truth. Until now nothing checked that the product said what
+  // the table said, which is how a "Read my quote" button that appears in no
+  // table shipped, and how the footer line drifted from it.
+  async function canonMicrocopy(label: string): Promise<string> {
+    const design = await readFile(DESIGN_DOC, 'utf8');
+    // Split rather than regex: the table cell is delimited by pipes and backticks,
+    // and building that pattern inside a template literal is how the first
+    // version of this helper silently matched nothing.
+    const line = design.split(String.fromCharCode(10))
+      .find((row) => row.startsWith(`| ${label} |`));
+    expect(line, `design.md has no canon row for "${label}"`).toBeDefined();
+    const cell = (line as string).split('|')[2] ?? '';
+    return cell.trim().replace(/^`|`$/g, '');
+  }
+
+  it('prints the canonical footer trust line, verbatim', async () => {
+    const canonical = await canonMicrocopy('footer trust line');
+    const page = await readFile(new URL('../src/web/page.ts', import.meta.url), 'utf8');
+    expect(page).toContain(canonical);
+  });
+
+  it('uses the canonical primary button label on both submit paths', async () => {
+    const canonical = await canonMicrocopy('primary button');
+    const page = await readFile(new URL('../src/web/page.ts', import.meta.url), 'utf8');
+    const buttons = page.match(/<button type="submit"[^>]*>([^<]+)<\/button>/g) ?? [];
+    const labels = buttons.map((b) => (/>([^<]+)<\/button>/.exec(b) as RegExpExecArray)[1]);
+    // The typed form and the photo form both submit a quote, so both carry the
+    // one canonical label. "Read my quote" was invented and is gone.
+    expect(labels.filter((l) => l === canonical).length).toBeGreaterThanOrEqual(2);
+    expect(page).not.toContain('Read my quote');
+  });
+
+  it('uses the canonical photo button label where the photo path is offered', async () => {
+    const canonical = await canonMicrocopy('photo button');
+    const page = await readFile(new URL('../src/web/page.ts', import.meta.url), 'utf8');
+    expect(page).toContain(canonical);
+  });
+});

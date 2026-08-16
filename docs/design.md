@@ -60,7 +60,12 @@ Hank = the neighbor who's good with numbers. Not mascot. Not cartoon. A voice.
 | consent gate | `Want lenders to compete for this deal? You say go. Nothing moves without you.` |
 | consent decline | `No thanks — my numbers stay here.` (equal-weight button, not gray shame text) |
 | blurry photo | `Too blurry to read. Try again in better light.` |
-| footer trust line | `Free tool. Photo deleted after reading. Nothing leaves here unless you say go.` |
+| do-not-share link | `Do Not Sell or Share My Personal Information` (CCPA wording, verbatim) |
+| footer trust line | `Free tool. Your photo is never saved. Your numbers stay here unless you say go.` |
+
+**Two notes on this table.** The footer line is scoped to the numbers on purpose. Server-side ad measurement sends a click tag for farmers who arrived from our own ad (spec.md §10), so a flat "nothing leaves here" would be a lie in the one place this product can least afford one. The full account lives on `/privacy` and `/straight-answers`, in plain words, including the sentence that nothing is sent at all for anyone who did not come from an ad.
+
+The do-not-share link is Title Case because the statute writes it that way. It is the one string in this product exempt from sentence case, and the voice sweep skips it rather than fixing it.
 
 ---
 

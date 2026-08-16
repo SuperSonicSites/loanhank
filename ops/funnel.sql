@@ -28,4 +28,13 @@ SELECT
   (SELECT COALESCE(SUM(reconciled), 0) FROM decodes
      WHERE synthetic = 0 AND out_of_bounds = 0)          AS pile_reconciled,
   (SELECT COUNT(*) FROM decodes
-     WHERE verdict <> 'none' AND synthetic = 0)         AS pile_with_verdict;
+     WHERE verdict <> 'none' AND synthetic = 0)         AS pile_with_verdict,
+  /* The backup alarm. A dead nightly cron looks exactly like a healthy one
+     from the outside, so the ritual asks the only question that settles it:
+     how long since the pile was last written somewhere it can be restored
+     from. Anything above 1 is a cron that stopped. NULL means never. */
+  (SELECT CAST(julianday('now') - julianday(MAX(ts)) AS INT)
+     FROM events WHERE event = 'backup_completed')       AS days_since_backup,
+  (SELECT json_extract(meta_json, '$.rows') FROM events
+     WHERE event = 'backup_completed'
+     ORDER BY ts DESC LIMIT 1)                           AS last_backup_rows;

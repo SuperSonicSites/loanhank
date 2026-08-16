@@ -111,6 +111,8 @@ Carved in both directions, because a firewall with one wall is a funnel:
 
 **Nothing on the business side may reference the verdict.** The interest question, and any consent flow that ever follows it, may not mention the rate, the stamp, the verdict, the delta, or how the deal compared. It asks one question about a hypothetical and carries no argument.
 
+**The firewall runs through every outbound payload, not only every rendered page.** No verdict, rate, delta, or deal figure ever leaves this system in an analytics or advertising payload. The Meta CAPI body (§10) carries an event name and a click tag and has no `custom_data` key in existence, so the bytes on the wire are identical whether the stamp said CHECKS OUT, LOOK CLOSER, or nothing at all. A payload that varied with the verdict would hand an ad platform the ability to optimize delivery toward farmers whose deals price badly, which is the stamp selling, performed where a page-level test cannot see it. The payload-shape assertions are the enforcement and they ship in the same commit as any sender.
+
 **And the question does not move with the answer.** The interest question renders identically for CHECKS OUT, for LOOK CLOSER, and for an abstention. Showing it only to farmers whose deals looked expensive would be steering by omission, which is the same sin performed quietly.
 
 The disclosure link beside the question is the one permitted crossing, and it runs the safe way: from the business toward the truth about it, never from the verdict toward the business. FTC guidance wants that disclosure near the action (§10).
@@ -391,6 +393,16 @@ These are on the paper. They are never extracted, never stored, and never infera
 
 This is enforced by shape, not by discipline: `quoteExtractionSchema` has no field that can hold any of them, so a model that returned one would have nowhere to put it. `brand` means the manufacturer and is null when only a dealership name is visible. We rank quotes, never dealers.
 
+**One narrow exception, ruled 2026-08-16: campaign labels.** `ops/ads.md` judges channels by UTM-tagged decodes, and the code was stripping every query parameter, so the two documents commanded opposite things and neither said why. Resolved in favor of measurement, narrowly:
+
+**Exactly four fields may be stored on events: `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`. Nothing else from a query string, ever.**
+
+The trade-off, written where it now lives instead of nowhere. These four are *our own labels on our own ads*, chosen by us before a farmer ever clicks. They describe a campaign, not a person, and they carry nothing a farmer typed or a third party attached. Without them "cost per completed decode" cannot be computed per channel, which makes the §7.1 wall numbers unusable and the $500 test unreadable.
+
+Everything else in a query string stays stripped, and the reason is that it is not ours: `fbclid` and its cousins are assigned by an ad platform to identify a browser, and one is a personal identifier however casually it is passed around. `fbclid` stays transient, used for a server-side CAPI call in the request that carries it and **never written to any table**. `utm_term` is excluded too, because it can carry a user's own search text.
+
+Referrers keep the existing rule: origin and path only, never the query string (§9.5 as applied in `referringPage`).
+
 ### 9.1 Quote pile treasures (forage like alpha)
 
 Pile worth more than leads. Ten treasures sleep in it. Forage all, from day one, so no gold lost.
@@ -424,12 +436,20 @@ All footer-linked. All Hank voice: plain-words summary box on top, lawyer text u
    > Your photo is never saved. It goes straight to the reader and is gone when the answer comes back.
 
    The happy path never writes a photo anywhere. The `loanhank-quotes` bucket and its one-day expiry rule remain as a backstop against any future path that does write one, and today nothing does. Also: anonymized aggregate stats kept forever (this line = license for the treasure pile — no line, no pile), nothing personal moves without your go. **California catch: farmer-consented lead handoff = "sale/share" of personal info under CCPA — and if >50% of revenue comes from it, the law applies at ANY company size. Need "Do Not Sell or Share My Personal Information" link + a rights process.**
+
+   **Also carries the ads paragraph, canon, exactly as written:**
+
+   > If you came here from a Facebook ad, we send Meta the click tag that was already on your visit, plus the fact that a decode happened, so we can tell which ads work. Your numbers, your photo, and your email are never part of it. If your browser sends a do-not-share signal, we send Meta nothing at all.
+
+   The page also records what the Do Not Sell or Share link actually does, in the same plain register. A link that describes a mechanism the code does not have is the promise problem (§7.3) wearing a legal hat.
 2. `/terms` — not financial or tax advice, math shown and farmer confirms inputs, no savings guaranteed, aggregate-data license, the "not a lender / not a broker" sentence ONLY as lawyer approves.
 3. `/how-we-make-money` — the Kennedy damaging admission gets its own page: free tool, farmer pushes go, lenders pay for the introduction, that is the whole business. ALSO linked right next to the interest/consent question — FTC wants disclosure clear, conspicuous, and near the action, not buried in footer.
 4. `/contact` — real email, real postal address (PO box fine — CAN-SPAM requires postal address in every email anyway).
 5. `/whos-behind-this` — REAL name, REAL face, real camera, two paragraphs. Machinery Pete works because Pete is a person. Anonymous finance site = scam smell. Biggest trust page on the site.
 6. `/how-we-figure-it` — show the work: formulas in plain words, benchmark sources + dates + links, what the real rate means, the 100 bps buffer and its version, the n≥20 rule stated out loud. Farmer can check our math = ultimate Kennedy proof. Also an SEO page for free.
-7. `/straight-answers` — small FAQ, objections only, 6-8 max: Is it free? Why? Are you a lender? Who sees my numbers? What happens to the photo? What if my deal is good?
+7. `/straight-answers` — small FAQ, objections only, 6-8 max: Is it free? Why? Are you a lender? Who sees my numbers? What happens to the photo? What if my deal is good? Plus the question a careful person asks and most sites hope he does not, answered canon:
+
+   > **Do you tell Facebook about me?** Only if you arrived from one of our Facebook ads, and only that the visit led to a decode, using the click tag Facebook already attached. Never your numbers. Never your name.
 8. `404` — one line, go-home link, on voice.
 
 **Email plumbing (law, not pages):**
@@ -442,11 +462,22 @@ All footer-linked. All Hank voice: plain-words summary box on top, lawyer text u
 - No SMS v1. TCPA is a swamp; enter only with lawyer.
 - Log consent forever: timestamp + exact text version farmer saw (`consent_text_version`). Receipts protect cave too.
 
-**Ads measurement tension (decided, don't drift):** doctrine says no tracking cookies, no banner. Meta test still needs conversion signal. Answer: server-side Conversions API on decode/email/interest events, first-party only, disclosed in `/privacy`. No third-party pixel cookie → no-banner stance holds. If lawyer disagrees, banner is one quiet line, never a modal wall.
+**Ads measurement tension (decided, don't drift):** doctrine says no tracking cookies, no banner. Meta test still needs conversion signal. Answer: server-side Conversions API, no pixel, no cookie, no third party in the path. No third-party pixel cookie → no-banner stance holds. If lawyer disagrees, banner is one quiet line, never a modal wall.
+
+The shape of it, decided, because "server-side CAPI" is a category and not a design:
+
+- **Gated on arrival.** An event fires only when the landing URL carried `fbclid`. No ad click, no event, ever. Organic traffic was worth nothing to an ad optimizer anyway, so the gate costs no measurement and means Meta hears about nobody who did not come from us.
+- **Gated on GPC.** A request carrying `Sec-GPC: 1` fires nothing. That signal is a CPRA opt-out and twelve states now require honouring a universal opt-out mechanism, so it is treated as the opt-out it is rather than as a preference to weigh.
+- **Identifiers.** `fbc` built from the `fbclid`, plus client IP and user agent, which is Meta's one-parameter minimum met with a tag the farmer arrived carrying. **No hashed email until counsel clears it.** Sending a farmer's address to an ad platform sits close enough to §8.1's line that it waits.
+- **Limited Data Use on**, country and state both `0`, so Meta applies LDU where US state law requires and nowhere else. Loosening it later is a lawyer conversation, not a scramble. LDU is a US-state mechanism, so Canadian traffic is a separate PIPEDA question and belongs on the stones below.
+- **Nothing persisted.** The `fbclid` rides a hidden form field from landing to POST and dies there. It never touches `decodes`, which §5.1 keeps clean, and never touches `emails`.
+- **Nothing about the verdict**, per §3.1. Event name and click tag. No `custom_data` key in existence.
+- **Synthetic never fires** (§7.2), and all verification runs against a separate Meta dataset. Meta's own docs are explicit that `test_event_code` traffic is not dropped and does feed targeting, which makes testing against the production dataset the Meta equivalent of writing test rows into the pile.
+- **Every send is logged as an event, success or failure.** "We measure which ads work" is a future-tense claim about a mechanism, so it needs a sender like every other one (§7.3). A send that silently fails and leaves no row is the same defect species as the teardown that was promised and never queued.
 
 **LAWYER STONES — spend $2-5k BEFORE any consent button goes live. Not optional:**
 1. **State commercial-finance broker laws.** Some states make "introduce borrower to lender for money" a licensed activity. Lead-gen vs. broker line is drawn per state by a fintech lawyer, not by us. May mean geo-gating the consent feature to safe states at launch — tool math itself fine everywhere.
-2. **CCPA/CPRA** sale/share analysis + DNSMPI mechanics.
+2. **CCPA/CPRA** sale/share analysis + DNSMPI mechanics. **Note the trigger moved.** This stone was written against the Phase C lead handoff. Sending identifiers to Meta for ad optimization is itself a share for cross-context behavioural advertising, and that fires the day CAPI goes live, which is before the $500 test and long before Phase C. So the Do Not Sell or Share link, a rights path that actually works even if v1 is a monitored inbox, and the GPC honouring above are **day-one launch items**, not Phase C ones. The lawyer stone still stands for the larger version of the question that the handoff raises.
 3. **"Not a broker" wording** — might become false in some states the day leads sell. Words follow law, not vibes.
 4. **FTC lead-generator guidance** — bless the consent-flow wording.
 5. **LoanHank USPTO clearance** (aggregator zero-hit ≠ clearance). Before hats.
@@ -515,7 +546,8 @@ Architectural choices of record. Change one only by editing this table in the sa
 | 5 | Extraction model | one vision-capable model behind a thin interface in `src/api/extractor.ts`; provider key via secret; hard monthly spend cap set at the provider | swappable, cost-capped |
 | 6 | Email | Resend (or Postmark if deliverability testing says so), from `mail.loanhank.com` | CAN-SPAM plumbing per §10 |
 | 7 | Anti-abuse | Turnstile invisible on submit + per-IP rate limit on `/extract` + max upload size | each decode costs real money |
-| 8 | Analytics | the `events` table + `ops/funnel.sql`. No third-party analytics, no pixel; Meta via server-side CAPI later | measure-or-dead without tracking cookies |
+| 8 | Analytics | the `events` table + `ops/funnel.sql`. No third-party analytics, no pixel, no tag manager | measure-or-dead without tracking cookies |
+| 8a | Ads measurement | **Meta CAPI direct from the worker**, `src/api/capi.ts`, plain `fetch` to `graph.facebook.com/v26.0/<dataset>/events`. Not the CAPI Gateway, not server-side GTM, not a partner connector, and not the Business SDK. Shape and gates in §10 | one vendor in the path is us; the SDK is Node-bound and will not run on Workers |
 | 9 | Consent route | **Deferred.** `POST /interest` ships now (non-binding, §8 Phase A); a real consent route ships only after the lawyer stones clear | Phase A measures intent without brokering |
 | 10 | Email provider pick | **Pending** — Resend vs Postmark, decided by deliverability testing (§14) | has DNS lead time, decide early |
 | 11 | Fonts | Libre Franklin + Courier Prime, subset woff2, self-hosted from the worker | no third-party font CDN, 150KB budget, no tracking |
@@ -533,13 +565,21 @@ Check off before ads spend a dollar.
 - [x] **Backup retention.** `infra/r2-lifecycle-backups.json`, 90 days, so `loanhank-backups` does not grow forever.
 - [ ] **CI.** GitHub Actions: typecheck + tests + `test:eval` gate on PR; deploy on merge to main. The eval gate is what lets extraction prompts change safely.
 - [ ] **Cost + abuse protection on `/extract`.** Max upload size (`security.ts` has bones — verify), Turnstile invisible mode on submit, hard monthly spend cap + alert on the LLM provider account. An abuse script hitting `/extract` is a bill, not an outage. Turnstile belongs on the photo path only: it needs JS, and the typed form must keep working without any (design.md §9).
-- [x] **Per-IP rate limit.** Native Workers rate limiting binding, 20 a minute per route per hashed IP, on `GET /` and `POST /decode`. Verified live: the twenty-first decode gets a 429. The form still renders when the page-view limit trips, because an undercounted funnel beats a farmer who cannot see the tool.
+- [x] **Per-IP rate limit.** Native Workers rate limiting binding, 20 a minute per route per hashed IP, on `GET /` and `POST /decode`. **Best effort, not a counter:** the binding is approximate at the boundary and the observed live run let 21 through before refusing, which is the documented behavior rather than a bug. What is exact is the consequence: a refused request creates zero rows and calls no model. The form still renders when the page-view limit trips, because an undercounted funnel beats a farmer who cannot see the tool.
 - [x] **Email deliverability.** Resend, sending from `hank@mail.loanhank.com`, domain verified. DMARC is inherited from `loanhank.com` at `p=none`; tighten later.
 - [ ] **Tighten DMARC to `p=quarantine`** after the first few weeks of clean sending. **The clean-send clock starts 2026-08-16**, the first real delivery from `mail.loanhank.com`. `p=none` is right while nothing has sent; leaving it there once mail is flowing is leaving the door open.
 - [ ] **Real name and photograph for `/whos-behind-this`.** The page currently admits it is unfinished rather than inventing a byline. An anonymous site about money is a fair thing to distrust, and this is the biggest trust page there is.
 - [x] **Postal address for the CAN-SPAM footer.** `LoanHank · 109b - 1917 Peninsula Rd, Ucluelet, BC V0R 3A0, Canada`, versioned in `wrangler.jsonc` and printed verbatim on `/contact`, in every email footer, and in the teardown PDF. The country is included because most recipients are American.
 - [ ] ~~Pick provider (Decision 10).~~ Send from `mail.loanhank.com`. SPF + DKIM + DMARC; DMARC starts `p=none`, tighten later. Postal address for the CAN-SPAM footer before the first teardown sends.
 - [ ] **Meta Business setup — start NOW, has lead time.** Business Manager + business verification + domain verification on loanhank.com + Conversions API token. Verification can take days-to-weeks.
+- [ ] **`OPENAI_DATA_CONTROLS_VERIFIED` stays `false` until the owner verifies it.** Not the agent's to flip, because the evidence lives behind a login only the owner has.
+
+  What to click: OpenAI platform console, **Settings → Organization → Data controls**. Confirm that "Improve the model for everyone" (also shown as sharing prompts and completions for training) is **off** for the organization and for the project the API key belongs to. Then **Settings → Organization → Data retention** and read the retention window that applies to the Responses API for that project.
+
+  What flips it: a dated screenshot of both panels showing the organization name, the project name and the setting states, filed with the launch evidence. Then set the var to `true` in `wrangler.jsonc` in a commit that cites the screenshot's date.
+
+  Why it is not just paperwork: every request already sends `store: false` per call, which is the belt. This flag records that the account-level suspenders were checked by a person who could see the console. A farmer's quote photograph passes through that account, and "we set a flag in code" is not the same claim as "the account cannot retain it".
+
 - [ ] **Eval samples.** Mystery-shop 12-15 dealers + forum-posted quote photos + synthetic print-and-photograph pipeline (20 docs × 5 conditions). Golden holdout of 5, never tuned against. Metric #1: false-confidence rate = 0.
 - [ ] **Tax-edge golden fixture.** At least one where cash-deal tax ≠ finance-deal tax (§2.1).
 - [ ] **Turnstile domains at cutover.** The widget currently allows `loanhank-decoder.supersonicworkers.workers.dev` so the photo path could be verified before the custom domain exists. **Remove that host from the widget the day loanhank.com cuts over**, or a retired hostname keeps issuing tokens the backend would accept.

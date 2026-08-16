@@ -30,7 +30,13 @@ function extraction(): Extraction {
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe('OpenAI extraction privacy boundary', () => {
+// NOTE ON SCOPE. This guards the ANCESTOR's loan-document extractor, which no
+// route in this product calls. The live photo path uses OpenAIQuoteExtractor
+// and is guarded separately in tests/photo-path.test.ts. Keeping this is worth
+// it: it encodes the privacy boundary the ancestor learned the hard way, and
+// the class is still exported. It is not, and never was, coverage of the path
+// a farmer reaches.
+describe('OpenAI extraction privacy boundary (ancestor extractor, not the live path)', () => {
   it('sets store:false and returns only normalized structured output', async () => {
     const calls: unknown[] = [];
     const client = {

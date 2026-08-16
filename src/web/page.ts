@@ -349,7 +349,7 @@ export function shell(title: string, body: string): string {
 ${body}
   <footer>
     <nav>${FOOTER_PAGES.map(([href, label]) => `<a href="${href}">${label}</a>`).join('')}</nav>
-    <p>Free tool. Nothing leaves here unless you say go.</p>
+    <p>Free tool. Your photo is never saved. Your numbers stay here unless you say go.</p>
   </footer>
 </main>
 </body>
@@ -411,6 +411,7 @@ export function renderForm(
   values: FormValues = EMPTY_FORM,
   problems: string[] = [],
   photo: PhotoPath | null = null,
+  campaign: Record<string, string> = {},
 ): string {
   const problemBlock = problems.length === 0
     ? ''
@@ -447,7 +448,7 @@ export function renderForm(
       <input type="text" id="paymentCount" name="paymentCount" inputmode="numeric" value="${escapeHtml(values.paymentCount)}" required>
     </div>
     <input type="hidden" name="standalone" value="">
-    <button type="submit">Run the numbers</button>
+${campaignFields(campaign)}    <button type="submit">Run the numbers</button>
   </form>
 ${photoBlock(photo)}`);
 }
@@ -460,6 +461,17 @@ ${photoBlock(photo)}`);
  * depends on any of this: design.md section 9 makes a working no-JS form law,
  * so the challenge lives here and nowhere near it.
  */
+/**
+ * Campaign labels ride through the form as hidden fields, so a decode can be
+ * attributed to the ad that produced it with no cookie and no JavaScript.
+ */
+function campaignFields(campaign: Record<string, string>): string {
+  return Object.entries(campaign)
+    .map(([name, value]) => `    <input type="hidden" name="${escapeHtml(name)}" value="${escapeHtml(value)}">
+`)
+    .join('');
+}
+
 function photoBlock(photo: PhotoPath | null): string {
   if (photo === null || photo.turnstileSiteKey === '') return '';
   return `
@@ -471,7 +483,7 @@ function photoBlock(photo: PhotoPath | null): string {
       <input type="file" id="photo" name="photo" accept="image/jpeg,image/png,application/pdf" capture="environment" required>
     </div>
     <div class="cf-turnstile" data-sitekey="${escapeHtml(photo.turnstileSiteKey)}" data-action="extract"></div>
-    <button type="submit" class="secondary">Read my quote</button>
+    <button type="submit" class="secondary">Run the numbers</button>
     <p class="note">Reading your paper takes about 10 seconds. The photo is never saved.</p>
   </form>
   <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>

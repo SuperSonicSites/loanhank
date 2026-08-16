@@ -10,8 +10,8 @@ import type {
 import { Hono } from 'hono';
 import {
   costAgainstBenchmark, decideVerdict, decodeLedger, formatCurrency, formatRate,
-  cohortBands, cohortLadder, matchBenchmark, promoPriceRate, quoteWithinSanityBounds,
-  VERDICT_BUFFER_VERSION,
+  cohortBands, cohortLadder, matchBenchmark, PEER_POLICY_VERSION, promoPriceRate,
+  quoteWithinSanityBounds, VERDICT_BUFFER_VERSION,
   type BenchmarkRow, type DealLedger, type LedgerFee,
 } from '../finance/index.js';
 import { hashAccessKey } from './security.js';
@@ -30,7 +30,7 @@ import { FOLLOWUP_TEXT_VERSION } from '../web/page.js';
 import {
   renderContact, renderHowWeFigureIt, renderHowWeMakeMoney, renderManifest, renderNotFound,
   renderNote, renderNotesIndex, renderPrivacy, renderSent, renderStraightAnswers, renderTerms,
-  renderWhosBehindThis, NOTES,
+  renderWhosBehindThis, NOTES, PRIVACY_VERSION, TERMS_VERSION,
 } from '../web/pages.js';
 import { getConfig } from './env.js';
 
@@ -293,7 +293,7 @@ const REMINDER_LEAD_DAYS = 7;
  * a system that meant well, which is the same failure as a number that is
  * confidently wrong.
  */
-export async function sendDueReminders(env: Env, today: string): Promise<{ sent: number; failed: number }> {
+export async function sendDueReminders(env: Env, today: string, transport?: MailTransport): Promise<{ sent: number; failed: number }> {
   const sendable = emailSendable(env);
   if (sendable === null) {
     console.log('cron reminders: sending is not configured, nothing sent');
@@ -316,34 +316,22 @@ export async function sendDueReminders(env: Env, today: string): Promise<{ sent:
   let sent = 0;
   let failed = 0;
   for (const row of due.results) {
-    const unsubscribe = `${PUBLIC_ORIGIN}/unsubscribe/${row.id}`;
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { authorization: `Bearer ${sendable.apiKey}`, 'content-type': 'application/json' },
-      body: JSON.stringify({
-        from: `Hank <${sendable.from}>`,
-        to: [row.email],
-        subject: `Your quote expires ${row.remind_on}`,
-        text: [
-          `The quote you ran through us is good until ${row.remind_on}.`,
-          '',
-          'That is the date printed on the dealer\'s own paper, not one we made up.',
-          'If you are still deciding, it is worth knowing what the financing costs',
-          'before the paper goes stale.',
-          '',
-          'This is the one note. We will not send another about this quote.',
-          '',
-          `P.S. If the deal checked out, go sign it. We said so for a reason.`,
-          '',
-          `Unsubscribe: ${unsubscribe}`,
-          sendable.postalAddress,
-        ].join('\n'),
-        headers: {
-          'List-Unsubscribe': `<${unsubscribe}>`,
-          'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
-        },
-      }),
-    });
+    const response = await sendEmail(env, {
+      to: String(row.email),
+      subject: `Your quote expires ${row.remind_on}`,
+      unsubscribeUrl: `${PUBLIC_ORIGIN}/unsubscribe/${row.id}`,
+      body: [
+        `The quote you ran through us is good until ${row.remind_on}.`,
+        '',
+        "That is the date printed on the dealer's own paper, not one we made up.",
+        'If you are still deciding, it is worth knowing what the financing costs',
+        'before the paper goes stale.',
+        '',
+        'This is the one note. We will not send another about this quote.',
+        '',
+        'P.S. If the deal checked out, go sign it. We said so for a reason.',
+      ],
+    }, transport);
 
     if (response.ok) {
       await env.DB.prepare('UPDATE emails SET reminded_at = ? WHERE id = ?')
@@ -383,7 +371,7 @@ function sqlLiteral(value: unknown): string {
  * and it can be read with an eye, which matters at three in the morning when
  * the clever format turns out to need the tool that is also broken.
  */
-export async function backupToR2(env: Env, stamp: string): Promise<{ key: string; rows: number }> {
+export async function backupToR2(env: Env, stamp: string): Promise<{ key: string; rows: number; bytes: number }> {
   const parts: string[] = [
     `-- LoanHank pile export ${stamp}`,
     '-- Restore: wrangler d1 execute <database> --file <this file>',
@@ -408,10 +396,15 @@ export async function backupToR2(env: Env, stamp: string): Promise<{ key: string
   }
 
   const key = `d1/loanhank-${stamp}.sql`;
-  await env.BACKUPS.put(key, parts.join('\n'), {
-    httpMetadata: { contentType: 'application/sql' },
-  });
-  return { key, rows };
+  const dump = parts.join(String.fromCharCode(10));
+  await env.BACKUPS.put(key, dump, { httpMetadata: { contentType: 'application/sql' } });
+
+  // A row, not just a log line. console.log is invisible to the morning ritual,
+  // and a cron that quietly stopped looks exactly like one that ran. This is
+  // what lets ops/funnel.sql print days since the last successful backup, so a
+  // dead cron shows up within a day instead of on the day it is needed.
+  await recordEvent(env, 'backup_completed', null, { key, rows, bytes: dump.length });
+  return { key, rows, bytes: dump.length };
 }
 
 
@@ -423,7 +416,7 @@ export async function backupToR2(env: Env, stamp: string): Promise<{ key: string
  * answer. Sent once, disclosed at capture, and inside CASL's six month
  * implied-consent window by a wide margin.
  */
-export async function sendDayFour(env: Env, today: string): Promise<{ sent: number }> {
+export async function sendDayFour(env: Env, today: string, transport?: MailTransport): Promise<{ sent: number }> {
   const sendable = emailSendable(env);
   if (sendable === null) return { sent: 0 };
 
@@ -444,7 +437,6 @@ export async function sendDayFour(env: Env, today: string): Promise<{ sent: numb
     const rate = row.real_rate_all_in_bps === null
       ? 'the rate on your ticket'
       : formatRate(Number(row.real_rate_all_in_bps));
-    const unsubscribe = `${PUBLIC_ORIGIN}/unsubscribe/${String(row.id)}`;
     const lines = [
       'Four days ago you ran a quote through us and it came out at ' + rate + '.',
       '',
@@ -458,25 +450,15 @@ export async function sendDayFour(env: Env, today: string): Promise<{ sent: numb
       'teardown, so nothing about the comparison has changed.',
       '',
       'P.S. If it checked out, go sign it. We said so for a reason.',
-      '',
-      `Unsubscribe: ${unsubscribe}`,
-      sendable.postalAddress,
     ];
 
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { authorization: `Bearer ${sendable.apiKey}`, 'content-type': 'application/json' },
-      body: JSON.stringify({
-        from: `Hank <${sendable.from}>`,
-        to: [String(row.email)],
-        subject: 'Did you take the deal?',
-        text: lines.join('\n'),
-        headers: {
-          'List-Unsubscribe': `<${unsubscribe}>`,
-          'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
-        },
-      }),
-    });
+    const response = await sendEmail(env, {
+      to: String(row.email),
+      subject: 'Did you take the deal?',
+      unsubscribeUrl: `${PUBLIC_ORIGIN}/unsubscribe/${String(row.id)}`,
+      body: lines,
+    }, transport);
+
     if (response.ok) {
       await env.DB.prepare('UPDATE emails SET day4_sent_at = ? WHERE id = ?')
         .bind(new Date().toISOString(), row.id).run();
@@ -499,7 +481,7 @@ export async function sendDayFour(env: Env, today: string): Promise<{ sent: numb
  *
  * It will stay silent for a long time. That is the ladder working, not a bug.
  */
-export async function sendDayThirty(env: Env, today: string): Promise<{ sent: number; skipped: number }> {
+export async function sendDayThirty(env: Env, today: string, transport?: MailTransport): Promise<{ sent: number; skipped: number }> {
   const sendable = emailSendable(env);
   if (sendable === null) return { sent: 0, skipped: 0 };
 
@@ -562,33 +544,23 @@ export async function sendDayThirty(env: Env, today: string): Promise<{ sent: nu
     const yours = row.real_rate_all_in_bps === null
       ? null
       : formatRate(Number(row.real_rate_all_in_bps));
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { authorization: `Bearer ${sendable.apiKey}`, 'content-type': 'application/json' },
-      body: JSON.stringify({
-        from: `Hank <${sendable.from}>`,
-        to: [String(row.email)],
-        subject: `What ${cohort.label} quotes are carrying now`,
-        text: [
-          `There are enough quotes like yours now to say something useful.`,
-          '',
-          `${cohort.label}: the middle of the pack is ${formatRate(cohort.medianBps)}, `
-          + `with most between ${formatRate(cohort.p25Bps)} and ${formatRate(cohort.p75Bps)}.`,
-          `That is from ${cohort.n} real quotes, not a survey.`,
-          '',
-          yours === null ? '' : `Yours came out at ${yours}.`,
-          '',
-          `Cohort ${cohort.key}. Method ${cohort.policyVersion}, written out at ${PUBLIC_ORIGIN}/how-we-figure-it.`,
-          '',
-          `Unsubscribe: ${unsubscribe}`,
-          sendable.postalAddress,
-        ].filter((line) => line !== undefined).join('\n'),
-        headers: {
-          'List-Unsubscribe': `<${unsubscribe}>`,
-          'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
-        },
-      }),
-    });
+    const response = await sendEmail(env, {
+      to: String(row.email),
+      subject: `What ${cohort.label} quotes are carrying now`,
+      unsubscribeUrl: `${PUBLIC_ORIGIN}/unsubscribe/${String(row.id)}`,
+      body: [
+        'There are enough quotes like yours now to say something useful.',
+        '',
+        `${cohort.label}: the middle of the pack is ${formatRate(cohort.medianBps)}, `
+        + `with most between ${formatRate(cohort.p25Bps)} and ${formatRate(cohort.p75Bps)}.`,
+        `That is from ${cohort.n} real quotes, not a survey.`,
+        '',
+        yours === null ? '' : `Yours came out at ${yours}.`,
+        '',
+        `Cohort ${cohort.key}. Method ${cohort.policyVersion}, written out at ${PUBLIC_ORIGIN}/how-we-figure-it.`,
+      ],
+    }, transport);
+
     if (response.ok) {
       await env.DB.prepare('UPDATE emails SET day30_sent_at = ? WHERE id = ?')
         .bind(new Date().toISOString(), row.id).run();
@@ -621,20 +593,150 @@ function referringPage(raw: string | undefined): string | null {
   }
 }
 
-const app = new Hono<{ Bindings: Env }>();
+
+/**
+ * The single send path. Every email this product produces goes through here.
+ *
+ * There were four separate fetch calls to the provider before this, each
+ * assembling its own unsubscribe headers and its own footer. Three were
+ * guarded by tests and the fourth, the teardown itself, was guarded by
+ * nothing, while a comment claimed the reminder tests covered "the same sender
+ * path". They were not the same path. They were four copies of a path, and the
+ * copy carrying the farmer's first impression was the unguarded one.
+ *
+ * `transport` is injectable so the delivery tests exercise this exact function
+ * rather than a stand-in that agrees with whatever it is told, the same
+ * discipline as the real-SQLite adapter behind the sweep tests.
+ */
+export type MailTransport = (url: string, init: RequestInit) => Promise<{ ok: boolean; status: number }>;
+
+export interface Outgoing {
+  to: string;
+  subject: string;
+  /** Body without the footer. The unsubscribe line and address are added here. */
+  body: string[];
+  unsubscribeUrl: string;
+  attachment?: { filename: string; content: string };
+}
+
+export async function sendEmail(
+  env: Env,
+  message: Outgoing,
+  transport: MailTransport = ((url, init) => fetch(url, init)) as MailTransport,
+): Promise<{ ok: boolean; status: number }> {
+  const sendable = emailSendable(env);
+  if (sendable === null) return { ok: false, status: 503 };
+
+  // One place builds the footer, so CAN-SPAM cannot be satisfied in three
+  // files and forgotten in the fourth.
+  const text = [
+    ...message.body,
+    '',
+    `Unsubscribe: ${message.unsubscribeUrl}`,
+    sendable.postalAddress,
+  ].join('\n');
+
+  const payload: Record<string, unknown> = {
+    from: `Hank <${sendable.from}>`,
+    to: [message.to],
+    subject: message.subject,
+    text,
+    headers: {
+      'List-Unsubscribe': `<${message.unsubscribeUrl}>`,
+      'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+    },
+  };
+  if (message.attachment !== undefined) {
+    payload.attachments = [message.attachment];
+  }
+
+  return transport('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${sendable.apiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * The teardown itself, extracted from the route so it can be exercised.
+ *
+ * This is the send §7.3 was written to protect and the one that had no test.
+ */
+export async function sendTeardown(
+  env: Env,
+  input: { emailId: string; to: string; row: Record<string, unknown>; origin: string },
+  transport?: MailTransport,
+): Promise<{ ok: boolean; status: number }> {
+  const sendable = emailSendable(env);
+  if (sendable === null) return { ok: false, status: 503 };
+
+  const pdf = await renderTeardownPdf(teardownFromRow(input.row, sendable.postalAddress));
+  return sendEmail(env, {
+    to: input.to,
+    subject: 'Your teardown',
+    unsubscribeUrl: `${input.origin}/unsubscribe/${input.emailId}`,
+    body: [
+      'Your teardown is attached. It is one page: the real rate, what the financing',
+      'costs against paying cash, and where the comparison came from.',
+      '',
+      'Print it and take it to the desk. That is what it is for.',
+      '',
+      'You can add LoanHank to your phone home screen from the site, if you would',
+      'rather not go looking for it next time.',
+      '',
+      'P.S. If the deal checks out, go sign it. We will say so when it does.',
+    ],
+    attachment: { filename: 'loanhank-teardown.pdf', content: base64(pdf) },
+  }, transport);
+}
+
+/** Exported so route tests can drive the real routes, not a re-implementation. */
+
+/**
+ * Campaign labels, and only the four spec.md 9.5 permits.
+ *
+ * These are our own labels on our own ads, chosen before a farmer ever clicks.
+ * They describe a campaign, not a person. Everything else in a query string
+ * stays out: `fbclid` identifies a browser and is transient for CAPI only,
+ * `utm_term` can carry a user's own search text, and an allowlist is the only
+ * shape where "everything else" cannot quietly grow.
+ */
+const UTM_FIELDS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content'] as const;
+
+function campaignLabels(url: URL): Record<string, string> {
+  const labels: Record<string, string> = {};
+  for (const field of UTM_FIELDS) {
+    const value = url.searchParams.get(field);
+    if (value !== null && value !== '') labels[field] = value.slice(0, 60);
+  }
+  return labels;
+}
+
+export const app = new Hono<{ Bindings: Env }>();
+
+// Stamped on every response, so any page a reviewer already has open answers
+// "which build is this" without a second request.
+app.use('*', async (c, next) => {
+  await next();
+  const sha = typeof c.env.BUILD_SHA === 'string' ? c.env.BUILD_SHA : 'unset';
+  c.header('x-loanhank-build', sha);
+});
 
 app.get('/', async (c) => {
   // A flood here would bloat the events table and the bill. The form still
   // renders when the limit trips; only the measurement row is dropped, because
   // refusing to show a farmer the tool is worse than an undercounted funnel.
   const cameFrom = referringPage(c.req.header('referer'));
+  const campaign = campaignLabels(new URL(c.req.url));
   if (await withinRateLimit(c, 'page_view')) {
     // The funnel denominator. Written behind waitUntil so measuring never
     // stands between a farmer on rural LTE and the form.
-    c.executionCtx.waitUntil(recordEvent(c.env, 'page_view', null, { came_from: cameFrom }));
+    c.executionCtx.waitUntil(
+      recordEvent(c.env, 'page_view', null, { came_from: cameFrom, ...campaign }),
+    );
   }
   const siteKey = typeof c.env.TURNSTILE_SITE_KEY === 'string' ? c.env.TURNSTILE_SITE_KEY : '';
-  return c.html(renderForm(undefined, [], { turnstileSiteKey: siteKey }));
+  return c.html(renderForm(undefined, [], { turnstileSiteKey: siteKey }, campaign));
 });
 
 app.post('/decode', async (c) => {
@@ -1000,6 +1102,9 @@ async function decodeFullLedger(c: {
   ).run();
 
   await recordEvent(c.env, 'decode', decodeId, {
+    ...Object.fromEntries(UTM_FIELDS
+      .map((field) => [field, String(body[field] ?? '')])
+      .filter(([, value]) => value !== '')),
     path: 'ledger',
     real_rate_all_in_bps: decoded.realRateAllInBps,
     verdict: verdict.verdict,
@@ -1130,40 +1235,8 @@ app.post('/email', async (c) => {
 
   const origin = new URL(c.req.url).origin;
   const unsubscribe = `${origin}/unsubscribe/${emailId}`;
-  const pdf = await renderTeardownPdf(teardownFromRow(row, sendable.postalAddress));
-
-  const sent = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${sendable.apiKey}`,
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      from: `Hank <${sendable.from}>`,
-      to: [parsed.data.email],
-      subject: 'Your teardown',
-      text: [
-        'Your teardown is attached. It is one page: the real rate, what the financing',
-        'costs against paying cash, and where the comparison came from.',
-        '',
-        'Print it and take it to the desk. That is what it is for.',
-        '',
-        `P.S. If the deal checks out, go sign it. We will say so when it does.`,
-        '',
-        'You can add LoanHank to your phone home screen from the site, if you would',
-        'rather not go looking for it next time.',
-        '',
-        `Unsubscribe: ${unsubscribe}`,
-        sendable.postalAddress,
-      ].join('\n'),
-      attachments: [{ filename: 'loanhank-teardown.pdf', content: base64(pdf) }],
-      headers: {
-        // RFC 8058 one-click, plus the plain link in the body. CAN-SPAM, no
-        // exceptions, and it works before anybody opens the attachment.
-        'List-Unsubscribe': `<${unsubscribe}>`,
-        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
-      },
-    }),
+  const sent = await sendTeardown(c.env, {
+    emailId, to: parsed.data.email, row, origin: new URL(c.req.url).origin,
   });
 
   if (!sent.ok) {
@@ -1271,6 +1344,26 @@ app.get('/notes/:slug', (c) => {
   return c.html(renderNote(note));
 });
 
+
+/**
+ * What is actually running.
+ *
+ * Deploy parity was sampled before this: fetch a page, eyeball a sentence,
+ * assume the rest matched. This makes it provable. BUILD_SHA is injected at
+ * deploy time from the git commit, so a worker running something other than
+ * what is on main says so when asked.
+ */
+app.get('/version', (c) => {
+  c.header('cache-control', 'no-store');
+  return c.json({
+    sha: typeof c.env.BUILD_SHA === 'string' ? c.env.BUILD_SHA : 'unset',
+    terms: TERMS_VERSION,
+    privacy: PRIVACY_VERSION,
+    buffer: VERDICT_BUFFER_VERSION,
+    peer: PEER_POLICY_VERSION,
+  });
+});
+
 app.notFound((c) => c.html(renderNotFound(), 404));
 
 
@@ -1346,7 +1439,7 @@ export default {
       case BACKUP_CRON:
         ctx.waitUntil(
           backupToR2(env, new Date().toISOString().slice(0, 10))
-            .then((result) => console.log(`cron backup: ${result.rows} rows to ${result.key}`))
+            .then((result) => console.log(`cron backup: ${result.rows} rows, ${result.bytes} bytes, to ${result.key}`))
             .catch((error) => console.log(`cron backup FAILED: ${String(error)}`)),
         );
         // The reminder sweep rides the daily cron. It is the delivery half of
