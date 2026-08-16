@@ -251,8 +251,14 @@ One week data > one month opinion. If numbers good → scale spend. If bad twice
 
 The pile is the company. These rules exist so nobody has to be individually correct about it.
 
-- **Test rows never enter production.** Exercise the funnel against the local database (`wrangler dev`, `pnpm funnel --local`). If a row must be written against production to prove something, it carries `meta_json.synthetic = true` on the event and is excluded from `ops/funnel.sql` and from every cohort statistic, the same way `reconciled = 0` rows are.
-- **Production deletes require owner sign-off.** Any `DELETE` or `UPDATE` against `decodes`, `emails` or `events` on the remote database is an owner decision, asked for and answered in writing before it runs. This includes cleaning up a mess the agent itself made. On 2026-08-15 a session cleared 24 self-created rows on its own judgment. The judgment was right and the precedent is not.
+- **Test rows never enter production.** Exercise the funnel against the local database (`wrangler dev`, `pnpm funnel --local`).
+- **Verification traffic against production is flagged synthetic immediately, in the session that creates it.** Not at the end of the week, not when somebody asks, and not after a question about whether it counts. `decodes.synthetic`, `emails.synthetic` and `events.synthetic` are columns, and every published statistic and `ops/funnel.sql` read `synthetic = 0`.
+
+  **No sign-off is needed to flag.** Flagging destroys nothing and can only make the pile more honest, so an agent that writes verification rows to production flags them itself and reports that it did. Waiting to be told is how four unflagged rows sat in the pile across a session boundary while everyone assumed somebody else owned them.
+
+  Verification traffic is synthetic by definition, however real the pipes it proves. A send that genuinely reaches a real inbox is still a send nobody asked for, and three runs of the same canonical deal would seed the first cohort median with an echo of our own test.
+- **Production deletes require owner sign-off.** Any `DELETE` against `decodes`, `emails` or `events` on the remote database is an owner decision, asked for and answered in writing before it runs. This includes cleaning up a mess the agent itself made. On 2026-08-15 a session cleared 24 self-created rows on its own judgment. The judgment was right and the precedent is not. **The rule is asymmetric on purpose: flag freely, delete never.**
+- **The pile's first real row should be the first real farmer.**
 - **Benchmarks are the exception, and only through a migration.** Corrections to published-rate rows ship as a new numbered migration, never as an ad-hoc statement, because a verdict has to stay reproducible against what the table said on the day.
 
 ---
@@ -263,6 +269,13 @@ The pile is the company. These rules exist so nobody has to be individually corr
 - **Every abstention path needs a companion canary.** This product abstains safely everywhere: no matched reference, no verdict; unreconciled ledger, no verdict; unknown amount, no verdict. That safety is also a hiding place. On 2026-08-15 migration 0001 shipped every benchmark amount bound a thousand times too large, so no quote on earth fell inside a band and every deal would have abstained. Nothing failed. It read as caution.
 
   So: at least one golden deal must match its band and produce a stamp, run against the benchmark table the migrations actually ship, not a copy of it. **A canary that abstains fails the build.** Abstention is earned, never defaulted into. `tests/canary.test.ts`.
+- **No promise without a sender.** Any user-facing future-tense commitment needs a test proving the mechanism that keeps it actually fires. "We'll email it." "We will remind you." "We will not email you again." Each one is a claim about the future, and a claim about the future is only as good as the code that arrives to keep it.
+
+  The test covers the negative paths too, because that is where these fail quietly: the out-of-window row skipped, the already-sent row not sent twice, the unsubscribed address refused however early its yes arrived, the nonexistent id answered honestly rather than reassured.
+
+  Every future-tense phrase in product copy is registered in `tests/promises.test.ts`, naming either the test that keeps it or the reason it is not a delivery commitment. A named test that does not exist fails the build, so the citation cannot be fiction. The voice sweep flags any unregistered promise.
+
+  Two defects of this exact species shipped in one session and were caught only by exercising them live. The expiry opt-in stored a yes and had nothing that would ever send it. The failed-send screen said the teardown would follow shortly, and nothing in this product would have sent it. Both read as reassurance, which is what made them worse than an error message: a farmer who is told nothing goes and checks, and a farmer who is told "shortly" waits.
 - **Seeded data is checked against its own label.** A hand-typed number is the only thing in the repo with no compiler behind it. `tests/benchmark-seed.test.ts` reads each band's bounds against the band printed on it.
 - **Canon is engine output.** Figures printed in `design.md` are recomputed by `tests/design-canon.test.ts`. Canon drift is a failing build.
 

@@ -290,7 +290,7 @@ const REMINDER_LEAD_DAYS = 7;
  * a system that meant well, which is the same failure as a number that is
  * confidently wrong.
  */
-async function sendDueReminders(env: Env, today: string): Promise<{ sent: number; failed: number }> {
+export async function sendDueReminders(env: Env, today: string): Promise<{ sent: number; failed: number }> {
   const sendable = emailSendable(env);
   if (sendable === null) {
     console.log('cron reminders: sending is not configured, nothing sent');
@@ -889,9 +889,14 @@ app.post('/email', async (c) => {
 
   if (!sent.ok) {
     c.executionCtx.waitUntil(recordEvent(c.env, 'email_failed', parsed.data.decodeId, { status: sent.status }));
+    // No retry exists, so none is promised. The earlier wording here said the
+    // teardown would follow shortly, which nothing in this product would have
+    // done: the same defect as an opt-in with no sender, and more comfortable
+    // to read, which is what makes it worse.
     return c.html(renderNotice(
       'That did not send',
-      'We kept your address and will send the teardown shortly. Your numbers are on the screen behind this.',
+      'Something went wrong on our side and the teardown did not go out. We kept your address, '
+      + 'and nothing else happened. Your numbers are on the screen behind this, and you can ask again.',
     ), 502);
   }
 

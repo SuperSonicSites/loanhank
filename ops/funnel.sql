@@ -1,5 +1,7 @@
 WITH windowed AS (
-  SELECT event FROM events WHERE ts >= datetime('now', '-7 days')
+  SELECT event FROM events
+   WHERE ts >= datetime('now', '-7 days')
+     AND synthetic = 0
 )
 SELECT
   (SELECT COUNT(*) FROM windowed WHERE event = 'page_view')          AS page_views,
@@ -22,6 +24,8 @@ SELECT
     / NULLIF((SELECT COUNT(*) FROM windowed WHERE event = 'email'), 0), 1)     AS pct_email_to_interest,
   /* The pile, all time, and how much of it is honest enough to publish. Only
      reconciled rows ever feed a median or a percentile (spec.md 9). */
-  (SELECT COUNT(*) FROM decodes)                         AS pile_total,
-  (SELECT COALESCE(SUM(reconciled), 0) FROM decodes)     AS pile_reconciled,
-  (SELECT COUNT(*) FROM decodes WHERE verdict <> 'none') AS pile_with_verdict;
+  (SELECT COUNT(*) FROM decodes WHERE synthetic = 0)      AS pile_total,
+  (SELECT COALESCE(SUM(reconciled), 0) FROM decodes
+     WHERE synthetic = 0 AND out_of_bounds = 0)          AS pile_reconciled,
+  (SELECT COUNT(*) FROM decodes
+     WHERE verdict <> 'none' AND synthetic = 0)         AS pile_with_verdict;

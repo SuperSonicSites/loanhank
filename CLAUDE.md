@@ -33,6 +33,8 @@ Keep these true in package.json; if you rename a script, update this file in the
 
 - Any change in `src/finance/` starts with a failing test.
 - Every abstention path needs a companion canary proving the positive path is reachable. A canary that abstains fails the build (spec.md §7.3).
+- No promise without a sender: any future-tense commitment in product copy needs a test proving the mechanism fires, negative paths included, registered in `tests/promises.test.ts` (spec.md §7.3).
+- Verification traffic against production is flagged synthetic in the same session that creates it. Flagging needs no sign-off; deletion always does (spec.md §7.2).
 - If a finance test fails, assume the code is wrong, not the test. Changing an expected value requires a comment explaining why the old value was incorrect.
 - Extraction never guesses. Unreadable field → null + flagged for the farmer to type. A confidently-wrong extracted number is the one fatal bug class; abstaining is success.
 - Longer amortization is never labeled "savings."
