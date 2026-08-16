@@ -44,6 +44,9 @@ Keep these true in package.json; if you rename a script, update this file in the
 
 - `decodes` rows: no PII, no dealer names, no account numbers, ever. Quote photos are never written down: the bytes go from the request to the reader and are gone. The `loanhank-quotes` bucket and its one-day rule are a backstop for a future path that writes one; the happy path never touches it.
 - A lead never moves without a consent row: timestamp + `consent_text_version` of the exact text shown.
+- The verdict and the business are firewalled both ways (spec.md §3.1). No verdict screen, stamp or canonical line references partners, refinancing or the interest question; the interest question and any consent flow never reference the verdict; and the question renders the same whatever the verdict said.
+- Lead compensation is flat fee or retainer only. Success-contingent or funded-deal-contingent pricing requires a signed broker-of-record agreement on file (spec.md §8.1), and none exists.
+- Nothing in this product may have a field capable of holding an SSN, EIN, tax document, credit application, bank statement, or account or routing number (spec.md §8.2, §9.5). Schema law, tested.
 - Aggregate outputs only, n ≥ 20; row-level data never leaves the system.
 
 ## Copy rules (user-facing text)

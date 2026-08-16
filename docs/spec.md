@@ -101,6 +101,24 @@ Value in sixty seconds. Rigor before judgment. Both, no compromise between.
 
 Note the credibility feature: this rule will frequently bless captive 0% promos. Good. A tool that sometimes says "take the dealer's deal" is the only tool anyone believes.
 
+### 3.1 The firewall between the verdict and the business
+
+**The verdict judges the paper the farmer already holds, and nothing else.** It is arithmetic against a published rate card. It is not a lead qualifier, not a sales trigger, and not an argument for anything we might later sell.
+
+Carved in both directions, because a firewall with one wall is a funnel:
+
+**Nothing on the verdict side may reference the business.** No verdict screen, no stamp, no verdict line, no receipt row, no reference line, no footnote, and no canonical example in `design.md` may mention a partner, a lender who might compete, refinancing, or the interest question. A LOOK CLOSER stamp says the deal prices above the published card. It never says what to do about it, because the moment it does, the stamp is selling.
+
+**Nothing on the business side may reference the verdict.** The interest question, and any consent flow that ever follows it, may not mention the rate, the stamp, the verdict, the delta, or how the deal compared. It asks one question about a hypothetical and carries no argument.
+
+**And the question does not move with the answer.** The interest question renders identically for CHECKS OUT, for LOOK CLOSER, and for an abstention. Showing it only to farmers whose deals looked expensive would be steering by omission, which is the same sin performed quietly.
+
+The disclosure link beside the question is the one permitted crossing, and it runs the safe way: from the business toward the truth about it, never from the verdict toward the business. FTC guidance wants that disclosure near the action (§10).
+
+Enforced by `tests/firewall.test.ts`, both directions and the independence property.
+
+**Why this is law rather than taste.** The moment a stamp can be read as a sales cue, every verdict becomes suspect in retrospect, including the honest ones. The neutrality is only worth something if it is structural, and structure means a test.
+
 ---
 
 ## 4. BENCHMARK HIERARCHY
@@ -263,6 +281,36 @@ No forwarding, no lender contact, no shared PII, no "consent" label. This measur
 
 Honest ladder: decode/email = farmer demand. Interest-yes = directional intent. Buyer LOIs = revenue model. Post-counsel consent = the business. No rung skipped, no rung overclaimed.
 
+### 8.1 Lead pricing law
+
+**Compensation for a lead is a flat fee or a retainer. Nothing else.**
+
+No success fee. No funded-deal contingency. No share of interest, points, spread, or origination. No volume bonus tied to closings. If money moves to us because a farmer's loan actually funded, we are being paid for the outcome of a credit transaction, and in a number of states that is the definition of the licensed activity we have said we do not perform.
+
+**The single exception, and it is not available today:** contingent compensation may exist only where a signed broker-of-record agreement is on file for that arrangement, and only after counsel has confirmed the licensing position in every state it touches. Until such an agreement exists, contingent pricing may not be quoted, negotiated, agreed in principle, or built into any system.
+
+This binds the pricing conversation as much as the code. A buyer who will only pay per funded deal is a buyer we do not take at that price, however good the price is.
+
+### 8.2 The Phase C consent form, specified now and built later
+
+Recorded here so the shape is settled before anybody is under pressure to ship it. **None of this exists yet. None of it may be built before counsel has reviewed the wording** (§10 lawyer stones).
+
+**What consent collects, and only at consent:**
+
+- Phone number. Not asked for anywhere else in the product, not on the decode, not at the email gate, not with the interest question. It arrives at consent or not at all.
+- Self-reported credit tier, optional, and clearly optional. Self-reported, never pulled, never inferred, and never verified by us. A farmer may decline it and still consent.
+
+**The opt-in is explicit, named, and per-channel:**
+
+- The partner is **named** on the form. Not "our lending partners", not "a lender in our network". The name of the company that will contact him, shown before he agrees.
+- Channels are itemised and separately agreed: **calls, texts, and email**. A yes to email is not a yes to a phone call, and a yes to a phone call is not a yes to an autodialed one.
+- The wording satisfies **TCPA** for calls and texts, including the prior express written consent language, and **CASL** for anything reaching a Canadian address, which requires consent rather than an unsubscribe link. CASL is the stricter and sets the floor.
+- The exact text version shown is stored beside the answer (`consent_text_version`), forever, as it already is for everything else we ask.
+
+**Never collected, at any stage, consent included:** credit applications, tax documents, SSNs, EINs, bank statements, account or routing numbers. This is **schema law, not practice**: no table and no extraction schema in this product may contain a field capable of holding any of them, so the failure mode is a compile error rather than a judgment call at four in the afternoon. A lender who needs those collects them itself, on its own paper, under its own licence and its own liability. We introduce; we do not underwrite, and we do not warehouse the material of underwriting.
+
+Extends the never-capture list in §9.5, which covers what is on the dealer's paper. This covers what a lender might ask us to gather, and the answer is the same.
+
 ---
 
 ## 9. DATA ENGINE (THE MOAT)
@@ -325,6 +373,8 @@ These are on the paper. They are never extracted, never stored, and never infera
 - Salesperson name
 - Customer name, address, phone, email
 - Serial numbers, VINs, stock numbers, account numbers
+
+**Extended by §8.2 for anything a lender might ask us to gather:** credit applications, tax documents, SSNs, EINs, bank statements, account and routing numbers. Same rule, same enforcement.
 
 This is enforced by shape, not by discipline: `quoteExtractionSchema` has no field that can hold any of them, so a model that returned one would have nowhere to put it. `brand` means the manufacturer and is null when only a dealership name is visible. We rank quotes, never dealers.
 

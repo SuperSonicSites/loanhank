@@ -1,5 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
+
+const NEWLINE = String.fromCharCode(10);
 import { parseMoneyToCents, quickPathFormSchema } from '../src/shared/schema.js';
 
 describe('parseMoneyToCents', () => {
@@ -86,6 +88,46 @@ describe('the never-capture list is enforced by shape', () => {
     ]) {
       expect(block.toLowerCase(), `quoteExtractionSchema has a field for ${forbidden}`)
         .not.toContain(forbidden);
+    }
+  });
+
+  // spec.md 8.2. This covers the material of underwriting, which a lender may
+  // one day ask us to gather on its behalf. The answer is the same as for the
+  // dealer's paper: there is nowhere to put it, so it cannot be collected by
+  // anybody's good intentions or anybody's deadline.
+  it('has nowhere to store the material of underwriting, in any table', async () => {
+    const sources = await Promise.all([
+      readFile(new URL('../src/shared/schema.ts', import.meta.url), 'utf8'),
+      readFile(new URL('../migrations/0001_init.sql', import.meta.url), 'utf8'),
+      readFile(new URL('../migrations/0002_fix_benchmark_amount_bands.sql', import.meta.url), 'utf8'),
+      readFile(new URL('../migrations/0003_capture_the_paper.sql', import.meta.url), 'utf8'),
+      readFile(new URL('../migrations/0004_expiry_reminder.sql', import.meta.url), 'utf8'),
+    ]);
+    // Column and field names only: the prose in a migration comment is allowed
+    // to name what it is forbidding.
+    const identifiers = sources
+      .join(NEWLINE)
+      .split(NEWLINE)
+      .filter((line) => !line.trim().startsWith('--') && !line.trim().startsWith('//') && !line.trim().startsWith('*'))
+      // One deliberate exclusion. The ancestor's loan-document schema carries
+      // `sensitive_identifiers_detected`, an enum of CATEGORY NAMES recording
+      // that an identifier was seen and thrown away. It cannot hold an SSN; it
+      // is the receipt proving one was discarded, which is the opposite of the
+      // thing this test forbids. Nothing in the quote path uses it.
+      .filter((line) => !line.includes('sensitive_identifiers_detected'))
+      .join(NEWLINE)
+      .toLowerCase();
+
+    for (const forbidden of [
+      'ssn', 'social_security', 'ein', 'tax_id', 'taxid', 'tin',
+      'bank_statement', 'routing_number', 'account_number',
+      'credit_application', 'tax_document', 'tax_return',
+    ]) {
+      // Whole identifiers, not substrings. A plain includes() flagged
+      // Number.isSafeInteger for containing "ein", which is the sort of false
+      // alarm that gets a good test deleted rather than fixed.
+      const asIdentifier = new RegExp(`(?<![a-z0-9])${forbidden}(?![a-z0-9])`);
+      expect(asIdentifier.test(identifiers), `something in the schema can hold ${forbidden}`).toBe(false);
     }
   });
 
