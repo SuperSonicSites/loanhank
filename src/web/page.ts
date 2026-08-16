@@ -273,6 +273,12 @@ a { color: var(--denim); }
 export /**
  * The only script in the product, and it is entirely optional.
  *
+ * It contains no "<" anywhere, deliberately. A "<" inside an inline script is
+ * an HTML hazard on its own, and it was also what blinded the voice sweep: a
+ * naive tag stripper matching <[^>]+> ran from the "<" in a for-loop all the
+ * way to </script>, swallowing every line between and hiding them from every
+ * copy rule we have.
+ *
  * Everything the tool does works with JavaScript switched off: the form is a
  * plain POST and always will be (design.md §9). This adds three things that
  * only exist when a browser offers them.
@@ -289,7 +295,7 @@ var b=document.getElementById('install');if(b)b.hidden=false;});
 function beacon(n){try{navigator.sendBeacon&&navigator.sendBeacon('/event',n)}catch(e){}}
 if(matchMedia('(display-mode: standalone)').matches){
 var f=document.querySelectorAll('input[name="standalone"]');
-for(var i=0;i<f.length;i++)f[i].value='1';
+Array.prototype.forEach.call(f,function(i){i.value='1';});
 if(location.pathname==='/')beacon('standalone_launch');}
 addEventListener('click',function(ev){
 var b=ev.target&&ev.target.closest&&ev.target.closest('#install');
@@ -310,6 +316,7 @@ export function escapeHtml(value: string): string {
 
 /** Footer-linked on every page (spec.md §10). */
 const FOOTER_PAGES: Array<[string, string]> = [
+  ['/notes/', 'Notes'],
   ['/how-we-figure-it', 'How we figure it'],
   ['/how-we-make-money', 'How we make money'],
   ['/straight-answers', 'Straight answers'],

@@ -54,6 +54,7 @@ Keep these true in package.json; if you rename a script, update this file in the
 ## Copy rules (user-facing text)
 
 - Hank voice per `docs/design.md` §2–2½. Sentence case. No em dashes. No exclamation marks. No staccato triads.
+- American English everywhere: "zero percent" not "nought", "anonymized" not "anonymised" (spec.md §12.1). The voice sweep fails the build on a British spelling.
 - Every external figure carries source + date. Exact numbers over round ones.
 - Canonical microcopy table in design.md is the source of truth; don't paraphrase it.
 

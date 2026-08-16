@@ -29,7 +29,8 @@ import { renderTeardownPdf, type TeardownLine } from './teardown-pdf.js';
 import { FOLLOWUP_TEXT_VERSION } from '../web/page.js';
 import {
   renderContact, renderHowWeFigureIt, renderHowWeMakeMoney, renderManifest, renderNotFound,
-  renderPrivacy, renderSent, renderStraightAnswers, renderTerms, renderWhosBehindThis,
+  renderNote, renderNotesIndex, renderPrivacy, renderSent, renderStraightAnswers, renderTerms,
+  renderWhosBehindThis, NOTES,
 } from '../web/pages.js';
 import { getConfig } from './env.js';
 
@@ -58,7 +59,7 @@ async function withinRateLimit(c: {
   req: { header: (name: string) => string | undefined };
 }, route: string): Promise<boolean> {
   const ip = c.req.header('cf-connecting-ip') ?? 'unknown';
-  // Salted, because an unsalted hash of an IPv4 address is not an anonymised
+  // Salted, because an unsalted hash of an IPv4 address is not an anonymized
   // IP address: the whole space is small enough to enumerate in minutes.
   const salt = typeof c.env.RATE_LIMIT_SALT === 'string' ? c.env.RATE_LIMIT_SALT : '';
   const { success } = await c.env.DECODE_LIMIT.limit({ key: `${route}:${hashAccessKey(`${salt}:${ip}`)}` });
@@ -600,16 +601,37 @@ export async function sendDayThirty(env: Env, today: string): Promise<{ sent: nu
   return { sent, skipped };
 }
 
+
+/**
+ * The referring page, stripped to origin and path.
+ *
+ * Never the query string. A referrer routinely carries a click id, a campaign
+ * blob, sometimes an email address, and none of that is ours to keep. spec.md
+ * 9.5 says we do not store identifiers, and a referrer is a perfectly ordinary
+ * way to store one by accident.
+ */
+function referringPage(raw: string | undefined): string | null {
+  if (!raw) return null;
+  try {
+    const url = new URL(raw);
+    const cleaned = `${url.origin}${url.pathname}`;
+    return cleaned.slice(0, 200);
+  } catch {
+    return null;
+  }
+}
+
 const app = new Hono<{ Bindings: Env }>();
 
 app.get('/', async (c) => {
   // A flood here would bloat the events table and the bill. The form still
   // renders when the limit trips; only the measurement row is dropped, because
   // refusing to show a farmer the tool is worse than an undercounted funnel.
+  const cameFrom = referringPage(c.req.header('referer'));
   if (await withinRateLimit(c, 'page_view')) {
     // The funnel denominator. Written behind waitUntil so measuring never
     // stands between a farmer on rural LTE and the form.
-    c.executionCtx.waitUntil(recordEvent(c.env, 'page_view'));
+    c.executionCtx.waitUntil(recordEvent(c.env, 'page_view', null, { came_from: cameFrom }));
   }
   const siteKey = typeof c.env.TURNSTILE_SITE_KEY === 'string' ? c.env.TURNSTILE_SITE_KEY : '';
   return c.html(renderForm(undefined, [], { turnstileSiteKey: siteKey }));
@@ -805,7 +827,7 @@ app.post('/extract', async (c) => {
 /** The verdict path: a complete ledger, a matched reference, and a stamp. */
 async function decodeFullLedger(c: {
   env: Env;
-  req: { parseBody: () => Promise<Record<string, unknown>> };
+  req: { parseBody: () => Promise<Record<string, unknown>>; header: (name: string) => string | undefined };
   executionCtx: { waitUntil: (promise: Promise<unknown>) => void };
   html: (body: string, status?: 200 | 422) => Response;
 }, body: Record<string, unknown>): Promise<Response> {
@@ -954,8 +976,8 @@ async function decodeFullLedger(c: {
        benchmark_at_ts, delta_vs_benchmark_bps,
        country, currency, province_or_state, out_of_bounds,
        quote_date, quote_expiry_date, launched_standalone,
-       price_band, term_band
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       price_band, term_band, referrer
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).bind(
     decodeId, ts, quarterOf(ts),
     form.quotedPrice, form.cashDiscount, decoded.totals.cashOutlayCents,
@@ -974,6 +996,7 @@ async function decodeFullLedger(c: {
     // not ask about, and it must never be counted as "not installed".
     String(body.standalone ?? '') === '1' ? 1 : null,
     bands.priceBand, bands.termBand,
+    referringPage(c.req.header('referer')),
   ).run();
 
   await recordEvent(c.env, 'decode', decodeId, {
@@ -1232,6 +1255,20 @@ app.get('/manifest.webmanifest', (c) => {
   c.header('content-type', 'application/manifest+json');
   c.header('cache-control', 'public, max-age=86400');
   return c.body(renderManifest());
+});
+
+
+// Notes. Papers, not a blog: no feed, no archive by month, no comments.
+app.get('/notes', (c) => c.redirect('/notes/', 301));
+app.get('/notes/', (c) => {
+  c.header('cache-control', 'public, max-age=600');
+  return c.html(renderNotesIndex());
+});
+app.get('/notes/:slug', (c) => {
+  const note = NOTES.find((entry) => entry.slug === c.req.param('slug'));
+  if (note === undefined) return c.html(renderNotFound(), 404);
+  c.header('cache-control', 'public, max-age=600');
+  return c.html(renderNote(note));
 });
 
 app.notFound((c) => c.html(renderNotFound(), 404));

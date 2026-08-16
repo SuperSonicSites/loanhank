@@ -39,7 +39,7 @@ ${plain('We keep the numbers off your quote, and your email if you hand it over.
   <p>We rank quotes. We never rank dealers.</p>
 
   <h2>The aggregate</h2>
-  <p>We keep anonymised, aggregated market statistics from the quote numbers, and we keep them indefinitely. That is how a median for used tractors on a five year term comes to exist at all. We publish a statistic only when at least ${COHORT_MIN_N} quotes stand behind it, and we always print how many. Nothing published is ever traceable to one quote or one farmer.</p>
+  <p>We keep anonymized, aggregated market statistics from the quote numbers, and we keep them indefinitely. That is how a median for used tractors on a five year term comes to exist at all. We publish a statistic only when at least ${COHORT_MIN_N} quotes stand behind it, and we always print how many. Nothing published is ever traceable to one quote or one farmer.</p>
 
   <h2>Nothing moves</h2>
   <p>We do not sell, share or hand your personal information to anybody. There is no lender on the other end of this today. If we are ever asked whether you would want to hear from an independent lender, that question moves nothing on its own, and we say so where we ask it.</p>
@@ -80,7 +80,7 @@ ${plain('Free tool. It does arithmetic on numbers you give it. It is not advice,
   <p>We do not guarantee any saving, any rate, or any outcome. A published rate card is a posted rate subject to credit approval, not a rate you have been offered. Sometimes this tool will tell you the dealer's deal is good and you should take it. That is not advice either, it is arithmetic.</p>
 
   <h2>The aggregate data</h2>
-  <p>By running a quote you let us keep the numbers from it, without anything identifying you, and use them in anonymised aggregate market statistics. That is what makes the comparisons possible. See <a href="/privacy">privacy</a> for exactly what that covers.</p>
+  <p>By running a quote you let us keep the numbers from it, without anything identifying you, and use them in anonymized aggregate market statistics. That is what makes the comparisons possible. See <a href="/privacy">privacy</a> for exactly what that covers.</p>
 
   <h2>Availability</h2>
   <p>Free, and no promise that it stays running, stays free of faults, or stays available. If it is down, use a pen.</p>
@@ -115,8 +115,8 @@ ${plain('Here is the arithmetic, the sources, and the rules we hold ourselves to
   <p>Your real rate is the annual rate that makes those two equal. It is the rate you are effectively paying to keep the cash in your pocket, and it includes every mandatory cost you only face because you financed.</p>
   <p>This is not the legal APR. Most farm equipment credit is exempt from federal Truth in Lending disclosure, so most quotes are not required to show one. We compute a comparable number from the deal you were actually offered, and we call it what it is.</p>
 
-  <h2>Why a nought per cent deal is not free</h2>
-  <p>If a dealer will take six thousand dollars off for cash and you give that up to get the financing, the six thousand is the price of the financing. It is interest wearing a different hat. Nought per cent on the sticker and nought per cent on the money are different claims.</p>
+  <h2>Why a zero percent deal is not free</h2>
+  <p>If a dealer will take six thousand dollars off for cash and you give that up to get the financing, the six thousand is the price of the financing. It is interest wearing a different hat. Zero percent on the sticker and zero percent on the money are different claims.</p>
 
   <h2>Fees</h2>
   <p>A fee you pay either way, like tax or delivery, is not the cost of financing, so it stays out of the rate and sits on the receipt as its own line. A fee you pay only because you financed goes into the rate. An optional add-on stays out unless you say otherwise. An amount nobody can explain stops us rating the deal at all, and we say so rather than guessing what it is.</p>
@@ -131,7 +131,7 @@ ${plain('Here is the arithmetic, the sources, and the rules we hold ourselves to
   <h2>Comparing you to other farmers</h2>
   <p>We show what quotes like yours carry only when at least ${COHORT_MIN_N} of them stand behind the figure, and we always print how many. Under that, there is no honest statistic and we show the published card instead and say so.</p>
   <p>A cohort is the same country, the same currency, the same equipment category and condition, the same term band, the same price band, the same quarter. If that is too thin we widen it in a fixed order, dropping the price band first, then the term band, then reaching back to earlier quarters. We never widen across country, currency, category or condition. Canadian dollars and American dollars are never pooled, converted or compared.</p>
-  <p>Medians and quartiles use linear interpolation between the closest ranks, the same definition Excel's PERCENTILE.INC and numpy use by default. Put our numbers in a spreadsheet and you will get our answer back, not one near it. Peer policy <strong>${PEER_POLICY_VERSION}</strong>.</p>
+  <p>Medians and quartiles use linear interpolation between the closest ranks, which is the R-7 definition. Check us with a spreadsheet: <strong>QUARTILE.INC</strong> gives our number back, and so does PERCENTILE.INC, and so does numpy's default. Put our quotes in a column and you will get our answer back, not one near it. Peer policy <strong>${PEER_POLICY_VERSION}</strong>.</p>
   <p>Every statistic we ever showed you is frozen onto your decode: the exact median, the quartiles, the count, which cohort it was, and when it was computed. A ticket from two years ago still says what it said, and we can prove why.</p>
 
   <h2>Where the published rates come from</h2>
@@ -156,7 +156,7 @@ export function renderStraightAnswers(): string {
   <p>No. We do not lend and we do not arrange financing.</p>
 
   <h2>Who sees my numbers?</h2>
-  <p>We do. Nobody else. They go into anonymised aggregate statistics with nothing attached that could identify you or your dealer.</p>
+  <p>We do. Nobody else. They go into anonymized aggregate statistics with nothing attached that could identify you or your dealer.</p>
 
   <h2>What happens to the photo?</h2>
   <p>It is read and gone. It is never saved anywhere. See <a href="/privacy">privacy</a>.</p>
@@ -165,7 +165,7 @@ export function renderStraightAnswers(): string {
   <p>We do not know who your dealer is. We do not extract or store the dealership name, and there is nowhere in our records to put it.</p>
 
   <h2>What if my deal is good?</h2>
-  <p>We say so and you should go sign it. That happens often with subsidised nought per cent offers, and a tool that could not say it would not be worth trusting.</p>
+  <p>We say so and you should go sign it. That happens often with subsidized zero percent offers, and a tool that could not say it would not be worth trusting.</p>
 
   <h2>Why do you sometimes refuse to give a verdict?</h2>
   <p>Because the numbers did not reconcile, or an amount was unexplained, or no published rate honestly matches your deal. We would rather hand you the arithmetic and admit the gap than invent a comparison.</p>
@@ -193,7 +193,7 @@ export function renderWhosBehindThis(): string {
 
   <h2>This page is not finished, and that is worth admitting</h2>
   <p>An anonymous website about money is a fair thing to distrust. This page is where a real name and a real photograph of the person who built this belong, and they are being added. It is the most important page on the site and it is the one that is not done.</p>
-  <p>Until it is, here is what can be said honestly. This tool was built by one person who got tired of watching nought per cent offers described as free money. There is no company behind it yet, no investors, and no lender paying for placement. The arithmetic is written out on <a href="/how-we-figure-it">how we figure it</a> so that trusting the person is not the only way to check the work.</p>
+  <p>Until it is, here is what can be said honestly. This tool was built by one person who got tired of watching zero percent offers described as free money. There is no company behind it yet, no investors, and no lender paying for placement. The arithmetic is written out on <a href="/how-we-figure-it">how we figure it</a> so that trusting the person is not the only way to check the work.</p>
   <p>If you want to ask who we are before you use it, that is reasonable. <a href="/contact">Write to us</a>.</p>
 `);
 }
@@ -267,5 +267,71 @@ export function renderSent(emailId: string, expiry: string | null): string {
 ${offer}  <p class="note">You can add LoanHank to your phone home screen from your browser menu, if you would rather not go looking for it next time.</p>
   <p class="no-print"><button type="button" id="install" class="secondary" hidden>Add it to my home screen</button></p>
   <p class="no-print"><a href="/">Run another quote</a></p>
+`);
+}
+
+// ---------------------------------------------------------------------------
+// NOTES — spec.md §10.1
+//
+// Papers, not a blog. No feed, no dates parading as freshness, no comments, no
+// author bylines chasing personality. A note earns its place by being the
+// thing a farmer wanted to read before he signed, and it dies when it stops
+// being that.
+//
+// Every note obeys every copy law already in force: the voice sweep, the
+// promise registry, canon figures from design.md §2¾, a source and a date on
+// every external number, and exactly one ask, which is always to run the
+// numbers. A note that wants a second ask is two notes.
+// ---------------------------------------------------------------------------
+
+export interface Note {
+  slug: string;
+  title: string;
+  standfirst: string;
+  body: string;
+}
+
+/** Empty on purpose. Four papers are written on the owner's side. */
+export const NOTES: Note[] = [];
+
+/** The planned four, listed so the shelf is honest about being empty. */
+const COMING = [
+  'Why your quote has no APR on it, and why that is legal',
+  'A zero percent deal, worked all the way through',
+  'How to read a dealer quote, line by line',
+  'Balloons and leases, and where the money hides in each',
+];
+
+export function renderNotesIndex(): string {
+  const shelf = NOTES.length === 0
+    ? `  <p>There is nothing here yet. Four papers are being written, and they will appear here when they are worth reading rather than when a schedule says so.</p>
+  <ul>${COMING.map((title) => `<li>${escapeHtml(title)}</li>`).join('')}</ul>
+  <p class="note">No feed, no comments, no newsletter. The notes sit here when they are written, and you can come back and look.</p>
+`
+    : `  <ul>${NOTES.map((note) =>
+      `<li><a href="/notes/${escapeHtml(note.slug)}">${escapeHtml(note.title)}</a>. ${escapeHtml(note.standfirst)}</li>`).join('')}</ul>
+`;
+
+  return shell('Notes · LoanHank', `  <h1>Notes</h1>
+  <p>Papers about the paperwork. Written to be read once and used at a desk, not to be scrolled.</p>
+${shelf}
+  <div class="gate">
+    <h2>Run the numbers</h2>
+    <p>The tool is free and takes about a minute.</p>
+    <p><a href="/">Decode a quote</a></p>
+  </div>
+`);
+}
+
+export function renderNote(note: Note): string {
+  return shell(`${note.title} · LoanHank`, `  <h1>${escapeHtml(note.title)}</h1>
+  <p class="note">${escapeHtml(note.standfirst)}</p>
+${note.body}
+  <div class="gate">
+    <h2>Run the numbers</h2>
+    <p>The tool is free and takes about a minute.</p>
+    <p><a href="/">Decode a quote</a></p>
+  </div>
+  <p class="no-print"><a href="/notes/">All notes</a></p>
 `);
 }

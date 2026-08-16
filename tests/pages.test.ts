@@ -11,7 +11,10 @@ import {
   renderPrivacy,
   renderStraightAnswers,
   renderTerms,
+  renderNote,
+  renderNotesIndex,
   renderWhosBehindThis,
+  NOTES,
 } from '../src/web/pages.js';
 
 /** The configured footer form, exactly as wrangler.jsonc carries it. */
@@ -26,11 +29,25 @@ const PAGES: Array<[string, string]> = [
   ['contact', renderContact(POSTAL)],
   ['whos-behind-this', renderWhosBehindThis()],
   ['404', renderNotFound()],
+  // Every note obeys every copy law the rest of the site does, so they join
+  // the same sweep rather than getting their own softer one.
+  ['notes-index', renderNotesIndex()],
+  ...NOTES.map((note) => [`note:${note.slug}`, renderNote(note)] as [string, string]),
 ];
 
-/** Strip tags so voice rules are checked against what a farmer actually reads. */
+/**
+ * Strip markup so voice rules are checked against what a farmer actually reads.
+ *
+ * Script and style blocks come out WHOLE, before any tag stripping. Leaving
+ * them to the tag regex is what let a `<` inside an inline script swallow
+ * every line between it and `</script>`, which hid two exclamation marks and
+ * would have hidden any real copy that followed them. A sweep that can quietly
+ * eat its own input is worse than no sweep, so `provesItReadsTheBody` below
+ * checks that the stripper left the page behind.
+ */
 const prose = (html: string) => html
-  .replace(/<style[\s\S]*?<\/style>/g, '')
+  .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+  .replace(/<style[\s\S]*?<\/style>/gi, ' ')
   .replace(/<[^>]+>/g, ' ')
   .replace(/\s+/g, ' ');
 
@@ -126,7 +143,10 @@ describe('how we figure it shows the work', () => {
 
   it('tells a farmer how to reproduce our median himself', () => {
     // The receipt test, extended to statistics.
-    expect(html).toContain("PERCENTILE.INC");
+    // Name the function a farmer's accountant would actually reach for. We
+    // publish a median and quartiles, so QUARTILE.INC is the direct check.
+    expect(html).toContain('QUARTILE.INC');
+    expect(html).toContain('PERCENTILE.INC');
     expect(html).toContain('you will get our answer back');
   });
 
@@ -218,5 +238,161 @@ describe('the manifest installs the tool and nothing more', () => {
 
   it('uses the paper colour so the phone chrome matches the page', () => {
     expect(manifest.theme_color).toBe('#F7F5EF');
+  });
+});
+
+describe('the sweep can actually see the page', () => {
+  // A stripper that eats its input passes every copy rule by accident. These
+  // assert the body survived, so a silent sweep fails instead of reassuring.
+  it.each(PAGES)('%s still has its own words after stripping', (_name, html) => {
+    const text = prose(html);
+    // 404 is legitimately one line, so the floor is low. The real canary is
+    // the two sentences below: if the stripper ate the body, they go first.
+    expect(text.length).toBeGreaterThan(150);
+    expect(text).toContain('LoanHank');
+    expect(text).toContain('Runs the numbers. Takes no side.');
+  });
+
+  it('would catch an exclamation mark hidden behind a script', () => {
+    // The exact shape that got through: a '<' inside a script, then copy after
+    // it. Under the old stripper everything from the '<' to '</script>' went
+    // missing, this line included.
+    const booby = '<p>Before</p><script>for(var i=0;i<9;i++){}</script><p>After!</p>';
+    expect(prose(booby)).toContain('After!');
+    expect(prose(booby)).toContain('Before');
+  });
+
+  it('does not let script source count as product copy', () => {
+    const withScript = '<script>if(!x)return;</script><p>Clean copy.</p>';
+    expect(prose(withScript)).not.toContain('!');
+    expect(prose(withScript)).toContain('Clean copy.');
+  });
+});
+
+describe('the product is written in American English', () => {
+  // design.md §2 and spec.md §12.1. A Nebraska farmer reading "nought per cent"
+  // hears a foreigner, and trust does not come back once it goes. This is not
+  // a style preference; it is the same rule as the fonts and the palette, and
+  // it fails the build for the same reason.
+  //
+  // Word boundaries throughout: "analyses" is the correct plural noun in
+  // American English and must not be flagged for containing "analyse".
+  const BRITISH: Array<[string, string]> = [
+    ['nought', 'zero'],
+    ['anonymise', 'anonymize'],
+    ['anonymised', 'anonymized'],
+    ['anonymisation', 'anonymization'],
+    ['subsidise', 'subsidize'],
+    ['subsidised', 'subsidized'],
+    ['organise', 'organize'],
+    ['organised', 'organized'],
+    ['recognise', 'recognize'],
+    ['recognised', 'recognized'],
+    ['normalise', 'normalize'],
+    ['normalised', 'normalized'],
+    ['categorise', 'categorize'],
+    ['categorised', 'categorized'],
+    ['prioritise', 'prioritize'],
+    ['specialise', 'specialize'],
+    ['standardise', 'standardize'],
+    ['authorise', 'authorize'],
+    ['authorised', 'authorized'],
+    ['minimise', 'minimize'],
+    ['maximise', 'maximize'],
+    ['summarise', 'summarize'],
+    ['realise', 'realize'],
+    ['apologise', 'apologize'],
+    ['criticise', 'criticize'],
+    ['analyse', 'analyze'],
+    ['analysed', 'analyzed'],
+    ['colour', 'color'],
+    ['behaviour', 'behavior'],
+    ['labour', 'labor'],
+    ['favour', 'favor'],
+    ['neighbour', 'neighbor'],
+    ['honour', 'honor'],
+    ['licence', 'license'],
+    ['defence', 'defense'],
+    ['offence', 'offense'],
+    ['practise', 'practice'],
+    ['centre', 'center'],
+    ['metre', 'meter'],
+    ['litre', 'liter'],
+    ['cheque', 'check'],
+    ['programme', 'program'],
+    ['instalment', 'installment'],
+    ['fulfil', 'fulfill'],
+    ['enrol', 'enroll'],
+    ['judgement', 'judgment'],
+    ['ageing', 'aging'],
+    ['grey', 'gray'],
+    ['whilst', 'while'],
+    ['amongst', 'among'],
+    ['learnt', 'learned'],
+    ['spelt', 'spelled'],
+    ['travelled', 'traveled'],
+    ['cancelled', 'canceled'],
+    ['per cent', 'percent'],
+  ];
+
+  it.each(PAGES)('%s uses no British or Canadian spellings', (_name, html) => {
+    const text = prose(html).toLowerCase();
+    for (const [british, american] of BRITISH) {
+      const pattern = new RegExp(`\\b${british}\\b`);
+      expect(
+        pattern.test(text),
+        `write "${american}", not "${british}"`,
+      ).toBe(false);
+    }
+  });
+
+  it('keeps the correct American plural, which is not a violation', () => {
+    // "analyses" is right in American English. A dictionary check that fails
+    // on it teaches people to delete the dictionary check.
+    const pattern = new RegExp('\\banalyse\\b');
+    expect(pattern.test('the analyses were filed')).toBe(false);
+    expect(pattern.test('we analyse the quote')).toBe(true);
+  });
+});
+
+
+describe('notes are papers, not a blog', () => {
+  it('has exactly one ask, and it is to run the numbers', () => {
+    const html = renderNotesIndex();
+    // One ask per piece (design.md §2½ item 7). A note that wants a second
+    // ask is two notes.
+    expect((html.match(/<h2>/g) ?? []).length).toBe(1);
+    expect(prose(html)).toContain('Run the numbers');
+  });
+
+  it('is honest about being empty rather than padding the shelf', () => {
+    expect(NOTES).toHaveLength(0);
+    expect(prose(renderNotesIndex())).toContain('There is nothing here yet.');
+  });
+
+  it('ships no feed, comment or newsletter machinery', () => {
+    // Hunt the machinery, not the word. The page says "no comments" out loud,
+    // which an earlier version of this test flagged as a comment system.
+    const html = renderNotesIndex().toLowerCase();
+    for (const machinery of [
+      'rel="alternate"', '.xml', 'application/rss', 'application/atom',
+      '<textarea', 'name="comment', 'action="/subscribe',
+    ]) {
+      expect(html, `the notes page ships ${machinery}`).not.toContain(machinery);
+    }
+  });
+
+  it('gives every future note the same ask and the same laws', () => {
+    // Rendered against a stand-in so the rule is enforced before the first
+    // real paper arrives, not after somebody writes four of them.
+    const html = renderNote({
+      slug: 'stand-in', title: 'A stand-in note',
+      standfirst: 'Proves the template obeys the copy laws before any note exists.',
+      body: '<p>Body text.</p>',
+    });
+    expect((html.match(/<h2>/g) ?? []).length).toBe(1);
+    expect(prose(html)).toContain('Run the numbers');
+    expect(prose(html)).not.toMatch(/!/);
+    expect(prose(html)).not.toMatch(/—/);
   });
 });
