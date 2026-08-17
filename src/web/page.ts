@@ -190,26 +190,39 @@ button {
 .field.checkbox label { font-weight: 400; font-size: var(--text-label); }
 .field.checkbox input { width: var(--tap-min); height: var(--tap-min); margin-right: var(--s-8); vertical-align: middle; }
 
-/* The hero. Camera first on a phone, fields first on a desk: the DOM order is
-   the phone order, and the media query inverts only the hero. A calculator
-   searcher wants fields; a phone at the dealer lot wants the camera. */
+/* The hero, one flex stack. The camera form's own box dissolves (display:
+   contents) so its children and the manual disclosure interleave into one
+   visual order: the snap box, the type-instead line, Run the numbers, then
+   the Turnstile widget beneath the button. Desktop moves only the disclosure
+   to the top: a calculator searcher wants fields; a phone at the dealer lot
+   wants the camera. */
 .hero { display: flex; flex-direction: column; }
+.hero-camera { display: contents; }
+.camera-btn { order: 1; }
+.shots { order: 2; }
+.addmore { order: 3; }
+.hero-manual { order: 4; }
+.camera-run { order: 5; }
+.hero-camera .cf-turnstile { order: 6; margin: var(--s-8) 0 0; }
+.camera-note { order: 7; }
 @media (min-width: 700px) {
-  .hero-manual { order: 1; }
-  .hero-camera { order: 2; margin-top: var(--s-24); }
+  .hero-manual { order: 0; }
 }
 
-/* The camera hero: a styled file input. The label is the button; the input is
-   visually hidden but still focusable, so validation and keyboards keep
-   working. capture="environment" opens a phone camera with no JavaScript. */
+/* The camera hero: a styled file input. The label is the big box; the input
+   is visually hidden but still focusable, so validation and keyboards keep
+   working. capture="environment" opens a phone camera with no JavaScript.
+   The camera glyph is the only icon in the product (design.md section 6). */
 .camera-btn {
-  display: flex; align-items: center; justify-content: center;
-  width: 100%; min-height: var(--control-h);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: var(--s-8);
+  width: 100%; min-height: 96px; padding: var(--s-16);
   background: var(--denim); color: var(--input-white);
   border: 1px solid var(--denim); border-radius: var(--radius);
   font-size: var(--text-body); font-weight: 700; cursor: pointer;
-  margin: 0 0 var(--s-12);
+  margin: 0 0 var(--s-8);
 }
+.camera-btn .cam { width: 32px; height: 32px; }
 .camera-input {
   position: absolute; width: 1px; height: 1px;
   opacity: 0; overflow: hidden; clip-path: inset(50%);
@@ -228,15 +241,16 @@ button {
   font-weight: 400; font-size: var(--text-footnote);
 }
 
-/* Manual entry, demoted to a native disclosure. Never a modal. */
-.hero-manual { margin-top: var(--s-8); }
+/* Manual entry, demoted to a native disclosure under the snap box. Smaller
+   than the hero on purpose, and never a modal. */
+.hero-manual { margin: 0 0 var(--s-8); }
 .hero-manual summary {
-  min-height: var(--tap-min); padding: var(--s-12) 0;
-  color: var(--denim); font-weight: 700; font-size: var(--text-body); cursor: pointer;
+  min-height: var(--tap-min); padding: var(--s-8) 0;
+  color: var(--denim); font-weight: 400; font-size: var(--text-label); cursor: pointer;
 }
 .hero-manual[open] summary { margin-bottom: var(--s-8); }
 
-/* A plain ruled block: the whose-side lines, the worked sample. */
+/* A plain ruled block: the whose-side lines. */
 .block { border-top: var(--hairline); margin: var(--s-32) 0 0; padding-top: var(--s-24); }
 
 /* The ticket. Labels left in Libre Franklin, values right in Courier Prime,
@@ -561,39 +575,6 @@ const WHOSE_SIDE = `  <div class="block">
   </div>
 `;
 
-/**
- * The worked ticket on the front door: canonical example A from design.md
- * §2¾, rendered static. Every figure below is engine output. None of it may be
- * typed fresh here: tests/design-canon.test.ts recomputes the canon block from
- * the engine and pins this sample to it, so a drifted figure fails the build.
- *
- * It blesses the dealer's promo on purpose. The front door showing the tool
- * approving a dealer's deal before the farmer has typed a thing is the
- * neutrality proof doing the advocacy's work.
- */
-const WORKED_SAMPLE = `  <div class="block">
-    <p>Here is one, worked.</p>
-    <div class="ticket">
-      <hr class="ticket-rule">
-      <p class="headline-label">Your real rate</p>
-      <p class="headline-rate">2.94%</p>
-      <p class="stamp stamp-good">CHECKS OUT</p>
-      <p class="verdict-line">This deal checks out. We'd take it.</p>
-      <hr class="ticket-rule">
-      <table>
-        <tr><td>Quoted price</td><td>$84,500</td></tr>
-        <tr><td>Cash discount</td><td>− $6,000</td></tr>
-        <tr><td>Cash price today</td><td>$78,500</td></tr>
-        <tr><td>Total of payments</td><td>$84,500</td></tr>
-        <tr><td>What financing costs</td><td>$6,000</td></tr>
-      </table>
-      <hr class="ticket-rule-double">
-      <p class="reference">Comparable published equipment rate: 7.25%, subject to approval. AgDirect, $25,000-$99,999, 5 years, fixed, as of 2026-08-01.</p>
-    </div>
-    <p>If the deal is good, we say so. If it isn't, you'll know before you sign.</p>
-  </div>
-`;
-
 /** Screen 1. The tool is the landing page, and the hero is the camera. */
 export function renderForm(
   values: FormValues = EMPTY_FORM,
@@ -625,7 +606,7 @@ ${typedForm(values, 'typed', campaign, fbc)}    </details>
   return shell('LoanHank', `${problemBlock}  <h1>Point your phone at the dealer's quote. See the number they didn't print.</h1>
   <p>Free, takes about a minute, and your numbers stay here unless you say otherwise.</p>
 
-${tool}${WHOSE_SIDE}${WORKED_SAMPLE}`);
+${tool}${WHOSE_SIDE}`);
 }
 
 /**
@@ -685,13 +666,13 @@ function fbcField(fbc: string | null | undefined): string {
  */
 function cameraHero(photo: PhotoPath, campaign: Record<string, string>, fbc: string | null): string {
   return `    <form method="post" action="/extract" enctype="multipart/form-data" class="hero-camera">
-      <label class="camera-btn" for="photo">Snap the quote</label>
+      <label class="camera-btn" for="photo"><svg class="cam" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="1.5" y="5" width="17" height="12" rx="1"></rect><path d="M6.5 5l1.5-2.5h4L13.5 5"></path><circle cx="10" cy="11" r="3.25"></circle></svg>Snap the quote</label>
       <input type="file" id="photo" name="photo" class="camera-input" accept="image/jpeg,image/png,application/pdf" capture="environment" multiple required>
       <div id="shots" class="shots" hidden></div>
       <p class="note addmore">Add the next page, or the fine print.</p>
-${campaignFields(campaign)}${fbcField(fbc)}      <div class="cf-turnstile" data-sitekey="${escapeHtml(photo.turnstileSiteKey)}" data-action="extract"></div>
-      <button type="submit">Run the numbers</button>
-      <p class="note">Reading your paper takes about 10 seconds. The photo is never saved.</p>
+${campaignFields(campaign)}${fbcField(fbc)}      <button type="submit" class="camera-run">Run the numbers</button>
+      <div class="cf-turnstile" data-sitekey="${escapeHtml(photo.turnstileSiteKey)}" data-action="extract"></div>
+      <p class="note camera-note">Reading your paper takes about 10 seconds. The photo is never saved.</p>
     </form>
 `;
 }

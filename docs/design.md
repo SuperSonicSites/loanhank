@@ -56,8 +56,6 @@ Hank = the neighbor who's good with numbers. Not mascot. Not cartoon. A voice.
 | retake button | `Retake` |
 | manual disclosure | `Type the numbers instead` (a native details summary, never a modal) |
 | whose side | `The dealer's math sells the machine. The lender's math sells the money. This math just shows you the number.` (renders within one screen of the how-we-make-money link, see §10) |
-| worked ticket intro | `Here is one, worked.` |
-| protective promise | `If the deal is good, we say so. If it isn't, you'll know before you sign.` (second sentence registered in tests/promises.test.ts with its keeper) |
 | too many photos | `One decode reads up to four photos. Pick the four that show the whole deal.` |
 | extraction wait | `Reading your paper… about 10 seconds.` |
 | confirm screen header | `Check these against your paper. Fix anything we got wrong.` |
@@ -252,26 +250,29 @@ Chrome: wordmark top-left, trust line footer. **No nav.** One page is one page.
 H1: Point your phone at the dealer's quote.
     See the number they didn't print.
 one line: Free, takes about a minute. Your numbers stay here unless you say otherwise.
-[ Snap the quote ]               ← denim, full width, 56px. a styled file input
-                                   with capture="environment": the camera opens
-                                   with no JavaScript
+┌────────────────────────────┐
+│         [camera]           │   ← the big snap box: denim, full width, ~96px
+│      Snap the quote        │     tall, the camera glyph above the words. a
+└────────────────────────────┘     styled file input with capture=
+                                   "environment": camera opens with no JS
 (thumbnail row with a retake on each, and "Add the next page, or the fine
  print." once a photo is in — up to four photos, one decode, one merged read)
+▸ Type the numbers instead       ← directly under the snap box, smaller than
+                                   the hero. native details disclosure, never
+                                   a modal. the four fields plus frequency,
+                                   the same plain no-JS POST
 [ Run the numbers ]              ← submits the photos
-▸ Type the numbers instead       ← native details disclosure, never a modal.
-                                   the four fields plus frequency, 56px tall,
-                                   inputmode=decimal, the same plain no-JS POST
+(Turnstile widget)               ← beneath Run the numbers, never above it
 whose-side block                 ← canon three sentences, §2 table, with the
                                    how-we-make-money link beside it
-worked ticket                    ← canon example A as a static mini-ticket,
-                                   "Here is one, worked." above it and the
-                                   protective promise beneath
 footer trust line
 ```
-That is the mobile order, top to bottom. Desktop and wide viewports invert only
-the hero, by CSS media query: fields first, camera second. A calculator
-searcher wants fields; a phone at the dealer lot wants the camera. No other
-reordering.
+That is the mobile order, top to bottom (owner ruling 2026-08-17; an earlier
+version put a worked canon ticket below the whose-side block and it was
+removed the same day — canon example A stays on /how-we-figure-it). Desktop
+and wide viewports move only the disclosure to the top, by CSS media query:
+fields first, camera second. A calculator searcher wants fields; a phone at
+the dealer lot wants the camera. No other reordering.
 
 **The H1 follows the winning ad hook once the test has spoken. The ad test is
 the headline test; the page never runs its own.** The approved hook bank lives

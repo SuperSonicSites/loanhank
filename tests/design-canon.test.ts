@@ -384,13 +384,13 @@ describe('rendered microcopy matches the canon table', () => {
   });
 
   it('renders the homepage redesign moments from the canon table, verbatim', async () => {
-    // The camera hero, the manual disclosure, the add-another line, the retake,
-    // the whose-side block and the worked-ticket frame all entered the table in
-    // the same commit that shipped them. This pins the render to the table.
+    // The camera hero, the manual disclosure, the add-another line, the retake
+    // and the whose-side block all entered the table in the same commit that
+    // shipped them. This pins the render to the table.
     const html = renderForm(undefined, [], { turnstileSiteKey: 'canon-check' });
     for (const label of [
       'photo button', 'add another page', 'retake button', 'manual disclosure',
-      'whose side', 'worked ticket intro', 'protective promise',
+      'whose side',
     ]) {
       expect(html, `the homepage does not render the canon "${label}" words`)
         .toContain(await canonMicrocopy(label));
@@ -407,40 +407,12 @@ describe('rendered microcopy matches the canon table', () => {
 });
 
 
-describe('the homepage worked ticket is canon, engine-recomputed', () => {
-  // The front door renders canonical example A as a static mini-ticket. The
-  // figures are string constants in page.ts, and this is what stops them
-  // drifting: the canon block above is recomputed from the engine, and the
-  // homepage is pinned to the canon block, so a moved figure fails twice.
-  it('prints example A exactly as canon states it', async () => {
-    const entries = await canon();
-    const html = renderForm(undefined, [], { turnstileSiteKey: 'canon-check' });
-    for (const key of [
-      'a.quoted_price', 'a.cash_discount', 'a.cash_price', 'a.total_of_payments',
-      'a.cost_versus_cash', 'a.real_rate', 'a.line', 'a.reference',
-    ]) {
-      expect(html, `the homepage sample is missing canon \`${key}\``)
-        .toContain(figure(entries, key));
-    }
-    expect(html).toContain('CHECKS OUT');
-  });
-
-  it('blesses the dealer on the front door, stamp and all', async () => {
-    // The neutrality proof doing the advocacy's work: the tool approving a
-    // dealer's deal before the farmer has typed a thing.
-    const entries = await canon();
-    expect(figure(entries, 'a.verdict')).toBe('CHECKS OUT');
-    const html = renderForm(undefined, [], { turnstileSiteKey: 'canon-check' });
-    expect(html).toContain('stamp stamp-good');
-  });
-
-  it('renders the sample whether or not the photo path is on', () => {
-    // The proof is not conditional on Turnstile being configured.
-    expect(renderForm()).toContain('Here is one, worked.');
-  });
-
-  it('keeps the ruled page order: hero, disclosure, whose side, worked ticket', () => {
-    // The mobile DOM order is the law; desktop inverts only the hero, by CSS.
+describe('the homepage keeps the ruled shape', () => {
+  // Owner ruling 2026-08-17: no worked ticket on the front door (it lives on
+  // /how-we-figure-it), the snap box is the big camera-glyph hero, the
+  // disclosure sits directly under it, and Turnstile renders beneath the
+  // Run the numbers button.
+  it('keeps the DOM order: hero, disclosure, whose side, footer', () => {
     const html = renderForm(undefined, [], { turnstileSiteKey: 'canon-check' });
     // Measured from the h1, so the class names in the stylesheet up in the
     // head cannot shadow the body order being asserted.
@@ -450,12 +422,32 @@ describe('the homepage worked ticket is canon, engine-recomputed', () => {
       body.indexOf('hero-camera'),
       body.indexOf('hero-manual'),
       body.indexOf('The dealer\'s math sells the machine.'),
-      body.indexOf('Here is one, worked.'),
       body.indexOf('<footer'),
     ];
     for (const position of positions) expect(position).toBeGreaterThan(-1);
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
-    // The inversion is a media query, never a second layout.
+    // The desktop change is a media query, never a second layout.
     expect(html).toContain('@media (min-width: 700px)');
+  });
+
+  it('puts Turnstile beneath the Run the numbers button', () => {
+    const html = renderForm(undefined, [], { turnstileSiteKey: 'canon-check' });
+    const body = html.slice(html.indexOf('<h1>'));
+    const run = body.indexOf('class="camera-run"');
+    const turnstile = body.indexOf('cf-turnstile');
+    expect(run).toBeGreaterThan(-1);
+    expect(turnstile).toBeGreaterThan(run);
+  });
+
+  it('carries the camera glyph on the snap box, the one icon in the product', () => {
+    const html = renderForm(undefined, [], { turnstileSiteKey: 'canon-check' });
+    const label = html.slice(html.indexOf('class="camera-btn"'), html.indexOf('Snap the quote'));
+    expect(label).toContain('svg');
+  });
+
+  it('renders no worked ticket and no stamp on the front door', () => {
+    const html = renderForm(undefined, [], { turnstileSiteKey: 'canon-check' });
+    expect(html).not.toContain('Here is one, worked.');
+    expect(html).not.toContain('CHECKS OUT');
   });
 });

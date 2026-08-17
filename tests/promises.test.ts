@@ -44,15 +44,6 @@ const PROMISES: Promised[] = [
   { phrase: 'We will not email you again.', keptBy: 'an unsubscribed address is refused' },
   { phrase: 'We will say so when it does.', keptBy: 'produces a CHECKS OUT stamp from the shipped benchmark table' },
 
-  // The protective promise under the homepage worked ticket. "You'll know
-  // before you sign" is kept by the amber path being reachable: a deal that
-  // prices above the card comes back stamped LOOK CLOSER from the real seeded
-  // table, and the canary fails the build if that path ever silently abstains.
-  {
-    phrase: "you'll know before you sign",
-    keptBy: 'produces a LOOK CLOSER stamp from the shipped benchmark table',
-  },
-
   // The follow-up sequence: disclosed at capture rather than requested, which
   // is the other half of the posture in spec.md §10.
   { phrase: "We'll follow up once about your deal", keptBy: 'day four goes out once and only once' },
