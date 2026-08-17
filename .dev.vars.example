@@ -30,9 +30,23 @@ EMAIL_FROM=hank@mail.loanhank.com
 # off entirely. LOCAL RULE: this must point at a DEV dataset, never the
 # production one — Meta does not discard test_event_code traffic, so a test
 # against the production dataset is a test row in the pile (spec.md §7.2).
+#
+# There is no DEV_ prefixed variant of these on purpose. This file is only ever
+# read by `wrangler dev`; production reads Worker secrets set with
+# `wrangler secret put`, and never reads this file at all. So the values here
+# are the dev values by definition, and a second prefixed set would mean code
+# choosing between them at runtime, which is one more way to point a live
+# worker at the wrong dataset. One name, one meaning, and the environment
+# decides which value it holds.
+#
+# The token is scoped to its dataset. A token generated on the production
+# dataset cannot post to the dev one: Meta answers GraphMethodException code
+# 100, subcode 33. Generate the token from within the dataset it is for
+# (Events Manager, the dataset, Settings, Conversions API, generate).
 META_DATASET_ID=
 META_CAPI_TOKEN=
 META_TEST_EVENT_CODE=
+
 
 # Salt for hashing IPs in the per-extract rate limiter. Any long random string.
 RATE_LIMIT_SALT=
