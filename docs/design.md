@@ -51,7 +51,14 @@ Hank = the neighbor who's good with numbers. Not mascot. Not cartoon. A voice.
 | moment | words |
 |---|---|
 | primary button | `Run the numbers` |
-| photo button | `Snap the quote instead` |
+| photo button | `Snap the quote` (the camera hero; it is the primary control, so no "instead") |
+| add another page | `Add the next page, or the fine print.` |
+| retake button | `Retake` |
+| manual disclosure | `Type the numbers instead` (a native details summary, never a modal) |
+| whose side | `The dealer's math sells the machine. The lender's math sells the money. This math just shows you the number.` (renders within one screen of the how-we-make-money link, see §10) |
+| worked ticket intro | `Here is one, worked.` |
+| protective promise | `If the deal is good, we say so. If it isn't, you'll know before you sign.` (second sentence registered in tests/promises.test.ts with its keeper) |
+| too many photos | `One decode reads up to four photos. Pick the four that show the whole deal.` |
 | extraction wait | `Reading your paper… about 10 seconds.` |
 | confirm screen header | `Check these against your paper. Fix anything we got wrong.` |
 | good verdict | `This deal checks out. We'd take it.` |
@@ -59,7 +66,8 @@ Hank = the neighbor who's good with numbers. Not mascot. Not cartoon. A voice.
 | email gate | `Want the full teardown as a PDF? We'll email it. That's all we use your email for.` |
 | consent gate | `Want lenders to compete for this deal? You say go. Nothing moves without you.` |
 | consent decline | `No thanks — my numbers stay here.` (equal-weight button, not gray shame text) |
-| blurry photo | `Too blurry to read. Try again in better light.` |
+| blurry photo | `Too blurry to read. Try again in better light, or type the numbers.` (the typed fields render inline beside it, so the typing path is in view) |
+| straight answer, whose side | `We are on the math's side. Most days that amounts to the same thing. When your deal is good we say so, and nobody pays us either way for the answer.` |
 | do-not-share link | `Do Not Sell or Share My Personal Information` (CCPA wording, verbatim) |
 | footer trust line | `Free tool. Your photo is never saved. Your numbers stay here unless you say go.` |
 
@@ -238,23 +246,40 @@ Spacing scale: 4 / 8 / 12 / 16 / 24 / 32 / 48. Section gaps 32-48. Nothing cramp
 
 Chrome: wordmark top-left, trust line footer. **No nav.** One page is one page.
 
-**Screen 1 — THE TOOL (this is the landing page):**
+**Screen 1 — THE TOOL (this is the landing page). The hero is the camera:**
 ```
 [wordmark]
 H1: Point your phone at the dealer's quote.
     See the number they didn't print.
 one line: Free, takes about a minute. Your numbers stay here unless you say otherwise.
-┌────────────────────────────┐
-│ Quoted price        [____] │   4 fields, 56px tall,
-│ Cash discount       [____] │   inputmode=decimal,
-│ Term (months)       [____] │   full width
-│ Payment             [____] │
-└────────────────────────────┘
-[ Run the numbers ]              ← denim, full width, 56px
-[ Snap the quote instead ]       ← outline denim, same size
+[ Snap the quote ]               ← denim, full width, 56px. a styled file input
+                                   with capture="environment": the camera opens
+                                   with no JavaScript
+(thumbnail row with a retake on each, and "Add the next page, or the fine
+ print." once a photo is in — up to four photos, one decode, one merged read)
+[ Run the numbers ]              ← submits the photos
+▸ Type the numbers instead       ← native details disclosure, never a modal.
+                                   the four fields plus frequency, 56px tall,
+                                   inputmode=decimal, the same plain no-JS POST
+whose-side block                 ← canon three sentences, §2 table, with the
+                                   how-we-make-money link beside it
+worked ticket                    ← canon example A as a static mini-ticket,
+                                   "Here is one, worked." above it and the
+                                   protective promise beneath
 footer trust line
 ```
-Above the fold on an iPhone SE. Everything below fold is footnotes.
+That is the mobile order, top to bottom. Desktop and wide viewports invert only
+the hero, by CSS media query: fields first, camera second. A calculator
+searcher wants fields; a phone at the dealer lot wants the camera. No other
+reordering.
+
+**The H1 follows the winning ad hook once the test has spoken. The ad test is
+the headline test; the page never runs its own.** The approved hook bank lives
+in `ops/ads.md`.
+
+No-JS degradation on the camera: the native input takes one photo, or a
+gallery multi-select where the OS allows. Add-another is the JS enhancement,
+never the requirement.
 
 **Screen 2 — CONFIRM (photo path only):** extracted fields as big editable inputs, each flagged `read from your paper` or `couldn't read — enter it` (amber label, empty box, never a guess). One button: `Looks right — run it`.
 
@@ -357,3 +382,9 @@ Format that fits the psychology (suspicion-confirmation, native to feed):
 - `ink-soft` never draws a line. Borders are `rule`, always.
 - No airy minimalism. Dense like newsprint. Whitespace is not a virtue here; clarity is.
 - Perfect consistency is itself a tell. If a screen looks like a beautiful mock, it fails the made-by-a-guy test. Add a rule, add a sourced number, tighten a gap.
+
+**Whose-side stones (posture, never the label):**
+- The words "screwed", "ripped off", "scammed", "tricked", and any victim framing never appear in product copy. The farmer is the operator who checked, never the mark who got taken.
+- The phrases "consumer advocacy", "watchdog", and "on behalf of farmers" never appear as self-description.
+- Any side-taking sentence renders within one screen of the how-we-make-money link. A claimed allegiance and a disclosed angle must always be visible together.
+- The canon posture is the whose-side block in the §2 table, and it is the whole statement. Nothing extends it.

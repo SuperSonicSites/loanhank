@@ -163,8 +163,8 @@ export function renderStraightAnswers(): string {
   <h2>Will you tell my dealer?</h2>
   <p>We do not know who your dealer is. We do not extract or store the dealership name, and there is nowhere in our records to put it.</p>
 
-  <h2>What if my deal is good?</h2>
-  <p>We say so and you should go sign it. The worked example on <a href="/how-we-figure-it">how we figure it</a> is one: an $84,500 quote with a $6,000 cash discount, taken at the dealer's zero percent over 60 months, prices at 2.94% against a published 7.25%, and it checks out. We have not run enough real quotes to tell you how common that is, and we are not going to guess at a number we have not measured.</p>
+  <h2>Are you on my side?</h2>
+  <p>We are on the math's side. Most days that amounts to the same thing. When your deal is good we say so, and nobody pays us either way for the answer.</p>
 
   <h2>Why do you sometimes refuse to give a verdict?</h2>
   <p>Because the numbers did not reconcile, or an amount was unexplained, or no published rate honestly matches your deal. We would rather hand you the arithmetic and admit the gap than invent a comparison.</p>

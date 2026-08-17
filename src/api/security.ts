@@ -6,6 +6,12 @@ import type { Extraction, ExtractionWarningCode, UploadContentType } from '../sh
 import { calculatePaymentCents, periodsPerYear, projectCurrentLoan } from '../finance/index.js';
 
 export const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024;
+/**
+ * One decode reads up to four photos of the same paper, merged into one
+ * extraction call. The per-image size law above is unchanged; this is the
+ * ceiling on how many images one decode may carry, and breaching it is a 413.
+ */
+export const MAX_PHOTOS_PER_DECODE = 4;
 export const allowedContentTypes = new Set<UploadContentType>(['application/pdf', 'image/jpeg', 'image/png']);
 
 export type ValidationCheck = {

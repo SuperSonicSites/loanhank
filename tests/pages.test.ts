@@ -16,11 +16,16 @@ import {
   renderWhosBehindThis,
   NOTES,
 } from '../src/web/pages.js';
+import { renderForm } from '../src/web/page.js';
 
 /** The configured footer form, exactly as wrangler.jsonc carries it. */
 const POSTAL = 'LoanHank · 109b - 1917 Peninsula Rd, Ucluelet, BC V0R 3A0, Canada';
 
 const PAGES: Array<[string, string]> = [
+  // The front door sweeps with everything else. It carries the whose-side
+  // block and the worked ticket now, which is exactly the copy the banned
+  // list below exists to police.
+  ['home', renderForm(undefined, [], { turnstileSiteKey: 'sweep-check' })],
   ['privacy', renderPrivacy()],
   ['terms', renderTerms()],
   ['how-we-make-money', renderHowWeMakeMoney()],
@@ -65,6 +70,18 @@ describe('Hank voice holds on every page', () => {
   it.each(PAGES)('%s avoids the banned startup vocabulary', (_name, html) => {
     for (const word of ['unlock', 'supercharge', 'empower', 'journey', 'seamless', 'leverage']) {
       expect(prose(html).toLowerCase()).not.toContain(word);
+    }
+  });
+
+  it.each(PAGES)('%s takes no side by label and frames no victim', (_name, html) => {
+    // design.md §10 whose-side stones. The posture is the canon block; the
+    // label and the victim framing are banned everywhere a farmer can read.
+    const text = prose(html).toLowerCase();
+    for (const banned of [
+      'screwed', 'ripped off', 'scammed', 'tricked',
+      'consumer advocacy', 'watchdog', 'on behalf of farmers',
+    ]) {
+      expect(text, `product copy says "${banned}"`).not.toContain(banned);
     }
   });
 

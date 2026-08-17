@@ -10,7 +10,11 @@
 
 const GRAPH_VERSION = 'v26.0';
 
-export type CapiEventName = 'Decode' | 'EmailGiven' | 'InterestYes';
+// One event, not three (spec.md §10). The canon copy says Meta is told that a
+// decode happened and nothing else, and that sentence is the specification.
+// The email gate and the interest question are measured in the events table by
+// ops/funnel.sql, never sent out.
+export type CapiEventName = 'Decode';
 
 export type SkipReason = 'disabled' | 'synthetic' | 'gpc' | 'not_from_ad';
 

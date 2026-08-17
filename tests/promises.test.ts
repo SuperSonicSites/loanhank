@@ -44,6 +44,15 @@ const PROMISES: Promised[] = [
   { phrase: 'We will not email you again.', keptBy: 'an unsubscribed address is refused' },
   { phrase: 'We will say so when it does.', keptBy: 'produces a CHECKS OUT stamp from the shipped benchmark table' },
 
+  // The protective promise under the homepage worked ticket. "You'll know
+  // before you sign" is kept by the amber path being reachable: a deal that
+  // prices above the card comes back stamped LOOK CLOSER from the real seeded
+  // table, and the canary fails the build if that path ever silently abstains.
+  {
+    phrase: "you'll know before you sign",
+    keptBy: 'produces a LOOK CLOSER stamp from the shipped benchmark table',
+  },
+
   // The follow-up sequence: disclosed at capture rather than requested, which
   // is the other half of the posture in spec.md §10.
   { phrase: "We'll follow up once about your deal", keptBy: 'day four goes out once and only once' },
@@ -97,10 +106,6 @@ const PROMISES: Promised[] = [
   {
     phrase: 'Because you were going to wonder',
     notADelivery: 'describes the reader, promises nothing',
-  },
-  {
-    phrase: 'we are not going to guess at a number we have not measured',
-    notADelivery: 'a refusal to predict, which is the opposite of a commitment',
   },
   {
     phrase: 'If a dealer will take six thousand dollars off for cash',
@@ -157,9 +162,11 @@ const PROMISES: Promised[] = [
  * appear here", "the teardown will follow" and "this page will say so plainly",
  * every one of which is a commitment somebody has to keep. It catches ordinary
  * descriptive sentences too, and those are registered with a reason rather
- * than hidden behind a narrower pattern.
+ * than hidden behind a narrower pattern. "you'll" joined when the protective
+ * promise shipped: a promise about what the farmer will know is still ours to
+ * keep, whoever the sentence's subject is.
  */
-const FUTURE = /\b(will|we'll|going to|we can find)\b/gi;
+const FUTURE = /\b(will|we'll|you'll|going to|we can find)\b/gi;
 
 async function productCopy(): Promise<string[]> {
   const found: string[] = [];

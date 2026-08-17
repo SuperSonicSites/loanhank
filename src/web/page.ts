@@ -190,6 +190,55 @@ button {
 .field.checkbox label { font-weight: 400; font-size: var(--text-label); }
 .field.checkbox input { width: var(--tap-min); height: var(--tap-min); margin-right: var(--s-8); vertical-align: middle; }
 
+/* The hero. Camera first on a phone, fields first on a desk: the DOM order is
+   the phone order, and the media query inverts only the hero. A calculator
+   searcher wants fields; a phone at the dealer lot wants the camera. */
+.hero { display: flex; flex-direction: column; }
+@media (min-width: 700px) {
+  .hero-manual { order: 1; }
+  .hero-camera { order: 2; margin-top: var(--s-24); }
+}
+
+/* The camera hero: a styled file input. The label is the button; the input is
+   visually hidden but still focusable, so validation and keyboards keep
+   working. capture="environment" opens a phone camera with no JavaScript. */
+.camera-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 100%; min-height: var(--control-h);
+  background: var(--denim); color: var(--input-white);
+  border: 1px solid var(--denim); border-radius: var(--radius);
+  font-size: var(--text-body); font-weight: 700; cursor: pointer;
+  margin: 0 0 var(--s-12);
+}
+.camera-input {
+  position: absolute; width: 1px; height: 1px;
+  opacity: 0; overflow: hidden; clip-path: inset(50%);
+}
+.hero-camera:has(.camera-input:focus-visible) .camera-btn { outline: 2px solid var(--denim); outline-offset: 2px; }
+/* The add-another line appears once a photo is in. Pure CSS on :valid, so the
+   no-JS path gets the same line the enhanced path does. */
+.addmore { display: none; }
+.camera-input:valid ~ .addmore { display: block; }
+.shots { display: flex; gap: var(--s-8); flex-wrap: wrap; margin: 0 0 var(--s-12); }
+.shot { display: flex; flex-direction: column; gap: var(--s-4); }
+.shot img { width: 72px; height: 72px; object-fit: cover; border: var(--hairline); border-radius: var(--radius); background: var(--input-white); }
+.retake {
+  width: auto; min-height: var(--tap-min); padding: 0 var(--s-8);
+  background: var(--paper); color: var(--denim); border: 1px solid var(--denim);
+  font-weight: 400; font-size: var(--text-footnote);
+}
+
+/* Manual entry, demoted to a native disclosure. Never a modal. */
+.hero-manual { margin-top: var(--s-8); }
+.hero-manual summary {
+  min-height: var(--tap-min); padding: var(--s-12) 0;
+  color: var(--denim); font-weight: 700; font-size: var(--text-body); cursor: pointer;
+}
+.hero-manual[open] summary { margin-bottom: var(--s-8); }
+
+/* A plain ruled block: the whose-side lines, the worked sample. */
+.block { border-top: var(--hairline); margin: var(--s-32) 0 0; padding-top: var(--s-24); }
+
 /* The ticket. Labels left in Libre Franklin, values right in Courier Prime,
    hairline between every line, double rule above the total. No zebra, no
    header fill, no cell borders, no card, no shadow, no rounded wrapper. */
@@ -248,8 +297,6 @@ button {
 .gate { border-top: var(--hairline); margin: var(--s-32) 0 0; padding-top: var(--s-24); }
 .gate h2 { font-size: var(--text-verdict); font-weight: 600; margin: 0 0 var(--s-8); }
 
-.divider { text-align: center; color: var(--ink-soft); font-size: var(--text-receipt); margin: var(--s-24) 0 var(--s-8); }
-
 footer { margin: var(--s-48) 0 0; padding-top: var(--s-16); border-top: var(--hairline); }
 footer p { font-size: var(--text-footnote); color: var(--ink-soft); margin: 0; }
 footer nav { font-size: var(--text-footnote); margin: 0 0 var(--s-8); }
@@ -287,9 +334,44 @@ export /**
  * and held, and the install dialog opens only when a farmer clicks the one
  * line inviting him to. That is the difference between an invitation and an
  * interruption, and design.md §10 only forbids the second one.
+ *
+ * The third thing is the many-photos enhancement on the camera hero. The
+ * native input takes one photo (or a gallery multi-select where the OS allows)
+ * with no JavaScript at all; this accumulates captures into the same input via
+ * DataTransfer, draws the thumbnail row with a retake on each, and holds the
+ * four-photo ceiling client-side. The server holds it again either way.
  */
 const script = `(function(){
 var d=null;
+var dt=null;
+function redrawShots(inp){
+var row=document.getElementById('shots');
+if(!row)return;
+row.textContent='';
+Array.prototype.forEach.call(dt.files,function(f,i){
+var s=document.createElement('span');s.className='shot';
+var img=document.createElement('img');
+img.alt='Page '+(i+1);
+if(f.type.indexOf('image/')===0)img.src=URL.createObjectURL(f);
+var b=document.createElement('button');
+b.type='button';b.className='retake';b.textContent='Retake';
+b.addEventListener('click',function(){
+var next=new DataTransfer();
+Array.prototype.forEach.call(dt.files,function(g,j){if(j!==i)next.items.add(g);});
+dt=next;inp.files=dt.files;redrawShots(inp);});
+s.appendChild(img);s.appendChild(b);row.appendChild(s);});
+row.hidden=dt.files.length===0;
+}
+document.addEventListener('change',function(ev){
+var inp=ev.target;
+if(!inp||inp.id!=='photo'||!window.DataTransfer)return;
+if(dt===null)dt=new DataTransfer();
+Array.prototype.forEach.call(inp.files,function(f){
+if(dt.items.length>=4)return;
+dt.items.add(f);});
+inp.files=dt.files;
+redrawShots(inp);
+});
 addEventListener('beforeinstallprompt',function(e){e.preventDefault();d=e;
 var b=document.getElementById('install');if(b)b.hidden=false;});
 function beacon(n){try{navigator.sendBeacon&&navigator.sendBeacon('/event',n)}catch(e){}}
@@ -422,26 +504,23 @@ export interface PhotoPath {
   turnstileSiteKey: string;
 }
 
-/** Screen 1. The tool is the landing page. */
-export function renderForm(
-  values: FormValues = EMPTY_FORM,
-  problems: string[] = [],
-  photo: PhotoPath | null = null,
-  campaign: Record<string, string> = {},
-  fbc: string | null = null,
+/**
+ * The typed path: four fields plus frequency, a plain no-JS POST (spec.md
+ * Decision 2). It renders in three places: inside the manual disclosure on the
+ * landing page, as the whole hero when the photo path is off, and inline
+ * beside an extraction failure so no farmer meets a dead end without the
+ * typing path in view.
+ *
+ * `entry` names the path for the funnel: 'typed' for the disclosure, and
+ * 'recovery' when these fields rescued a failed photo.
+ */
+function typedForm(
+  values: FormValues,
+  entry: 'typed' | 'recovery',
+  campaign: Record<string, string>,
+  fbc: string | null,
 ): string {
-  const problemBlock = problems.length === 0
-    ? ''
-    : `  <div class="problem">
-    <p>We could not read a couple of these. Fix them and run it again.</p>
-    <ul>${problems.map((problem) => `<li>${escapeHtml(problem)}</li>`).join('')}</ul>
-  </div>
-`;
-
-  return shell('LoanHank', `${problemBlock}  <h1>Point your phone at the dealer's quote. See the number they didn't print.</h1>
-  <p>Free, takes about a minute, and your numbers stay here unless you say otherwise.</p>
-
-  <form method="post" action="/decode">
+  return `  <form method="post" action="/decode">
     <div class="field">
       <label for="quotedPrice">Quoted price</label>
       <input type="text" id="quotedPrice" name="quotedPrice" inputmode="decimal" value="${escapeHtml(values.quotedPrice)}" required>
@@ -465,19 +544,106 @@ export function renderForm(
       <input type="text" id="paymentCount" name="paymentCount" inputmode="numeric" value="${escapeHtml(values.paymentCount)}" required>
     </div>
     <input type="hidden" name="standalone" value="">
+    <input type="hidden" name="entry" value="${entry}">
 ${campaignFields(campaign)}${fbcField(fbc)}    <button type="submit">Run the numbers</button>
   </form>
-${photoBlock(photo, fbc)}`);
+`;
 }
 
 /**
- * The photo path, and the only JavaScript in the product.
- *
- * It renders only when Turnstile is configured, because the upload calls a
- * vision model and every call costs real money. The typed form above never
- * depends on any of this: design.md section 9 makes a working no-JS form law,
- * so the challenge lives here and nowhere near it.
+ * The whose-side block. Posture, never the label: canon in design.md §2, and
+ * the how-we-make-money link sits beside it because a claimed allegiance and a
+ * disclosed angle must always be visible together (design.md §10).
  */
+const WHOSE_SIDE = `  <div class="block">
+    <p>The dealer's math sells the machine. The lender's math sells the money. This math just shows you the number.</p>
+    <p class="note"><a href="/how-we-make-money">How we make money</a></p>
+  </div>
+`;
+
+/**
+ * The worked ticket on the front door: canonical example A from design.md
+ * §2¾, rendered static. Every figure below is engine output. None of it may be
+ * typed fresh here: tests/design-canon.test.ts recomputes the canon block from
+ * the engine and pins this sample to it, so a drifted figure fails the build.
+ *
+ * It blesses the dealer's promo on purpose. The front door showing the tool
+ * approving a dealer's deal before the farmer has typed a thing is the
+ * neutrality proof doing the advocacy's work.
+ */
+const WORKED_SAMPLE = `  <div class="block">
+    <p>Here is one, worked.</p>
+    <div class="ticket">
+      <hr class="ticket-rule">
+      <p class="headline-label">Your real rate</p>
+      <p class="headline-rate">2.94%</p>
+      <p class="stamp stamp-good">CHECKS OUT</p>
+      <p class="verdict-line">This deal checks out. We'd take it.</p>
+      <hr class="ticket-rule">
+      <table>
+        <tr><td>Quoted price</td><td>$84,500</td></tr>
+        <tr><td>Cash discount</td><td>− $6,000</td></tr>
+        <tr><td>Cash price today</td><td>$78,500</td></tr>
+        <tr><td>Total of payments</td><td>$84,500</td></tr>
+        <tr><td>What financing costs</td><td>$6,000</td></tr>
+      </table>
+      <hr class="ticket-rule-double">
+      <p class="reference">Comparable published equipment rate: 7.25%, subject to approval. AgDirect, $25,000-$99,999, 5 years, fixed, as of 2026-08-01.</p>
+    </div>
+    <p>If the deal is good, we say so. If it isn't, you'll know before you sign.</p>
+  </div>
+`;
+
+/** Screen 1. The tool is the landing page, and the hero is the camera. */
+export function renderForm(
+  values: FormValues = EMPTY_FORM,
+  problems: string[] = [],
+  photo: PhotoPath | null = null,
+  campaign: Record<string, string> = {},
+  fbc: string | null = null,
+): string {
+  const problemBlock = problems.length === 0
+    ? ''
+    : `  <div class="problem">
+    <p>We could not read a couple of these. Fix them and run it again.</p>
+    <ul>${problems.map((problem) => `<li>${escapeHtml(problem)}</li>`).join('')}</ul>
+  </div>
+`;
+
+  // When the photo path is off there is no hero to invert and no disclosure to
+  // demote into: the typed form is the whole tool and renders in the open.
+  const tool = photo === null || photo.turnstileSiteKey === ''
+    ? typedForm(values, 'typed', campaign, fbc)
+    : `  <div class="hero">
+${cameraHero(photo, campaign, fbc)}    <details class="hero-manual">
+      <summary>Type the numbers instead</summary>
+${typedForm(values, 'typed', campaign, fbc)}    </details>
+  </div>
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+`;
+
+  return shell('LoanHank', `${problemBlock}  <h1>Point your phone at the dealer's quote. See the number they didn't print.</h1>
+  <p>Free, takes about a minute, and your numbers stay here unless you say otherwise.</p>
+
+${tool}${WHOSE_SIDE}${WORKED_SAMPLE}`);
+}
+
+/**
+ * The failure screen for the photo path. The message renders beside the typed
+ * fields, not instead of them: a farmer whose photo failed is standing at the
+ * desk with the paper in his hand, and the typing path must be in view.
+ */
+export function renderExtractFailure(
+  message: string,
+  campaign: Record<string, string> = {},
+  fbc: string | null = null,
+): string {
+  return shell('LoanHank', `  <div class="problem">
+    <p>${escapeHtml(message)}</p>
+  </div>
+${typedForm(EMPTY_FORM, 'recovery', campaign, fbc)}`);
+}
+
 /**
  * Campaign labels ride through the form as hidden fields, so a decode can be
  * attributed to the ad that produced it with no cookie and no JavaScript.
@@ -504,21 +670,29 @@ function fbcField(fbc: string | null | undefined): string {
 `;
 }
 
-function photoBlock(photo: PhotoPath | null, fbc: string | null = null): string {
-  if (photo === null || photo.turnstileSiteKey === '') return '';
-  return `
-  <p class="divider">or</p>
-
-  <form method="post" action="/extract" enctype="multipart/form-data">
-    <div class="field">
-      <label for="photo">Snap the quote instead</label>
-      <input type="file" id="photo" name="photo" accept="image/jpeg,image/png,application/pdf" capture="environment" required>
-    </div>
-${fbcField(fbc)}    <div class="cf-turnstile" data-sitekey="${escapeHtml(photo.turnstileSiteKey)}" data-action="extract"></div>
-    <button type="submit" class="secondary">Run the numbers</button>
-    <p class="note">Reading your paper takes about 10 seconds. The photo is never saved.</p>
-  </form>
-  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+/**
+ * The camera hero. One full-width button that opens the camera directly: a
+ * styled file input with capture="environment", which needs no JavaScript to
+ * open a phone camera. A decode accepts up to four photos of the same paper;
+ * accumulating captures is the JS enhancement, never the requirement, and the
+ * native input alone takes one photo or a gallery multi-select where the OS
+ * allows.
+ *
+ * It renders only when Turnstile is configured, because the upload calls a
+ * vision model and every call costs real money. The typed form never depends
+ * on any of this: design.md section 9 makes a working no-JS form law, so the
+ * challenge lives here and nowhere near it.
+ */
+function cameraHero(photo: PhotoPath, campaign: Record<string, string>, fbc: string | null): string {
+  return `    <form method="post" action="/extract" enctype="multipart/form-data" class="hero-camera">
+      <label class="camera-btn" for="photo">Snap the quote</label>
+      <input type="file" id="photo" name="photo" class="camera-input" accept="image/jpeg,image/png,application/pdf" capture="environment" multiple required>
+      <div id="shots" class="shots" hidden></div>
+      <p class="note addmore">Add the next page, or the fine print.</p>
+${campaignFields(campaign)}${fbcField(fbc)}      <div class="cf-turnstile" data-sitekey="${escapeHtml(photo.turnstileSiteKey)}" data-action="extract"></div>
+      <button type="submit">Run the numbers</button>
+      <p class="note">Reading your paper takes about 10 seconds. The photo is never saved.</p>
+    </form>
 `;
 }
 
@@ -591,6 +765,10 @@ export interface ConfirmView {
   warnings: string[];
   /** The click tag carried forward, or null when the visit carried none. */
   fbc?: string | null;
+  /** How many photos this read came from, carried to the decode event. */
+  photoCount?: number;
+  /** Campaign labels carried through, spec.md §9.5's four and nothing else. */
+  campaign?: Record<string, string>;
 }
 
 /**
@@ -660,7 +838,8 @@ ${row.hint ? `      <p class="note">${escapeHtml(row.hint)}</p>
   <form method="post" action="/decode">
     <input type="hidden" name="ledger" value="1">
     <input type="hidden" name="extracted" value="${extractedSnapshot(view)}">
-${fbcField(view.fbc)}
+    <input type="hidden" name="photoCount" value="${view.photoCount ?? 1}">
+${campaignFields(view.campaign ?? {})}${fbcField(view.fbc)}
 ${view.rows.map(field).join('\n')}
     <div class="field">
       <label for="paymentFrequency">How often you pay</label>

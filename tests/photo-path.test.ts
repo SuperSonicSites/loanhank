@@ -62,7 +62,7 @@ describe('the live photo path never lets the provider retain a quote', () => {
       },
     };
     await new OpenAIQuoteExtractor(config, client as never)
-      .extractQuote('data:image/jpeg;base64,AAAA', 'image/jpeg');
+      .extractQuote([{ dataUrl: 'data:image/jpeg;base64,AAAA', contentType: 'image/jpeg' }]);
 
     expect(calls).toHaveLength(1);
     expect(calls[0]).toMatchObject({ model: 'test-primary', store: false });
@@ -79,7 +79,7 @@ describe('the live photo path never lets the provider retain a quote', () => {
       },
     };
     await new OpenAIQuoteExtractor(config, client as never)
-      .extractQuote('data:image/jpeg;base64,AAAA', 'image/jpeg');
+      .extractQuote([{ dataUrl: 'data:image/jpeg;base64,AAAA', contentType: 'image/jpeg' }]);
 
     const serialized = JSON.stringify(sent);
     // The farmer's own identifiers cannot be in the request because nothing
@@ -87,6 +87,33 @@ describe('the live photo path never lets the provider retain a quote', () => {
     // them must be.
     expect(serialized).toContain('Never return the dealership name');
     expect(serialized).not.toContain('"store":true');
+  });
+
+  it('merges every page into ONE call, read as one paper', async () => {
+    // Many photos, one decode. The reconciliation and multi-option laws apply
+    // across the pages as one deal, so the pages must arrive together: one
+    // call per image would hand the reader a paper it can never reconcile.
+    const calls: Array<{ input: Array<{ content: Array<{ type: string }> }> }> = [];
+    const client = {
+      responses: {
+        parse: vi.fn(async (body: never) => {
+          calls.push(body);
+          return { output_parsed: extraction() };
+        }),
+      },
+    };
+    await new OpenAIQuoteExtractor(config, client as never).extractQuote([
+      { dataUrl: 'data:image/jpeg;base64,AAAA', contentType: 'image/jpeg' },
+      { dataUrl: 'data:image/png;base64,BBBB', contentType: 'image/png' },
+      { dataUrl: 'data:application/pdf;base64,CCCC', contentType: 'application/pdf' },
+    ]);
+
+    expect(calls).toHaveLength(1);
+    const content = calls[0]?.input[0]?.content ?? [];
+    expect(content.filter((part) => part.type === 'input_image')).toHaveLength(2);
+    expect(content.filter((part) => part.type === 'input_file')).toHaveLength(1);
+    // The instruction that binds the pages into one paper travels with them.
+    expect(JSON.stringify(calls[0])).toContain('one paper');
   });
 });
 

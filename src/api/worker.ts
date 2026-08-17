@@ -21,11 +21,11 @@ import {
   type ConfirmableField, type QuoteExtraction,
 } from '../shared/schema.js';
 import {
-  renderConfirm, renderForm, renderNotice, renderTicket, renderUnpriceable, renderVerdictTicket,
-  setFooterPostalAddress,
+  renderConfirm, renderExtractFailure, renderForm, renderNotice, renderTicket, renderUnpriceable,
+  renderVerdictTicket, setFooterPostalAddress,
   type ConfirmRow, type FormValues,
 } from '../web/page.js';
-import { assertUploadAllowed, PublicApiError } from './security.js';
+import { assertUploadAllowed, MAX_PHOTOS_PER_DECODE, PublicApiError } from './security.js';
 import { OpenAIQuoteExtractor } from './extractor.js';
 import { renderTeardownPdf, type TeardownLine } from './teardown-pdf.js';
 import { FOLLOWUP_TEXT_VERSION } from '../web/page.js';
@@ -229,7 +229,7 @@ function confirmRows(extraction: QuoteExtraction): ConfirmRow[] {
 
 const WARNING_COPY: Record<string, string> = {
   NOT_AN_EQUIPMENT_QUOTE: 'This does not look like an equipment quote. Check the numbers carefully before you run it.',
-  IMAGE_TOO_BLURRY: 'Too blurry to read. Try again in better light.',
+  IMAGE_TOO_BLURRY: 'Too blurry to read. Try again in better light, or type the numbers.',
   MULTIPLE_QUOTES_DETECTED: 'There looks to be more than one quote on this page. We read one of them.',
   HANDWRITING_UNREADABLE: 'Some of this is handwritten and we could not read it.',
   PAGE_APPEARS_CROPPED: 'Part of the page is cut off. Check for anything missing.',
@@ -931,6 +931,11 @@ app.post('/decode', async (c) => {
     // view both kept theirs. Cost per completed decode is the round-one gate
     // (spec.md §7.1) and it cannot be computed from two thirds of the decodes.
     ...campaignFromBody(body),
+    // Which door the farmer came through: the manual disclosure, or the typed
+    // fields rendered beside a photo failure. The camera hero lands on the
+    // ledger path, so the three are distinguishable in the funnel (spec.md
+    // §7.1 calibration note).
+    entry: String(body.entry ?? '') === 'recovery' ? 'recovery' : 'typed',
     promo_price_rate_bps: result.promoPriceRateBps,
     payment_frequency: form.paymentFrequency,
   });
@@ -961,7 +966,7 @@ app.post('/decode', async (c) => {
 
 app.post('/extract', async (c) => {
   if (!(await withinRateLimit(c, 'extract'))) {
-    return c.html(renderUnpriceable('That is a lot of photos in one minute. Give it a minute and try again.'), 429);
+    return c.html(renderExtractFailure('That is a lot of photos in one minute. Give it a minute and try again, or type the numbers.'), 429);
   }
 
   const siteKey = typeof c.env.TURNSTILE_SITE_KEY === 'string' ? c.env.TURNSTILE_SITE_KEY : '';
@@ -970,12 +975,19 @@ app.post('/extract', async (c) => {
     // Fail closed and say so plainly rather than accepting a photo we have no
     // way to read or protect.
     return c.html(
-      renderUnpriceable('Reading photos is not switched on yet. Type the four numbers off your paper instead.'),
+      renderExtractFailure('Reading photos is not switched on yet. Type the four numbers off your paper instead.'),
       503,
     );
   }
 
-  const body = await c.req.parseBody();
+  // Every failure from here down renders the typed fields inline beside the
+  // message, so no farmer meets a dead end without the typing path in view.
+  const body = await c.req.parseBody({ all: true });
+  const campaign = campaignFromBody(body);
+  const fbc = gpcHonoured(c) ? null : fbcFromBody(body.fbc);
+  const fail = (message: string, status: 403 | 413 | 422 | 502) =>
+    c.html(renderExtractFailure(message, campaign, fbc), status);
+
   const token = String(body['cf-turnstile-response'] ?? '');
   const passed = await turnstilePassed(
     c.env,
@@ -985,57 +997,67 @@ app.post('/extract', async (c) => {
   );
   if (!passed) {
     c.executionCtx.waitUntil(recordEvent(c.env, 'extract_rejected', null, { reason: 'turnstile' }));
-    return c.html(renderUnpriceable('We could not confirm that came from a person. Reload the page and try once more.'), 403);
+    return fail('We could not confirm that came from a person. Reload the page and try once more, or type the numbers.', 403);
   }
 
-  const file = body.photo;
-  if (!(file instanceof File)) {
-    return c.html(renderUnpriceable('Pick a photo of the quote first.'), 422);
+  // Many photos, one decode: pages of the same paper, merged into one read.
+  const files = [body.photo].flat().filter((entry): entry is File => entry instanceof File);
+  if (files.length === 0) {
+    return fail('Pick a photo of the quote first.', 422);
+  }
+  if (files.length > MAX_PHOTOS_PER_DECODE) {
+    c.executionCtx.waitUntil(recordEvent(c.env, 'extract_rejected', null, { reason: 'too_many_photos' }));
+    return fail('One decode reads up to four photos. Pick the four that show the whole deal.', 413);
   }
 
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  try {
-    assertUploadAllowed(file.type, bytes.byteLength);
-  } catch (error) {
-    const message = error instanceof PublicApiError
-      ? 'That file is either too large or not a photo we can read. Send a JPG, a PNG, or a PDF under 20 MB.'
-      : 'We could not read that file.';
-    c.executionCtx.waitUntil(recordEvent(c.env, 'extract_rejected', null, { reason: 'upload_guard' }));
-    return c.html(renderUnpriceable(message), 422);
+  // The per-image size law is unchanged: each photo passes the same guard one
+  // always did, and one oversized page refuses the lot.
+  const pages: Array<{ dataUrl: string; contentType: string }> = [];
+  for (const file of files) {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    try {
+      assertUploadAllowed(file.type, bytes.byteLength);
+    } catch (error) {
+      const message = error instanceof PublicApiError
+        ? 'One of those files is either too large or not a photo we can read. Send JPGs, PNGs, or PDFs under 20 MB each.'
+        : 'We could not read one of those files.';
+      c.executionCtx.waitUntil(recordEvent(c.env, 'extract_rejected', null, { reason: 'upload_guard' }));
+      return fail(message, error instanceof PublicApiError && error.status === 413 ? 413 : 422);
+    }
+    pages.push({ dataUrl: `data:${file.type};base64,${Buffer.from(bytes).toString('base64')}`, contentType: file.type });
   }
 
-  // The photo is never written down. It goes from this request straight to the
-  // reader as bytes and is gone when the answer comes back. Nothing to delete,
-  // nothing to leak, nothing for a retention sweep to miss.
+  // The photos are never written down. They go from this request straight to
+  // the reader as bytes and are gone when the answer comes back. Nothing to
+  // delete, nothing to leak, nothing for a retention sweep to miss.
   let extraction;
   try {
-    const dataUrl = `data:${file.type};base64,${Buffer.from(bytes).toString('base64')}`;
-    extraction = await new OpenAIQuoteExtractor(getConfig(c.env)).extractQuote(dataUrl, file.type);
+    extraction = await new OpenAIQuoteExtractor(getConfig(c.env)).extractQuote(pages);
   } catch (error) {
-      // A failed read is a re-snap the farmer has to do, and the only place we
+    // A failed read is a re-snap the farmer has to do, and the only place we
     // would ever see it. Losing it means losing the signal that the extractor
     // is drifting on some quote format we have never met.
     c.executionCtx.waitUntil(recordEvent(c.env, 'extract_failed', null, {
-      content_type: file.type,
-      size_bytes: bytes.byteLength,
+      photo_count: files.length,
+      size_bytes: pages.reduce((total, page) => total + page.dataUrl.length, 0),
       reason: error instanceof Error ? error.name : 'unknown',
     }));
-    return c.html(
-      renderUnpriceable('We could not read that one. Try again in better light, or type the numbers off your paper.'),
-      502,
-    );
+    return fail('Too blurry to read. Try again in better light, or type the numbers.', 502);
   }
 
   c.executionCtx.waitUntil(recordEvent(c.env, 'extract', null, {
     document_type: extraction.document_type,
     warnings: extraction.warnings,
+    photo_count: files.length,
   }));
 
   return c.html(renderConfirm({
     rows: confirmRows(extraction),
     frequency: extraction.payment_frequency.value ?? 'monthly',
     warnings: extraction.warnings.map((code) => WARNING_COPY[code] ?? code),
-    fbc: gpcHonoured(c) ? null : fbcFromBody(body.fbc),
+    fbc,
+    photoCount: files.length,
+    campaign,
   }));
 });
 
@@ -1221,6 +1243,11 @@ async function decodeFullLedger(c: {
   const eventId = await recordEvent(c.env, 'decode', decodeId, {
     ...campaignFromBody(body),
     path: 'ledger',
+    // The ledger arrives off the confirm screen, which is the camera hero's
+    // landing. photo_count is what the farmer's browser claimed, clamped to
+    // the same ceiling the upload route enforces for real.
+    entry: 'hero',
+    photo_count: Math.min(4, Math.max(0, Math.trunc(Number(body.photoCount)) || 0)),
     real_rate_all_in_bps: decoded.realRateAllInBps,
     verdict: verdict.verdict,
     country,
@@ -1371,8 +1398,9 @@ app.post('/email', async (c) => {
     ), 502);
   }
 
-  const eventId = await recordEvent(c.env, 'email', parsed.data.decodeId, {});
-  measureAd(c, 'EmailGiven', eventId, fbcFromBody(body.fbc));
+  // Measured in the events table only. Meta hears about decodes and nothing
+  // else (spec.md §10, one event not three), so nothing fires here.
+  await recordEvent(c.env, 'email', parsed.data.decodeId, {});
 
   // The confirmation screen carries the second opt-in, and only when the
   // farmer's own paper gives us a date to remind him about. No date, no offer.
@@ -1410,10 +1438,9 @@ app.post('/interest', async (c) => {
   const decodeId = String(body.decodeId ?? '');
   const answer = String(body.answer ?? '') === 'yes' ? 'yes' : 'not_now';
 
-  const eventId = await recordEvent(c.env, answer === 'yes' ? 'interest_yes' : 'interest_not_now', decodeId || null, {});
-  // A yes is the measured conversion. A "not now" is an answer, not an event
-  // an ad platform optimizes toward, so nothing fires for it.
-  if (answer === 'yes') measureAd(c, 'InterestYes', eventId, fbcFromBody(body.fbc));
+  // Measured in the events table only. Meta hears about decodes and nothing
+  // else (spec.md §10, one event not three), so nothing fires here either way.
+  await recordEvent(c.env, answer === 'yes' ? 'interest_yes' : 'interest_not_now', decodeId || null, {});
 
   return c.html(renderNotice(
     answer === 'yes' ? 'Noted' : 'Understood',

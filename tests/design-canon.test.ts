@@ -12,6 +12,7 @@ import {
   type BenchmarkRow,
 } from '../src/finance/index.js';
 import { parseMoneyToCents } from '../src/shared/schema.js';
+import { renderForm } from '../src/web/page.js';
 
 // design.md §2¾ prints two worked deals. Every figure in them is engine
 // output, and this test is what makes that true rather than aspirational.
@@ -64,6 +65,26 @@ function figure(entries: Map<string, string>, key: string): string {
   const value = entries.get(key);
   expect(value, `design.md canon block is missing \`${key}\``).toBeDefined();
   return value as string;
+}
+
+/**
+ * A row from the design.md §2 canonical microcopy table, by moment label.
+ *
+ * The words live between the first pair of backticks; anything after them in
+ * the cell is a law note, not copy. Split rather than regex: the cell is
+ * delimited by pipes and backticks, and building that pattern inside a
+ * template literal is how the first version of this helper silently matched
+ * nothing.
+ */
+async function canonMicrocopy(label: string): Promise<string> {
+  const design = await readFile(DESIGN_DOC, 'utf8');
+  const line = design.split(String.fromCharCode(10))
+    .find((row) => row.startsWith(`| ${label} |`));
+  expect(line, `design.md has no canon row for "${label}"`).toBeDefined();
+  const cell = (line as string).split('|')[2] ?? '';
+  const words = /`([^`]*)`/.exec(cell);
+  expect(words, `the canon row for "${label}" carries no backticked words`).not.toBeNull();
+  return (words as RegExpExecArray)[1] as string;
 }
 
 describe('design.md canonical example A, CHECKS OUT', () => {
@@ -338,17 +359,6 @@ describe('rendered microcopy matches the canon table', () => {
   // the source of truth. Until now nothing checked that the product said what
   // the table said, which is how a "Read my quote" button that appears in no
   // table shipped, and how the footer line drifted from it.
-  async function canonMicrocopy(label: string): Promise<string> {
-    const design = await readFile(DESIGN_DOC, 'utf8');
-    // Split rather than regex: the table cell is delimited by pipes and backticks,
-    // and building that pattern inside a template literal is how the first
-    // version of this helper silently matched nothing.
-    const line = design.split(String.fromCharCode(10))
-      .find((row) => row.startsWith(`| ${label} |`));
-    expect(line, `design.md has no canon row for "${label}"`).toBeDefined();
-    const cell = (line as string).split('|')[2] ?? '';
-    return cell.trim().replace(/^`|`$/g, '');
-  }
 
   it('prints the canonical footer trust line, verbatim', async () => {
     const canonical = await canonMicrocopy('footer trust line');
@@ -371,5 +381,81 @@ describe('rendered microcopy matches the canon table', () => {
     const canonical = await canonMicrocopy('photo button');
     const page = await readFile(new URL('../src/web/page.ts', import.meta.url), 'utf8');
     expect(page).toContain(canonical);
+  });
+
+  it('renders the homepage redesign moments from the canon table, verbatim', async () => {
+    // The camera hero, the manual disclosure, the add-another line, the retake,
+    // the whose-side block and the worked-ticket frame all entered the table in
+    // the same commit that shipped them. This pins the render to the table.
+    const html = renderForm(undefined, [], { turnstileSiteKey: 'canon-check' });
+    for (const label of [
+      'photo button', 'add another page', 'retake button', 'manual disclosure',
+      'whose side', 'worked ticket intro', 'protective promise',
+    ]) {
+      expect(html, `the homepage does not render the canon "${label}" words`)
+        .toContain(await canonMicrocopy(label));
+    }
+  });
+
+  it('keeps the failure copy and the straight answer on canon too', async () => {
+    const worker = await readFile(new URL('../src/api/worker.ts', import.meta.url), 'utf8');
+    expect(worker).toContain(await canonMicrocopy('blurry photo'));
+    expect(worker).toContain(await canonMicrocopy('too many photos'));
+    const pages = await readFile(new URL('../src/web/pages.ts', import.meta.url), 'utf8');
+    expect(pages).toContain(await canonMicrocopy('straight answer, whose side'));
+  });
+});
+
+
+describe('the homepage worked ticket is canon, engine-recomputed', () => {
+  // The front door renders canonical example A as a static mini-ticket. The
+  // figures are string constants in page.ts, and this is what stops them
+  // drifting: the canon block above is recomputed from the engine, and the
+  // homepage is pinned to the canon block, so a moved figure fails twice.
+  it('prints example A exactly as canon states it', async () => {
+    const entries = await canon();
+    const html = renderForm(undefined, [], { turnstileSiteKey: 'canon-check' });
+    for (const key of [
+      'a.quoted_price', 'a.cash_discount', 'a.cash_price', 'a.total_of_payments',
+      'a.cost_versus_cash', 'a.real_rate', 'a.line', 'a.reference',
+    ]) {
+      expect(html, `the homepage sample is missing canon \`${key}\``)
+        .toContain(figure(entries, key));
+    }
+    expect(html).toContain('CHECKS OUT');
+  });
+
+  it('blesses the dealer on the front door, stamp and all', async () => {
+    // The neutrality proof doing the advocacy's work: the tool approving a
+    // dealer's deal before the farmer has typed a thing.
+    const entries = await canon();
+    expect(figure(entries, 'a.verdict')).toBe('CHECKS OUT');
+    const html = renderForm(undefined, [], { turnstileSiteKey: 'canon-check' });
+    expect(html).toContain('stamp stamp-good');
+  });
+
+  it('renders the sample whether or not the photo path is on', () => {
+    // The proof is not conditional on Turnstile being configured.
+    expect(renderForm()).toContain('Here is one, worked.');
+  });
+
+  it('keeps the ruled page order: hero, disclosure, whose side, worked ticket', () => {
+    // The mobile DOM order is the law; desktop inverts only the hero, by CSS.
+    const html = renderForm(undefined, [], { turnstileSiteKey: 'canon-check' });
+    // Measured from the h1, so the class names in the stylesheet up in the
+    // head cannot shadow the body order being asserted.
+    const body = html.slice(html.indexOf('<h1>'));
+    const positions = [
+      body.indexOf('<h1>'),
+      body.indexOf('hero-camera'),
+      body.indexOf('hero-manual'),
+      body.indexOf('The dealer\'s math sells the machine.'),
+      body.indexOf('Here is one, worked.'),
+      body.indexOf('<footer'),
+    ];
+    for (const position of positions) expect(position).toBeGreaterThan(-1);
+    expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+    // The inversion is a media query, never a second layout.
+    expect(html).toContain('@media (min-width: 700px)');
   });
 });

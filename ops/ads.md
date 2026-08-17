@@ -29,9 +29,10 @@ our own events table, never from the platform's dashboard.
 
 ## Meta — test flight
 
-- Objective: Sales/Conversions, optimizing on the `decode_completed` CAPI event.
-  Accept learning-limited delivery at test scale; the seed data is part of what
-  the $500 buys.
+- Objective: Sales/Conversions, optimizing on the `Decode` CAPI event, which is
+  the shipped event name and the only event Meta ever hears (spec.md §10, one
+  event not three). Accept learning-limited delivery at test scale; the seed
+  data is part of what the $500 buys.
 - ONE campaign, ONE ad set, THREE creatives. Never split audiences at this budget;
   fragmenting $500 starves learning. Test hooks, not audiences.
 - Audience: US, 25-65, interest stack loose (John Deere, Case IH, Farm Journal,
@@ -65,6 +66,20 @@ our own events table, never from the platform's dashboard.
 Copy law applies to ads same as product: sentence case, no em dashes, no
 exclamation marks, no staccato triads, no invented urgency. Real deadlines only
 (the quote's own expiry date may appear in retargeting copy later, never a timer).
+
+## Headline bank
+
+The ad test is the headline test: the page's H1 follows the winning hook once
+the test has spoken, and the page never runs its own test (design.md §5).
+Approved hooks:
+
+1. `0% isn't 0%. Snap the quote and see the real rate.`
+2. `That "0%" has a price. Your phone can find it in about a minute.`
+3. `We ran a "0% for 60 months" offer through the math. It cost 2.94%.`
+4. `The 0% deal isn't free. See what yours really costs.`
+
+The 2.94% in hook 3 is canon (design.md §2¾ example A, engine-recomputed by
+tests/design-canon.test.ts). If canon moves, the hook moves with it.
 
 ## Google Search — the moment channel
 
@@ -104,9 +119,9 @@ exclamation marks, no staccato triads, no invented urgency. Real deadlines only
 - Source of truth: our events table. Every landing URL carries
   `utm_source/utm_medium/utm_campaign/utm_content` (creative-level), stored on the
   decode row's events. Platform dashboards are for delivery health only.
-- Meta gets decode/email/interest events via server-side CAPI. No pixel, no
-  third-party cookies, no banner. Google gets nothing back v1; offline conversion
-  upload is a later decision.
+- Meta gets the `Decode` event via server-side CAPI, and nothing else (spec.md
+  §10, one event not three). No pixel, no third-party cookies, no banner. Google
+  gets nothing back v1; offline conversion upload is a later decision.
 
 ## Gates — written before spend, judged after, feelings don't vote
 
@@ -119,6 +134,10 @@ exclamation marks, no staccato triads, no invented urgency. Real deadlines only
 
 - Cost per lead is NOT judged until $2-3k total spend; at $500 the interest-yes
   count is noise (n of 3-10). Anyone reading a CPL off the test is reading static.
+- The click→decode gate was calibrated on the four-field typed path. The camera
+  hero may legitimately land lower while producing richer, verdict-capable rows
+  (spec.md §7.1 calibration note). Events split hero, disclosure, and recovery
+  decodes and carry photo count, so read the split before judging the gate.
 - Kill = stop that channel/creative, diagnose, fix one thing, retest once. Two
   kills on the same hook = the hook is wrong, rotate in a new one from the
   headline bank. No new strategy hunts between tests.
