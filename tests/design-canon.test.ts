@@ -478,6 +478,34 @@ describe('the homepage keeps the ruled shape', () => {
     expect(html()).toContain('<button type="submit" class="camera-run">');
   });
 
+  // design.md §9: the page must work at 200% zoom and on an iPhone SE, which
+  // means it may never scroll sideways. Two real defects caused exactly that
+  // and both are invariants of the stylesheet rather than of any figure, so
+  // they are pinned here. There is no layout engine in this suite; a browser
+  // measured the fix (0px overflow from 320px to 1440px) and these keep the
+  // two causes from coming back unnoticed.
+  it('hides the file input with a rule that outranks input[type="file"]', () => {
+    // The bug: `.camera-input` is one class (0,1,0) and `input[type="file"]`
+    // is a type plus an attribute (0,1,1), so the type rule won and the
+    // hidden input kept width:100%. Absolutely positioned with no positioned
+    // ancestor, that resolved against the viewport and pushed the page 649px
+    // wide. The selector has to name the type as well as the class.
+    expect(html()).toContain('input[type="file"].camera-input {');
+    const rule = /input\[type="file"\]\.camera-input \{[^}]*\}/.exec(html())?.[0] ?? '';
+    expect(rule).toContain('width: 1px');
+    // Every box property the type rule would otherwise supply is zeroed, or
+    // the 1px box grows back through padding, border or min-height.
+    for (const zeroed of ['min-height: 0', 'padding: 0', 'border: 0']) {
+      expect(rule, `the hidden input can regrow through ${zeroed}`).toContain(zeroed);
+    }
+  });
+
+  it('leaves room for the fixed-width Turnstile widget on a 320px phone', () => {
+    // The widget is a fixed 300px. At the standard 16px gutters a 320px screen
+    // offers 288px, and the overflow is a scrollbar no farmer can dismiss.
+    expect(html()).toContain('@media (max-width: 339px)');
+  });
+
   it('renders no worked ticket and no stamp on the front door', () => {
     const html = renderForm(undefined, [], { turnstileSiteKey: 'canon-check' });
     expect(html).not.toContain('Here is one, worked.');

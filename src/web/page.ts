@@ -115,6 +115,15 @@ body {
 
 main { max-width: var(--col-max); margin: 0 auto; padding: var(--s-32) var(--s-16) var(--s-48); }
 
+/* The Turnstile widget is a fixed 300px and cannot be told to be narrower.
+   On a 320px phone the 16px gutters leave 288px for it, and the page gains a
+   horizontal scrollbar nobody can get rid of. Tighten the gutter rather than
+   clip or scale the widget: the challenge has to stay whole and tappable, and
+   an iPhone SE is the screen design.md sizes the fold against. */
+@media (max-width: 339px) {
+  main { padding-left: var(--s-8); padding-right: var(--s-8); }
+}
+
 .wordmark { font-weight: 900; font-size: var(--text-h1); letter-spacing: -0.02em; text-transform: uppercase; margin: 0; }
 .wordmark a { color: var(--ink); text-decoration: none; }
 .wordmark-rule { border: 0; border-top: var(--hairline); margin: var(--s-8) 0 var(--s-4); }
@@ -230,8 +239,18 @@ button {
   margin: 0 0 var(--s-8);
 }
 .camera-btn .cam { width: 32px; height: 32px; }
-.camera-input {
+/* Visually hidden, still focusable and still the thing that opens the camera.
+   The selector names the type as well as the class on purpose: input[type=
+   "file"] above is more specific than a bare class, so it won that fight and
+   kept width:100% here. An absolutely positioned element is sized against the
+   nearest positioned ancestor, .hero-camera is display:contents and generates
+   no box, and nothing else on the page is positioned, so 100% resolved
+   against the VIEWPORT and sat at the column's static offset: 649px of
+   horizontal scroll on a wide screen. clip-path hides the paint, never the
+   layout. Every inherited box property is zeroed for the same reason. */
+input[type="file"].camera-input {
   position: absolute; width: 1px; height: 1px;
+  min-height: 0; padding: 0; border: 0; margin: -1px;
   opacity: 0; overflow: hidden; clip-path: inset(50%);
 }
 .hero-camera:has(.camera-input:focus-visible) .camera-btn { outline: 2px solid var(--denim); outline-offset: 2px; }
