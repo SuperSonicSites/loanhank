@@ -38,6 +38,14 @@ interface Promised {
 const PROMISES: Promised[] = [
   // Commitments with a mechanism behind them.
   { phrase: "We'll email it.", keptBy: 'the teardown send posts to the provider' },
+
+  // The front-door subhead. "We'll show you the number they didn't print" is
+  // the whole product stated as a commitment, so it carries a sender: a decode
+  // renders the computed rate, and an unpriceable one abstains instead.
+  {
+    phrase: "we'll show you the number they didn't print",
+    keptBy: 'the decode shows the farmer the number',
+  },
   { phrase: 'We will remind you', keptBy: 'a due reminder is sent and marked' },
   { phrase: 'We will send one note before', keptBy: 'a due reminder is sent and marked' },
   { phrase: 'We will not send another about this quote.', keptBy: 'a reminder is never sent twice' },

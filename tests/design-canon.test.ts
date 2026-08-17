@@ -389,12 +389,25 @@ describe('rendered microcopy matches the canon table', () => {
     // shipped them. This pins the render to the table.
     const html = renderForm(undefined, [], { turnstileSiteKey: 'canon-check' });
     for (const label of [
-      'photo button', 'add another page', 'retake button', 'manual disclosure',
-      'whose side',
+      'h1', 'subhead', 'photo button', 'add another page', 'retake button',
+      'manual disclosure', 'whose side',
     ]) {
       expect(html, `the homepage does not render the canon "${label}" words`)
         .toContain(await canonMicrocopy(label));
     }
+  });
+
+  it('carries the H1 the spec and the ad bank both name', async () => {
+    // Three documents have to agree or the scent breaks between the ad, the
+    // spec and the page: spec.md's site headline, the ads.md hook bank, and
+    // the rendered H1.
+    const h1 = await canonMicrocopy('h1');
+    const spec = await readFile(new URL('../docs/spec.md', import.meta.url), 'utf8');
+    const ads = await readFile(new URL('../ops/ads.md', import.meta.url), 'utf8');
+    expect(spec, 'spec.md names a different site headline').toContain(h1);
+    expect(ads, 'the live H1 is not a hook in the ads.md bank').toContain(h1);
+    const html = renderForm(undefined, [], { turnstileSiteKey: 'canon-check' });
+    expect(html).toContain(`<h1>${h1}</h1>`);
   });
 
   it('keeps the failure copy and the straight answer on canon too', async () => {
@@ -408,6 +421,8 @@ describe('rendered microcopy matches the canon table', () => {
 
 
 describe('the homepage keeps the ruled shape', () => {
+  const html = () => renderForm(undefined, [], { turnstileSiteKey: 'canon-check' });
+
   // Owner ruling 2026-08-17: no worked ticket on the front door (it lives on
   // /how-we-figure-it), the snap box is the big camera-glyph hero, the
   // disclosure sits directly under it, and Turnstile renders beneath the
@@ -440,9 +455,27 @@ describe('the homepage keeps the ruled shape', () => {
   });
 
   it('carries the camera glyph on the snap box, the one icon in the product', () => {
+    // Anchored to the label element itself. Slicing to the first "Snap the
+    // quote" broke the moment the H1 started with those words too.
     const html = renderForm(undefined, [], { turnstileSiteKey: 'canon-check' });
-    const label = html.slice(html.indexOf('class="camera-btn"'), html.indexOf('Snap the quote'));
-    expect(label).toContain('svg');
+    const label = /<label class="camera-btn"[^>]*>([\s\S]*?)<\/label>/.exec(html)?.[1] ?? '';
+    expect(label, 'the snap box label moved and this test can no longer see it').not.toBe('');
+    expect(label).toContain('<svg');
+    expect(label).toContain('Snap the quote');
+  });
+
+  it('draws the snap box as an outline, so one filled button stays the action', () => {
+    // Two solid denim blocks stacked read as two competing buttons. The box is
+    // a target to put a photo into; Run the numbers is the action.
+    //
+    // Every .camera-btn rule, not the first one: the first is the flex
+    // ordering rule, and matching only that passed while asserting nothing.
+    const rules = [...html().matchAll(/\.camera-btn \{[^}]*\}/g)].map((match) => match[0]).join('');
+    expect(rules, 'the .camera-btn rules moved and this test can no longer see them').not.toBe('');
+    expect(rules).toContain('background: transparent');
+    expect(rules).toContain('border: 2px solid var(--denim)');
+    // And the one filled denim block is still the submit button.
+    expect(html()).toContain('<button type="submit" class="camera-run">');
   });
 
   it('renders no worked ticket and no stamp on the front door', () => {

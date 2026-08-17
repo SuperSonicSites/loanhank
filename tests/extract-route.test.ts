@@ -144,6 +144,36 @@ const QUICK = {
   paymentCount: '60',
 };
 
+describe('the decode shows the farmer the number', () => {
+  // The subhead promises "we'll show you the number they didn't print", which
+  // is a future-tense commitment and needs a sender like every other one
+  // (spec.md §7.3). This is that sender: a decode comes back with the rate
+  // rendered in the headline slot, not merely with a 200.
+  // The rate lands in markup, never merely in the stylesheet. Asserting on the
+  // bare class name passed on the inlined CSS, which every page carries, so
+  // the check proved nothing until it was anchored to the rendered tag.
+  const RATE_RENDERED = /class="headline-rate">\d+\.\d{2}%</;
+
+  it('renders the computed rate on the ticket', async () => {
+    const { post } = await decodeHarness();
+    const response = await post({ ...QUICK, entry: 'typed' });
+    expect(response.status).toBe(200);
+    // A real figure in the slot, never an empty box where the number goes.
+    expect(await response.text()).toMatch(RATE_RENDERED);
+  });
+
+  it('says so plainly rather than printing a number it cannot stand behind', async () => {
+    // The other half of the same promise. Numbers that do not add up to a
+    // deal get an abstention, not a figure.
+    const { post } = await decodeHarness();
+    const response = await post({ ...QUICK, payment: '1', entry: 'typed' });
+    expect(response.status).toBe(422);
+    const body = await response.text();
+    expect(body).not.toMatch(RATE_RENDERED);
+    expect(body).not.toContain('class="headline-rate">');
+  });
+});
+
 describe('decode events name their door', () => {
   it('marks a disclosure decode as typed', async () => {
     const { post, decodeMeta } = await decodeHarness();

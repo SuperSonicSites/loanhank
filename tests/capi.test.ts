@@ -3,7 +3,7 @@ import {
   buildEvent, fbcFromBody, fbcFromUrl, recordCapiOutcome, sendCapi, skipReason,
   type CapiInput, type CapiOutcome,
 } from '../src/api/capi.js';
-import { renderConfirm, renderForm, renderVerdictTicket } from '../src/web/page.js';
+import { renderConfirm, renderForm, renderUnpriceable, renderVerdictTicket } from '../src/web/page.js';
 import { app } from '../src/api/worker.js';
 import { migratedDatabase } from './helpers/d1-sqlite.js';
 
@@ -183,6 +183,35 @@ describe('ad measurement fires from the worker, and every skip is a refusal', ()
       },
     );
   });
+
+  it('serializes no outcome carrying an fb. value, even when Meta echoes the click id back', async () => {
+    // spec.md §10: nothing persisted, in any table, meta_json included, and
+    // Meta's error bodies echo the offending value back. This is the realistic
+    // Graph API shape: error_user_msg quoting the rejected fbc verbatim. The
+    // serialized outcome is what recordCapiOutcome writes, so if fb. survives
+    // into it anywhere, a click tag just landed in the events table.
+    await withFetch(
+      () => ({
+        ok: false,
+        status: 400,
+        text: async () => JSON.stringify({
+          error: {
+            message: 'Invalid parameter',
+            error_user_msg: 'The click ID fb.1.1755400000000.TESTCLICK123 in the fbc parameter could not be validated.',
+            type: 'OAuthException',
+            code: 100,
+            error_subcode: 2804003,
+            fbtrace_id: 'A1bC2dE3f',
+          },
+        }),
+      }),
+      async () => {
+        const outcome = await sendCapi(CONFIGURED, input(), NOW_MS);
+        expect(outcome.status).toBe('failed');
+        expect(JSON.stringify(outcome)).not.toMatch(/fb\./);
+      },
+    );
+  });
 });
 
 describe('the click tag is built, checked, and stripped', () => {
@@ -229,11 +258,13 @@ describe('the click tag is built, checked, and stripped', () => {
   });
 });
 
-describe('the hidden field carries the tag through every form, and only the hidden field', () => {
+describe('the hidden field carries the tag to the decode POST, and dies there', () => {
   // No cookie and no JavaScript exist to carry it (spec.md Decision 2), so a
-  // form that drops the field kills measurement silently. Landing has two
-  // forms (typed and photo), the confirm screen posts the ledger, and the two
-  // gates each post on their own.
+  // form that drops the field kills measurement silently. The carriers are
+  // exactly the forms that end in a decode: the landing pair (camera hero and
+  // typed disclosure), the confirm screen, and the retry screen beside an
+  // unpriceable answer. Nothing past the decode carries it, because Meta
+  // hears about decodes and nothing else (spec.md §10, one event not three).
   const FBC = 'fb.1.1755405000000.TESTCLICK123';
   const FIELD = `<input type="hidden" name="fbc" value="${FBC}">`;
 
@@ -250,18 +281,23 @@ describe('the hidden field carries the tag through every form, and only the hidd
     gate: { decodeId: '00000000-0000-4000-8000-000000000000' },
   };
 
-  it('rides the landing forms, the confirm form, and both gate forms', () => {
+  it('rides the landing forms, the confirm form, and the unpriceable retry form', () => {
     const landing = renderForm(undefined, [], { turnstileSiteKey: 'site-key' }, {}, FBC);
-    expect(landing.split(FIELD)).toHaveLength(3); // typed form and photo form
+    expect(landing.split(FIELD)).toHaveLength(3); // camera hero and typed disclosure
     expect(renderConfirm({ ...confirmView, fbc: FBC })).toContain(FIELD);
-    const ticket = renderVerdictTicket({ ...ticketView, fbc: FBC });
-    expect(ticket.split(FIELD)).toHaveLength(3); // email gate and interest form
+    expect(renderUnpriceable('Those numbers do not add up.', {}, FBC)).toContain(FIELD);
+  });
+
+  it('never rides the ticket: the gates have no carrier at all', () => {
+    // The ticket renders after the decode already fired. A tag here could only
+    // feed an event the canon copy says does not exist.
+    expect(renderVerdictTicket(ticketView)).not.toContain('fbc');
   });
 
   it('renders nothing at all when the visit carried no tag', () => {
     expect(renderForm(undefined, [], { turnstileSiteKey: 'site-key' }, {}, null)).not.toContain('name="fbc"');
     expect(renderConfirm(confirmView)).not.toContain('name="fbc"');
-    expect(renderVerdictTicket(ticketView)).not.toContain('name="fbc"');
+    expect(renderUnpriceable('Those numbers do not add up.')).not.toContain('name="fbc"');
   });
 });
 
@@ -274,11 +310,11 @@ describe('the request headers reach the gates as wired, not as assumed', () => {
   const FBC = 'fb.1.1755405000000.TESTCLICK123';
   const FORM = 'quotedPrice=84500&cashDiscount=6000&payment=1408.33&paymentFrequency=monthly&paymentCount=60';
 
-  async function routeHarness() {
+  async function routeHarness({ limited = false }: { limited?: boolean } = {}) {
     const { db, d1 } = await migratedDatabase();
     const env = {
       DB: d1,
-      DECODE_LIMIT: { limit: async () => ({ success: true }) },
+      DECODE_LIMIT: { limit: async () => ({ success: !limited }) },
       RATE_LIMIT_SALT: 'test-salt-test-salt',
       META_DATASET_ID: 'DEV000',
       META_CAPI_TOKEN: 'token-under-test',
@@ -306,7 +342,9 @@ describe('the request headers reach the gates as wired, not as assumed', () => {
       ).get() as { meta_json: string };
       return (JSON.parse(row.meta_json) as { capi: unknown }).capi;
     };
-    return { post, outcome };
+    const events = () => (db.prepare('SELECT event FROM events').all() as Array<{ event: string }>)
+      .map((row) => row.event);
+    return { post, outcome, events };
   }
 
   it('honours Sec-GPC: 1 on the route, and nothing reaches the network', async () => {
@@ -322,6 +360,12 @@ describe('the request headers reach the gates as wired, not as assumed', () => {
   });
 
   it('honours the synthetic marker on the route, and nothing reaches the network', async () => {
+    // The header is law, not local convention: spec.md §7.2 defines
+    // `x-loanhank-synthetic: 1` as how verification traffic declares itself
+    // at request time, because an event cannot be un-sent the way a row can
+    // be flagged. It is opt-in, so it fails toward "real": forgetting it
+    // sends a real event, which is why it is the second line of defence
+    // behind the dev dataset and the unset secret, never the first.
     await withFetch(
       () => ({ ok: true, status: 200, json: async () => ({}) }),
       async (calls) => {
@@ -361,6 +405,74 @@ describe('the request headers reach the gates as wired, not as assumed', () => {
         expect(userData.fbc).toBe(FBC);
         expect(userData.client_ip_address).toBe('198.51.100.9');
         expect(userData.client_user_agent).toBe('route-test-agent');
+      },
+    );
+  });
+
+  // A farmer who is refused, fixes his numbers and completes must still count
+  // as the ad-attributed decode he is, or cost per decode inflates and the
+  // §7.1 wall reads wrong. Each refusal below reaches a DIFFERENT branch, and
+  // they were unguarded as a set: a mutation dropping the tag from both
+  // engine-unpriceable call sites left the whole suite green.
+  // The recorded event is asserted alongside the tag, so these cannot quietly
+  // collapse onto one branch: the first is refused by the schema, the other
+  // two are refused by the engine down each of the two decode paths.
+  const REFUSALS: Array<[string, string, string]> = [
+    ['a ledger the schema refuses', `ledger=1&quotedPrice=&payment=&paymentCount=&fbc=${FBC}`, 'decode_rejected'],
+    [
+      'numbers the engine cannot price',
+      `quotedPrice=6000&cashDiscount=6000&payment=100&paymentFrequency=monthly&paymentCount=60&fbc=${FBC}`,
+      'decode_unpriceable',
+    ],
+    [
+      'a ledger the engine cannot price',
+      `ledger=1&quotedPrice=6000&cashDiscount=6000&payment=100&paymentFrequency=monthly`
+      + `&paymentCount=60&region=NE&fbc=${FBC}`,
+      'decode_unpriceable',
+    ],
+  ];
+
+  for (const [what, form, event] of REFUSALS) {
+    it(`carries the tag onto the retry screen after ${what}`, async () => {
+      await withFetch(
+        () => ({ ok: true, status: 200, json: async () => ({}) }),
+        async () => {
+          const { post, events } = await routeHarness();
+          const response = await post({}, form);
+          expect(response.status).toBe(422);
+          expect(events()).toContain(event);
+          expect(await response.text()).toContain(`name="fbc" value="${FBC}"`);
+        },
+      );
+    });
+  }
+
+  it('carries the tag onto the retry screen when the limiter refuses', async () => {
+    // The refusal that arrives before the body is even parsed. It renders the
+    // same retry form as the others, so it threads the same way or it is the
+    // one screen that quietly drops the tag.
+    await withFetch(
+      () => ({ ok: true, status: 200, json: async () => ({}) }),
+      async () => {
+        const { post } = await routeHarness({ limited: true });
+        const response = await post({}, `${FORM}&fbc=${FBC}`);
+        expect(response.status).toBe(429);
+        expect(await response.text()).toContain(`name="fbc" value="${FBC}"`);
+      },
+    );
+  });
+
+  it('withholds the tag from the retry screen under GPC', async () => {
+    await withFetch(
+      () => ({ ok: true, status: 200, json: async () => ({}) }),
+      async () => {
+        const { post } = await routeHarness();
+        const response = await post(
+          { 'sec-gpc': '1' },
+          `ledger=1&quotedPrice=&payment=&paymentCount=&fbc=${FBC}`,
+        );
+        expect(response.status).toBe(422);
+        expect(await response.text()).not.toContain('name="fbc"');
       },
     );
   });

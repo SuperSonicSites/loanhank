@@ -112,15 +112,46 @@ function gpcHonoured(c: Pick<MeasurableRequest, 'req'>): boolean {
 }
 
 /**
+ * Every screen that refuses a decode and offers the retry, in one place.
+ *
+ * The retry form carries the campaign labels and the click tag forward, so a
+ * farmer who is refused, fixes his numbers and completes still counts as the
+ * ad-attributed decode he is. Without that, cost per completed decode inflates
+ * and the §7.1 wall reads wrong.
+ *
+ * One function rather than the argument list repeated at four call sites: the
+ * threading was got right three times and forgotten once, which is the shape
+ * of defect that comes back. There is now a single place to get it wrong, and
+ * a test that says so.
+ */
+function refuseDecode<R>(
+  c: Pick<MeasurableRequest, 'req'> & { html: (body: string, status?: never) => R },
+  body: Record<string, unknown>,
+  message: string,
+  status: 422 | 429,
+): R {
+  return c.html(
+    renderUnpriceable(
+      message,
+      campaignFromBody(body),
+      gpcHonoured(c) ? null : fbcFromBody(body.fbc),
+    ),
+    status as never,
+  );
+}
+
+/**
  * Meta CAPI, fired behind waitUntil so measurement never stands in the request
  * path, and the outcome patched onto the events row so every send is logged,
  * success, failure or skip (spec.md §10).
  *
- * The synthetic gate reads an explicit request marker: verification traffic
- * sends `x-loanhank-synthetic: 1` and never reaches Meta. §7.2 flags rows
- * after the fact, which cannot un-send an event, so the marker is how a
- * verification run declares itself BEFORE the sender decides. Anybody else
- * sending the header merely opts their own decode out of measurement.
+ * The synthetic gate reads the request marker spec.md §7.2 defines:
+ * verification traffic sends `x-loanhank-synthetic: 1` and never reaches Meta,
+ * because an event cannot be un-sent the way a row can be flagged. Note which
+ * way it fails: the header is opt-in, so forgetting it sends a real event. It
+ * is the second line of defence; the dev dataset or an unset META_DATASET_ID
+ * is the first. A stranger sending the header merely opts their own decode
+ * out of measurement.
  */
 function measureAd(
   c: MeasurableRequest,
@@ -843,8 +874,10 @@ app.get('/', async (c) => {
 
 app.post('/decode', async (c) => {
   if (!(await withinRateLimit(c, 'decode'))) {
-    return c.html(
-      renderUnpriceable('That is a lot of quotes in one minute. Give it a minute and run it again.'),
+    return refuseDecode(
+      c,
+      await c.req.parseBody().catch(() => ({})),
+      'That is a lot of quotes in one minute. Give it a minute and run it again.',
       429,
     );
   }
@@ -887,10 +920,10 @@ app.post('/decode', async (c) => {
     c.executionCtx.waitUntil(
       recordEvent(c.env, 'decode_unpriceable', null, { reason: result.unavailableReason }),
     );
-    return c.html(
-      renderUnpriceable(
-        'Those numbers do not add up to a deal we can price. Check the payment and how many there are against your paper, then run it again.',
-      ),
+    return refuseDecode(
+      c,
+      body,
+      'Those numbers do not add up to a deal we can price. Check the payment and how many there are against your paper, then run it again.',
       422,
     );
   }
@@ -1068,6 +1101,10 @@ async function decodeFullLedger(c: {
   executionCtx: { waitUntil: (promise: Promise<unknown>) => void };
   html: (body: string, status?: 200 | 422) => Response;
 }, body: Record<string, unknown>): Promise<Response> {
+  // Shape-checked before it is ever sent; a tag that is not exactly an fbc we
+  // could have rendered reads as no tag at all. The refusal screens below read
+  // it again through refuseDecode, which is the one place that threading lives.
+  const fbc = fbcFromBody(body.fbc);
   const parsed = ledgerFormSchema.safeParse({
     quotedPrice: String(body.quotedPrice ?? ''),
     cashDiscount: String(body.cashDiscount ?? ''),
@@ -1092,7 +1129,7 @@ async function decodeFullLedger(c: {
   if (!parsed.success) {
     const problems = parsed.error.issues.map((issue) => issue.message);
     c.executionCtx.waitUntil(recordEvent(c.env, 'decode_rejected', null, { problems, path: 'ledger' }));
-    return c.html(renderUnpriceable(problems.join(' ')), 422);
+    return refuseDecode(c, body, problems.join(' '), 422);
   }
 
   const form = parsed.data;
@@ -1139,8 +1176,10 @@ async function decodeFullLedger(c: {
   const decoded = decodeLedger(ledger);
   if (decoded.realRateAllInBps === null && decoded.unavailableReason !== null) {
     c.executionCtx.waitUntil(recordEvent(c.env, 'decode_unpriceable', null, { reason: decoded.unavailableReason }));
-    return c.html(
-      renderUnpriceable('Those numbers do not add up to a deal we can price. Check the payment and how many there are against your paper.'),
+    return refuseDecode(
+      c,
+      body,
+      'Those numbers do not add up to a deal we can price. Check the payment and how many there are against your paper.',
       422,
     );
   }
@@ -1239,7 +1278,6 @@ async function decodeFullLedger(c: {
     normalizeBrand(String(body.brand ?? '')),
   ).run();
 
-  const fbc = fbcFromBody(body.fbc);
   const eventId = await recordEvent(c.env, 'decode', decodeId, {
     ...campaignFromBody(body),
     path: 'ledger',
@@ -1296,9 +1334,6 @@ async function decodeFullLedger(c: {
         + `using the costs we can verify. Buffer policy ${VERDICT_BUFFER_VERSION}.`,
     assumption: null,
     gate: emailSendable(c.env) === null ? null : { decodeId },
-    // Measurement plumbing, deliberately beside the gate rather than inside
-    // it: the firewall test pins the gate to exactly the decode id.
-    fbc: gpcHonoured(c) ? null : fbc,
     missing: missingForVerdict(verdict.noVerdictReason, decoded.reconciliation.differenceCents, country),
     lines: [
       { label: 'Quoted price', amount: formatCurrency(form.quotedPrice) },

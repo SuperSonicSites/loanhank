@@ -121,6 +121,9 @@ main { max-width: var(--col-max); margin: 0 auto; padding: var(--s-32) var(--s-1
 .tagline { font-size: var(--text-footnote); color: var(--ink-soft); margin: 0 0 var(--s-32); }
 
 h1 { font-weight: 700; font-size: var(--text-h1); line-height: 1.3; margin: 0 0 var(--s-16); }
+/* The subhead under the H1. A heading by structure, body type by weight: it
+   carries the offer in plain words and must not compete with the headline. */
+.subline { font-weight: 400; font-size: var(--text-body); line-height: var(--lh-body); margin: 0 0 var(--s-24); }
 p { margin: 0 0 var(--s-16); }
 .note { color: var(--ink-soft); font-size: var(--text-footnote); }
 
@@ -212,13 +215,17 @@ button {
 /* The camera hero: a styled file input. The label is the big box; the input
    is visually hidden but still focusable, so validation and keyboards keep
    working. capture="environment" opens a phone camera with no JavaScript.
-   The camera glyph is the only icon in the product (design.md section 6). */
+   The camera glyph is the only icon in the product (design.md section 6).
+
+   Transparent, outlined in denim: the box reads as a target to put a photo
+   INTO, and the filled denim button below it stays the one action. Two solid
+   denim blocks stacked read as two competing buttons. */
 .camera-btn {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: var(--s-8);
   width: 100%; min-height: 96px; padding: var(--s-16);
-  background: var(--denim); color: var(--input-white);
-  border: 1px solid var(--denim); border-radius: var(--radius);
+  background: transparent; color: var(--denim);
+  border: 2px solid var(--denim); border-radius: var(--radius);
   font-size: var(--text-body); font-weight: 700; cursor: pointer;
   margin: 0 0 var(--s-8);
 }
@@ -603,8 +610,8 @@ ${typedForm(values, 'typed', campaign, fbc)}    </details>
   <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 `;
 
-  return shell('LoanHank', `${problemBlock}  <h1>Point your phone at the dealer's quote. See the number they didn't print.</h1>
-  <p>Free, takes about a minute, and your numbers stay here unless you say otherwise.</p>
+  return shell('LoanHank', `${problemBlock}  <h1>0% isn't 0%. Snap the quote and see the real rate.</h1>
+  <h2 class="subline">Take a picture of the dealer's quote and we'll show you the number they didn't print. It's free, secured, we do not keep a copy of it and you get the truth about your quote.</h2>
 
 ${tool}${WHOSE_SIDE}`);
 }
@@ -720,13 +727,23 @@ ${rows}
 `);
 }
 
-/** Screen 3, abstaining. We could not price it, so we say that and nothing else. */
-export function renderUnpriceable(reason: string): string {
+/**
+ * Screen 3, abstaining. We could not price it, so we say that, and the typed
+ * fields render beneath the message the way they do beside a photo failure:
+ * the retry is right there, and it carries the campaign labels and the click
+ * tag forward. A farmer who hit this screen, fixed his numbers, and completed
+ * used to fire as not_from_ad, which undercounted ad-attributed decodes and
+ * inflated cost per decode, the number §7.1's wall depends on.
+ */
+export function renderUnpriceable(
+  reason: string,
+  campaign: Record<string, string> = {},
+  fbc: string | null = null,
+): string {
   return shell('LoanHank', `  <div class="problem">
     <p>${escapeHtml(reason)}</p>
   </div>
-  <p><a href="/">Go back and check the numbers</a></p>
-`);
+${typedForm(EMPTY_FORM, 'recovery', campaign, fbc)}`);
 }
 
 export interface ConfirmRow {
@@ -879,7 +896,7 @@ export interface EmailGate {
  * PDF, and promising one we cannot deliver is the same class of error as
  * printing a number we cannot stand behind.
  */
-function emailGateBlock(gate: EmailGate | null, fbc: string | null = null): string {
+function emailGateBlock(gate: EmailGate | null): string {
   if (gate === null) return '';
   return `
   <div class="gate no-print">
@@ -888,7 +905,6 @@ function emailGateBlock(gate: EmailGate | null, fbc: string | null = null): stri
     <p class="note">${escapeHtml(FOLLOWUP_DISCLOSURE)}</p>
     <form method="post" action="/email">
       <input type="hidden" name="decodeId" value="${escapeHtml(gate.decodeId)}">
-${fbcField(fbc)}
       <div class="field">
         <label for="email">Your email</label>
         <input type="email" id="email" name="email" inputmode="email" autocomplete="email" required>
@@ -915,7 +931,7 @@ ${fbcField(fbc)}
  *
  * Both answers are equal-weight buttons. No gray shame text on the decline.
  */
-function interestBlock(gate: EmailGate | null, fbc: string | null = null): string {
+function interestBlock(gate: EmailGate | null): string {
   if (gate === null) return '';
   return `
   <div class="gate no-print">
@@ -923,7 +939,6 @@ function interestBlock(gate: EmailGate | null, fbc: string | null = null): strin
     <p class="note">Nothing moves either way. We are asking whether this would be worth building. Your numbers stay here regardless of which button you press.</p>
     <form method="post" action="/interest">
       <input type="hidden" name="decodeId" value="${escapeHtml(gate.decodeId)}">
-${fbcField(fbc)}
       <button type="submit" name="answer" value="yes">Yes</button>
       <button type="submit" name="answer" value="not_now" class="secondary">Not now</button>
     </form>
@@ -942,12 +957,6 @@ export interface VerdictTicketView {
   missing: string[];
   assumption: string | null;
   gate: EmailGate | null;
-  /**
-   * The click tag carried forward into the gate forms. NOT part of the gate
-   * object: the firewall test pins the gate to exactly the decode id, and the
-   * tag is measurement plumbing, not something the gate is told.
-   */
-  fbc?: string | null;
 }
 
 /**
@@ -988,7 +997,7 @@ ${view.reference ? `    <p class="reference">${escapeHtml(view.reference)}</p>\n
 
 ${view.assumption ? `  <p class="assumption">${escapeHtml(view.assumption)}</p>\n` : ''}${abstention}${
     view.footnote ? `  <p class="footnote">${escapeHtml(view.footnote)}</p>\n` : ''
-  }${emailGateBlock(view.gate, view.fbc ?? null)}${interestBlock(view.gate, view.fbc ?? null)}  <p class="no-print"><a href="/">Run another quote</a></p>
+  }${emailGateBlock(view.gate)}${interestBlock(view.gate)}  <p class="no-print"><a href="/">Run another quote</a></p>
 `);
 }
 

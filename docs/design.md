@@ -50,6 +50,8 @@ Hank = the neighbor who's good with numbers. Not mascot. Not cartoon. A voice.
 
 | moment | words |
 |---|---|
+| h1 | `0% isn't 0%. Snap the quote and see the real rate.` (hook 1 from the ads.md bank; replaced by the winning hook when the ad test speaks, never by a page-side test) |
+| subhead | `Take a picture of the dealer's quote and we'll show you the number they didn't print. It's free, secured, we do not keep a copy of it and you get the truth about your quote.` |
 | primary button | `Run the numbers` |
 | photo button | `Snap the quote` (the camera hero; it is the primary control, so no "instead") |
 | add another page | `Add the next page, or the fine print.` |
@@ -247,14 +249,19 @@ Chrome: wordmark top-left, trust line footer. **No nav.** One page is one page.
 **Screen 1 — THE TOOL (this is the landing page). The hero is the camera:**
 ```
 [wordmark]
-H1: Point your phone at the dealer's quote.
-    See the number they didn't print.
-one line: Free, takes about a minute. Your numbers stay here unless you say otherwise.
+H1: 0% isn't 0%. Snap the quote and see the real rate.
+H2 subhead: Take a picture of the dealer's quote and we'll show you the
+    number they didn't print. It's free, secured, we do not keep a copy of
+    it and you get the truth about your quote.
 ┌────────────────────────────┐
-│         [camera]           │   ← the big snap box: denim, full width, ~96px
-│      Snap the quote        │     tall, the camera glyph above the words. a
-└────────────────────────────┘     styled file input with capture=
-                                   "environment": camera opens with no JS
+│         [camera]           │   ← the big snap box: TRANSPARENT with a 2px
+│      Snap the quote        │     denim outline, full width, ~96px tall, the
+└────────────────────────────┘     camera glyph above the words. a styled file
+                                   input with capture="environment": camera
+                                   opens with no JS. outlined, not filled, so
+                                   it reads as a target to put a photo into
+                                   and does not compete with the one filled
+                                   button below it
 (thumbnail row with a retake on each, and "Add the next page, or the fine
  print." once a photo is in — up to four photos, one decode, one merged read)
 ▸ Type the numbers instead       ← directly under the snap box, smaller than
@@ -276,7 +283,14 @@ the dealer lot wants the camera. No other reordering.
 
 **The H1 follows the winning ad hook once the test has spoken. The ad test is
 the headline test; the page never runs its own.** The approved hook bank lives
-in `ops/ads.md`.
+in `ops/ads.md`. The H1 shipping today is hook 1, set by owner ruling
+2026-08-17 as the starting hook rather than as a test result, so the ad and the
+page carry the same words and the scent holds from click to form.
+
+**The subhead carries the offer, and the H1 carries the hook.** The hook stops
+him; the subhead tells him what the thing is, what it costs, and what happens
+to his photo, in one breath. It is the only place on the front door where the
+free/never-kept/plain-answer trio is stated, and it earns its length there.
 
 No-JS degradation on the camera: the native input takes one photo, or a
 gallery multi-select where the OS allows. Add-another is the JS enhancement,

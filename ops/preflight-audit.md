@@ -54,7 +54,7 @@ Scan git history for leaked secrets (`git log -p | grep -iE 'sk-|api[_-]?key|sec
 ## KNOWN HOLES — expected, not findings
 
 These are on the owner's list. Report their state, do not count them as failures:
-- META_CAPI_ACCESS_TOKEN empty (Meta setup pending)
+- META_CAPI_TOKEN and META_DATASET_ID unset (Meta setup pending, and the dataset id stays unset until the privacy surface is live, spec §14)
 - /whos-behind-this unfinished (owner's face and name pending)
 - equip_category not yet captured → cohorts empty, day-30 correctly silent
 - Custom domain not cut over (still workers.dev)

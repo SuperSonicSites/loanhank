@@ -73,10 +73,15 @@ The ad test is the headline test: the page's H1 follows the winning hook once
 the test has spoken, and the page never runs its own test (design.md §5).
 Approved hooks:
 
-1. `0% isn't 0%. Snap the quote and see the real rate.`
+1. `0% isn't 0%. Snap the quote and see the real rate.` **← live on the page as the H1** (owner ruling 2026-08-17, set as the starting hook, not as a test result)
 2. `That "0%" has a price. Your phone can find it in about a minute.`
 3. `We ran a "0% for 60 months" offer through the math. It cost 2.94%.`
 4. `The 0% deal isn't free. See what yours really costs.`
+
+**Scent rule:** whichever hook is winning is the hook on the page. An ad that
+promises one thing and a landing page that opens with another breaks the scent
+at the most expensive moment, and the decode rate pays for it. When the test
+speaks, the H1 moves with it, in the same commit as the ads.md change.
 
 The 2.94% in hook 3 is canon (design.md §2¾ example A, engine-recomputed by
 tests/design-canon.test.ts). If canon moves, the hook moves with it.

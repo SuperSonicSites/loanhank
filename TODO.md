@@ -34,7 +34,11 @@ yours; the agent cannot do any of it.
 
 ## Before the $500 test can start
 
-- [ ] Meta verification complete + CAPI token → agent wires META_CAPI_ACCESS_TOKEN
+- [ ] Meta verification complete + CAPI token → agent wires META_CAPI_TOKEN
+- [ ] Privacy surface live BEFORE the dataset id is set: META_DATASET_ID stays unset in
+      production until the Do Not Sell or Share link works, the /privacy ads paragraph
+      and GPC line are shipped, the /straight-answers answer is shipped, and the narrowed
+      footer line is site-wide (spec §14). The unset secret is the enforcement.
 - [ ] Domain cutover decision: loanhank.com → new worker (ads land on the real domain,
       not workers.dev; Meta domain verification targets loanhank.com). Pick the date.
 - [ ] Remove workers.dev host from Turnstile widget at cutover (agent task, your trigger)

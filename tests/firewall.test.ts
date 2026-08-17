@@ -146,14 +146,15 @@ describe('the question does not move with the answer', () => {
     expect(none).toBe(good);
   });
 
-  it('carries the click tag identically whatever the verdict was, markup included', () => {
+  it('renders the gates byte-identical and tag-free, whatever the verdict was', () => {
     // businessHalf strips markup, and a hidden input is markup, so the
-    // comparison above cannot see the carrier. A mutation that withheld the
-    // tag for one verdict would route EmailGiven and InterestYes by verdict,
-    // which is the §3.1 outbound sin performed through the carrier rather
-    // than the payload. This one compares the raw bytes, tags and all.
+    // comparison above cannot see one. Raw bytes here instead. The gates
+    // carry no click tag at all: Meta hears that a decode happened and
+    // nothing else (spec.md §10, one event not three), so the tag dies at
+    // the decode POST and anything downstream carrying one would be feeding
+    // an event the canon copy says does not exist.
     const rawGates = (verdict: VerdictTicketView['verdict']): string => {
-      const html = renderVerdictTicket({ ...view(verdict), fbc: 'fb.1.1755405000000.TESTCLICK' });
+      const html = renderVerdictTicket(view(verdict));
       const start = html.indexOf('<div class="gate');
       expect(start).toBeGreaterThan(-1);
       const end = html.indexOf('<footer', start);
@@ -162,9 +163,7 @@ describe('the question does not move with the answer', () => {
     const good = rawGates('checks_out');
     expect(rawGates('look_closer')).toBe(good);
     expect(rawGates('none')).toBe(good);
-    // And the carrier is genuinely in what was compared, so this cannot pass
-    // by all three dropping it.
-    expect(good).toContain('name="fbc"');
+    expect(good).not.toContain('fbc');
   });
 
   it('offers the disclosure beside the question, which is the one permitted crossing', () => {
@@ -207,20 +206,17 @@ describe('the firewall is wired in production, not only in the template', () => 
     expect(around).not.toMatch(/verdict\s*===\s*'(checks_out|look_closer|none)'[^;]*gate/);
   });
 
-  it('wires the click tag off the request alone, never off the verdict', async () => {
-    // The same pin as the gate above, for the carrier. `fbc:` conditioned on
-    // what the engine decided would route the Meta events by verdict, and the
-    // template test cannot see route wiring.
+  it('hands the ticket no click tag at all', async () => {
+    // One event, not three (spec.md §10). The decode fired before this render,
+    // so the ticket has no use for the tag, and a reintroduction would put a
+    // carrier downstream of the only event that exists. This fails on the
+    // route wiring, which the template test above cannot see.
     const worker = await readFile(new URL('../src/api/worker.ts', import.meta.url), 'utf8');
-    const ticketCall = worker.slice(worker.indexOf('return c.html(renderVerdictTicket'));
-    expect(ticketCall.length, 'the verdict route no longer renders the ticket the way this test expects')
-      .toBeGreaterThan(0);
-    const fbcLine = /fbc:[^\n]*/.exec(ticketCall)?.[0] ?? '';
-    expect(fbcLine, 'the verdict ticket no longer wires fbc the way this test expects')
-      .toBe('fbc: gpcHonoured(c) ? null : fbc,');
-    for (const leak of ['verdict', 'rate', 'delta', 'benchmark', 'cohort']) {
-      expect(fbcLine.toLowerCase(), `the fbc wiring reads "${leak}"`).not.toContain(leak);
-    }
+    const start = worker.indexOf('return c.html(renderVerdictTicket');
+    expect(start, 'the verdict route no longer renders the ticket the way this test expects')
+      .toBeGreaterThan(-1);
+    const call = worker.slice(start, worker.indexOf('}));', start));
+    expect(call).not.toContain('fbc');
   });
 });
 

@@ -16,7 +16,9 @@ Farmer trust us because we only tribe at table not selling him something. Someti
 
 Farmer with quote in hand = best lead in America. Buying THIS WEEK. When farmer say "make lenders fight for my deal" — we sell that lead. That the business. Tool free forever. Lead only move when farmer say go. Never sneak. Sneak once on AgTalk = tribe exile forever.
 
-Site headline: **"Point your phone at the dealer's quote. See the number they didn't print."**
+Site headline: **"0% isn't 0%. Snap the quote and see the real rate."**
+
+Owner ruling 2026-08-17: the H1 is hook 1 from the `ops/ads.md` headline bank, adopted ahead of the ad test rather than as its result. The rule that the ad test is the headline test still stands (design.md §5); this is the starting hook, and the winning one replaces it when the test speaks. The old headline, "Point your phone at the dealer's quote. See the number they didn't print.", survives inside the subhead, which is where its work is now done.
 
 ## ONE BIG WARNING BEFORE BUILD
 
