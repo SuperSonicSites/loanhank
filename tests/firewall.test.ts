@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
+import { buildEvent } from '../src/api/capi.js';
 import { renderVerdictTicket, type VerdictTicketView } from '../src/web/page.js';
 
 // THE FIREWALL — spec.md §3.1.
@@ -145,6 +146,27 @@ describe('the question does not move with the answer', () => {
     expect(none).toBe(good);
   });
 
+  it('carries the click tag identically whatever the verdict was, markup included', () => {
+    // businessHalf strips markup, and a hidden input is markup, so the
+    // comparison above cannot see the carrier. A mutation that withheld the
+    // tag for one verdict would route EmailGiven and InterestYes by verdict,
+    // which is the §3.1 outbound sin performed through the carrier rather
+    // than the payload. This one compares the raw bytes, tags and all.
+    const rawGates = (verdict: VerdictTicketView['verdict']): string => {
+      const html = renderVerdictTicket({ ...view(verdict), fbc: 'fb.1.1755405000000.TESTCLICK' });
+      const start = html.indexOf('<div class="gate');
+      expect(start).toBeGreaterThan(-1);
+      const end = html.indexOf('<footer', start);
+      return html.slice(start, end === -1 ? undefined : end);
+    };
+    const good = rawGates('checks_out');
+    expect(rawGates('look_closer')).toBe(good);
+    expect(rawGates('none')).toBe(good);
+    // And the carrier is genuinely in what was compared, so this cannot pass
+    // by all three dropping it.
+    expect(good).toContain('name="fbc"');
+  });
+
   it('offers the disclosure beside the question, which is the one permitted crossing', () => {
     // FTC guidance wants the disclosure near the action. It runs from the
     // business toward the truth about it, never from the verdict toward the
@@ -183,5 +205,92 @@ describe('the firewall is wired in production, not only in the template', () => 
       worker.indexOf('gate: emailSendable') + 200,
     );
     expect(around).not.toMatch(/verdict\s*===\s*'(checks_out|look_closer|none)'[^;]*gate/);
+  });
+
+  it('wires the click tag off the request alone, never off the verdict', async () => {
+    // The same pin as the gate above, for the carrier. `fbc:` conditioned on
+    // what the engine decided would route the Meta events by verdict, and the
+    // template test cannot see route wiring.
+    const worker = await readFile(new URL('../src/api/worker.ts', import.meta.url), 'utf8');
+    const ticketCall = worker.slice(worker.indexOf('return c.html(renderVerdictTicket'));
+    expect(ticketCall.length, 'the verdict route no longer renders the ticket the way this test expects')
+      .toBeGreaterThan(0);
+    const fbcLine = /fbc:[^\n]*/.exec(ticketCall)?.[0] ?? '';
+    expect(fbcLine, 'the verdict ticket no longer wires fbc the way this test expects')
+      .toBe('fbc: gpcHonoured(c) ? null : fbc,');
+    for (const leak of ['verdict', 'rate', 'delta', 'benchmark', 'cohort']) {
+      expect(fbcLine.toLowerCase(), `the fbc wiring reads "${leak}"`).not.toContain(leak);
+    }
+  });
+});
+
+
+describe('the firewall runs through every outbound payload', () => {
+  // spec.md §3.1, the outbound-payload clause. A payload that varied with the
+  // verdict would hand an ad platform the ability to optimize delivery toward
+  // farmers whose deals price badly, which is the stamp selling, performed
+  // where a page-level test cannot see it. These assertions ship in the same
+  // commit as the sender, and they assert on the serialized bytes themselves.
+
+  const NOW_MS = 1755400000000;
+
+  const capiInput = {
+    eventName: 'Decode' as const,
+    eventId: 'event-row-id',
+    sourceUrl: 'https://loanhank.test/decode',
+    fbc: 'fb.1.1755400000000.TESTCLICK',
+    clientIp: '203.0.113.7',
+    userAgent: 'a farmer phone',
+  };
+
+  // Everything a leaky sender could be tempted to reach into: the canonical
+  // LOOK CLOSER deal from design.md §2¾, stamp, delta and ledger included.
+  const canonicalDeal = {
+    verdict: 'look_closer',
+    realRateAllInBps: 990,
+    benchmarkRateBps: 725,
+    deltaBps: 265,
+    amountFinancedCents: 6200000,
+    paymentAmountCents: 156950,
+    paymentCount: 48,
+    totalOfPaymentsCents: 7533600,
+    differenceCents: 372600,
+    rate: '9.90%',
+    reference: 'Comparable published equipment rate: 7.25%, subject to approval.',
+  };
+
+  it('has no custom_data key, and exactly the keys the shape allows', () => {
+    const keys = Object.keys(buildEvent(capiInput, NOW_MS));
+    expect(keys).not.toContain('custom_data');
+    expect([...keys].sort()).toEqual([
+      'action_source', 'data_processing_options', 'data_processing_options_country',
+      'data_processing_options_state', 'event_id', 'event_name', 'event_source_url',
+      'event_time', 'user_data',
+    ]);
+  });
+
+  it('serializes byte-identical whatever the stamp said', () => {
+    const bytes = (verdict: string) =>
+      JSON.stringify(buildEvent({ ...capiInput, verdict } as never, NOW_MS));
+    expect(bytes('checks_out')).toBe(bytes('look_closer'));
+    expect(bytes('look_closer')).toBe(bytes('none'));
+  });
+
+  it('does not move a byte when the whole canonical deal rides alongside the input', () => {
+    const bare = JSON.stringify(buildEvent(capiInput, NOW_MS));
+    const loaded = JSON.stringify(buildEvent({ ...capiInput, ...canonicalDeal } as never, NOW_MS));
+    expect(loaded).toBe(bare);
+  });
+
+  it('carries no rate, no delta, no ledger figure, and no verdict word', () => {
+    const serialized = JSON.stringify(
+      buildEvent({ ...capiInput, ...canonicalDeal } as never, NOW_MS),
+    );
+    for (const word of ['checks_out', 'look_closer', 'verdict']) {
+      expect(serialized, `the payload says "${word}"`).not.toContain(word);
+    }
+    for (const [name, figure] of Object.entries(canonicalDeal)) {
+      expect(serialized, `the payload carries ${name}`).not.toContain(String(figure));
+    }
   });
 });

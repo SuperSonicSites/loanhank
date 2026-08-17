@@ -35,6 +35,7 @@ import {
   renderWhosBehindThis, NOTES, PRIVACY_VERSION, TERMS_VERSION,
 } from '../web/pages.js';
 import { getConfig } from './env.js';
+import { fbcFromBody, fbcFromUrl, recordCapiOutcome, sendCapi, type CapiEventName } from './capi.js';
 
 // Must match the crons in wrangler.jsonc. An unrecognized cron logs and does
 // nothing rather than falling into the wrong branch.
@@ -88,12 +89,61 @@ async function recordEvent(
   event: string,
   decodeId: string | null = null,
   meta: Record<string, unknown> = {},
-): Promise<void> {
+): Promise<string> {
+  const id = crypto.randomUUID();
   await env.DB.prepare(
     'INSERT INTO events (id, event, decode_id, ts, meta_json) VALUES (?, ?, ?, ?, ?)',
   )
-    .bind(crypto.randomUUID(), event, decodeId, new Date().toISOString(), JSON.stringify(meta))
+    .bind(id, event, decodeId, new Date().toISOString(), JSON.stringify(meta))
     .run();
+  return id;
+}
+
+/** The shape of a request the ad measurement needs to read. */
+interface MeasurableRequest {
+  env: Env;
+  req: { url: string; header: (name: string) => string | undefined };
+  executionCtx: { waitUntil: (promise: Promise<unknown>) => void };
+}
+
+/** Sec-GPC: 1 is a CPRA opt-out, honoured everywhere it is read (spec.md §10). */
+function gpcHonoured(c: Pick<MeasurableRequest, 'req'>): boolean {
+  return c.req.header('sec-gpc') === '1';
+}
+
+/**
+ * Meta CAPI, fired behind waitUntil so measurement never stands in the request
+ * path, and the outcome patched onto the events row so every send is logged,
+ * success, failure or skip (spec.md §10).
+ *
+ * The synthetic gate reads an explicit request marker: verification traffic
+ * sends `x-loanhank-synthetic: 1` and never reaches Meta. §7.2 flags rows
+ * after the fact, which cannot un-send an event, so the marker is how a
+ * verification run declares itself BEFORE the sender decides. Anybody else
+ * sending the header merely opts their own decode out of measurement.
+ */
+function measureAd(
+  c: MeasurableRequest,
+  eventName: CapiEventName,
+  eventId: string,
+  fbc: string | null,
+): void {
+  const input = {
+    eventName,
+    eventId,
+    sourceUrl: c.req.url,
+    fbc,
+    synthetic: c.req.header('x-loanhank-synthetic') === '1',
+    gpc: gpcHonoured(c),
+    clientIp: c.req.header('cf-connecting-ip'),
+    userAgent: c.req.header('user-agent'),
+  };
+  c.executionCtx.waitUntil(
+    (async () => {
+      const outcome = await sendCapi(c.env, input);
+      await recordCapiOutcome(c.env.DB, input.eventId, outcome);
+    })(),
+  );
 }
 
 
@@ -784,7 +834,11 @@ app.get('/', async (c) => {
     );
   }
   const siteKey = typeof c.env.TURNSTILE_SITE_KEY === 'string' ? c.env.TURNSTILE_SITE_KEY : '';
-  return c.html(renderForm(undefined, [], { turnstileSiteKey: siteKey }, campaign));
+  // The click tag rides a hidden field from here to the POST (spec.md §10) and
+  // is withheld entirely for a GPC browser, so an opted-out visit carries
+  // nothing that could later be sent.
+  const fbc = gpcHonoured(c) ? null : fbcFromUrl(new URL(c.req.url), Date.now());
+  return c.html(renderForm(undefined, [], { turnstileSiteKey: siteKey }, campaign, fbc));
 });
 
 app.post('/decode', async (c) => {
@@ -807,11 +861,15 @@ app.post('/decode', async (c) => {
     paymentFrequency: String(body.paymentFrequency ?? 'monthly'),
   };
 
+  // Shape-checked before it is ever echoed or sent; a tag that is not exactly
+  // an fbc we could have rendered reads as no tag at all.
+  const fbc = fbcFromBody(body.fbc);
+
   const parsed = quickPathFormSchema.safeParse(raw);
   if (!parsed.success) {
     const problems = parsed.error.issues.map((issue) => issue.message);
     c.executionCtx.waitUntil(recordEvent(c.env, 'decode_rejected', null, { problems }));
-    return c.html(renderForm(raw, problems), 422);
+    return c.html(renderForm(raw, problems, null, {}, gpcHonoured(c) ? null : fbc), 422);
   }
 
   const form = parsed.data;
@@ -867,7 +925,7 @@ app.post('/decode', async (c) => {
     )
     .run();
 
-  await recordEvent(c.env, 'decode', decodeId, {
+  const eventId = await recordEvent(c.env, 'decode', decodeId, {
     // The quick path carried no campaign labels, so a typed decode was
     // invisible to the ad that produced it while the ledger path and the page
     // view both kept theirs. Cost per completed decode is the round-one gate
@@ -876,6 +934,7 @@ app.post('/decode', async (c) => {
     promo_price_rate_bps: result.promoPriceRateBps,
     payment_frequency: form.paymentFrequency,
   });
+  measureAd(c, 'Decode', eventId, fbc);
 
   const cost = result.costVersusCashCents;
   const costSentence = cost >= 0
@@ -976,13 +1035,14 @@ app.post('/extract', async (c) => {
     rows: confirmRows(extraction),
     frequency: extraction.payment_frequency.value ?? 'monthly',
     warnings: extraction.warnings.map((code) => WARNING_COPY[code] ?? code),
+    fbc: gpcHonoured(c) ? null : fbcFromBody(body.fbc),
   }));
 });
 
 /** The verdict path: a complete ledger, a matched reference, and a stamp. */
 async function decodeFullLedger(c: {
   env: Env;
-  req: { parseBody: () => Promise<Record<string, unknown>>; header: (name: string) => string | undefined };
+  req: { url: string; parseBody: () => Promise<Record<string, unknown>>; header: (name: string) => string | undefined };
   executionCtx: { waitUntil: (promise: Promise<unknown>) => void };
   html: (body: string, status?: 200 | 422) => Response;
 }, body: Record<string, unknown>): Promise<Response> {
@@ -1157,7 +1217,8 @@ async function decodeFullLedger(c: {
     normalizeBrand(String(body.brand ?? '')),
   ).run();
 
-  await recordEvent(c.env, 'decode', decodeId, {
+  const fbc = fbcFromBody(body.fbc);
+  const eventId = await recordEvent(c.env, 'decode', decodeId, {
     ...campaignFromBody(body),
     path: 'ledger',
     real_rate_all_in_bps: decoded.realRateAllInBps,
@@ -1165,6 +1226,7 @@ async function decodeFullLedger(c: {
     country,
     out_of_bounds: bounds.outOfBounds ? bounds.reasons : undefined,
   });
+  measureAd(c, 'Decode', eventId, fbc);
 
   // The extraction flywheel. Only written when the ledger came off a photo.
   const diff = extractionDiff(String(body.extracted ?? ''), body);
@@ -1207,6 +1269,9 @@ async function decodeFullLedger(c: {
         + `using the costs we can verify. Buffer policy ${VERDICT_BUFFER_VERSION}.`,
     assumption: null,
     gate: emailSendable(c.env) === null ? null : { decodeId },
+    // Measurement plumbing, deliberately beside the gate rather than inside
+    // it: the firewall test pins the gate to exactly the decode id.
+    fbc: gpcHonoured(c) ? null : fbc,
     missing: missingForVerdict(verdict.noVerdictReason, decoded.reconciliation.differenceCents, country),
     lines: [
       { label: 'Quoted price', amount: formatCurrency(form.quotedPrice) },
@@ -1306,7 +1371,8 @@ app.post('/email', async (c) => {
     ), 502);
   }
 
-  await recordEvent(c.env, 'email', parsed.data.decodeId, {});
+  const eventId = await recordEvent(c.env, 'email', parsed.data.decodeId, {});
+  measureAd(c, 'EmailGiven', eventId, fbcFromBody(body.fbc));
 
   // The confirmation screen carries the second opt-in, and only when the
   // farmer's own paper gives us a date to remind him about. No date, no offer.
@@ -1344,7 +1410,10 @@ app.post('/interest', async (c) => {
   const decodeId = String(body.decodeId ?? '');
   const answer = String(body.answer ?? '') === 'yes' ? 'yes' : 'not_now';
 
-  await recordEvent(c.env, answer === 'yes' ? 'interest_yes' : 'interest_not_now', decodeId || null, {});
+  const eventId = await recordEvent(c.env, answer === 'yes' ? 'interest_yes' : 'interest_not_now', decodeId || null, {});
+  // A yes is the measured conversion. A "not now" is an answer, not an event
+  // an ad platform optimizes toward, so nothing fires for it.
+  if (answer === 'yes') measureAd(c, 'InterestYes', eventId, fbcFromBody(body.fbc));
 
   return c.html(renderNotice(
     answer === 'yes' ? 'Noted' : 'Understood',

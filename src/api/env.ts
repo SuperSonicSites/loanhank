@@ -13,6 +13,12 @@ const configurationSchema = z.object({
   TURNSTILE_SITE_KEY: z.string().default(''),
   TURNSTILE_SECRET_KEY: z.string().default(''),
   RATE_LIMIT_SALT: z.string().min(16).default('local-preview-rate-limit-salt'),
+  // Meta Conversions API (spec.md Decision 8a, §10). Optional is deliberate:
+  // an unset META_DATASET_ID is the kill switch for the whole sender. The
+  // dataset id is public, like any pixel id; the token is a Worker secret.
+  META_DATASET_ID: z.string().optional(),
+  META_CAPI_TOKEN: z.string().optional(),
+  META_TEST_EVENT_CODE: z.string().optional(),
 });
 
 export type AppConfig = z.infer<typeof configurationSchema>;

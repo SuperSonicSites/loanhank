@@ -428,6 +428,7 @@ export function renderForm(
   problems: string[] = [],
   photo: PhotoPath | null = null,
   campaign: Record<string, string> = {},
+  fbc: string | null = null,
 ): string {
   const problemBlock = problems.length === 0
     ? ''
@@ -464,9 +465,9 @@ export function renderForm(
       <input type="text" id="paymentCount" name="paymentCount" inputmode="numeric" value="${escapeHtml(values.paymentCount)}" required>
     </div>
     <input type="hidden" name="standalone" value="">
-${campaignFields(campaign)}    <button type="submit">Run the numbers</button>
+${campaignFields(campaign)}${fbcField(fbc)}    <button type="submit">Run the numbers</button>
   </form>
-${photoBlock(photo)}`);
+${photoBlock(photo, fbc)}`);
 }
 
 /**
@@ -488,7 +489,22 @@ function campaignFields(campaign: Record<string, string>): string {
     .join('');
 }
 
-function photoBlock(photo: PhotoPath | null): string {
+/**
+ * The Meta click tag, riding a hidden field from landing to POST because there
+ * is no cookie and no JavaScript to carry it (spec.md Decision 2). It dies at
+ * the sender and never touches a table (spec.md §9.5, §10).
+ *
+ * The worker withholds it for any request carrying Sec-GPC: 1, so an opted-out
+ * browser drops the tag here as well as at the sender. Defence in depth,
+ * on purpose.
+ */
+function fbcField(fbc: string | null | undefined): string {
+  if (fbc === null || fbc === undefined || fbc === '') return '';
+  return `    <input type="hidden" name="fbc" value="${escapeHtml(fbc)}">
+`;
+}
+
+function photoBlock(photo: PhotoPath | null, fbc: string | null = null): string {
   if (photo === null || photo.turnstileSiteKey === '') return '';
   return `
   <p class="divider">or</p>
@@ -498,7 +514,7 @@ function photoBlock(photo: PhotoPath | null): string {
       <label for="photo">Snap the quote instead</label>
       <input type="file" id="photo" name="photo" accept="image/jpeg,image/png,application/pdf" capture="environment" required>
     </div>
-    <div class="cf-turnstile" data-sitekey="${escapeHtml(photo.turnstileSiteKey)}" data-action="extract"></div>
+${fbcField(fbc)}    <div class="cf-turnstile" data-sitekey="${escapeHtml(photo.turnstileSiteKey)}" data-action="extract"></div>
     <button type="submit" class="secondary">Run the numbers</button>
     <p class="note">Reading your paper takes about 10 seconds. The photo is never saved.</p>
   </form>
@@ -573,6 +589,8 @@ export interface ConfirmView {
   rows: ConfirmRow[];
   frequency: string;
   warnings: string[];
+  /** The click tag carried forward, or null when the visit carried none. */
+  fbc?: string | null;
 }
 
 /**
@@ -642,6 +660,7 @@ ${row.hint ? `      <p class="note">${escapeHtml(row.hint)}</p>
   <form method="post" action="/decode">
     <input type="hidden" name="ledger" value="1">
     <input type="hidden" name="extracted" value="${extractedSnapshot(view)}">
+${fbcField(view.fbc)}
 ${view.rows.map(field).join('\n')}
     <div class="field">
       <label for="paymentFrequency">How often you pay</label>
@@ -700,7 +719,7 @@ export interface EmailGate {
  * PDF, and promising one we cannot deliver is the same class of error as
  * printing a number we cannot stand behind.
  */
-function emailGateBlock(gate: EmailGate | null): string {
+function emailGateBlock(gate: EmailGate | null, fbc: string | null = null): string {
   if (gate === null) return '';
   return `
   <div class="gate no-print">
@@ -709,6 +728,7 @@ function emailGateBlock(gate: EmailGate | null): string {
     <p class="note">${escapeHtml(FOLLOWUP_DISCLOSURE)}</p>
     <form method="post" action="/email">
       <input type="hidden" name="decodeId" value="${escapeHtml(gate.decodeId)}">
+${fbcField(fbc)}
       <div class="field">
         <label for="email">Your email</label>
         <input type="email" id="email" name="email" inputmode="email" autocomplete="email" required>
@@ -735,7 +755,7 @@ function emailGateBlock(gate: EmailGate | null): string {
  *
  * Both answers are equal-weight buttons. No gray shame text on the decline.
  */
-function interestBlock(gate: EmailGate | null): string {
+function interestBlock(gate: EmailGate | null, fbc: string | null = null): string {
   if (gate === null) return '';
   return `
   <div class="gate no-print">
@@ -743,6 +763,7 @@ function interestBlock(gate: EmailGate | null): string {
     <p class="note">Nothing moves either way. We are asking whether this would be worth building. Your numbers stay here regardless of which button you press.</p>
     <form method="post" action="/interest">
       <input type="hidden" name="decodeId" value="${escapeHtml(gate.decodeId)}">
+${fbcField(fbc)}
       <button type="submit" name="answer" value="yes">Yes</button>
       <button type="submit" name="answer" value="not_now" class="secondary">Not now</button>
     </form>
@@ -761,6 +782,12 @@ export interface VerdictTicketView {
   missing: string[];
   assumption: string | null;
   gate: EmailGate | null;
+  /**
+   * The click tag carried forward into the gate forms. NOT part of the gate
+   * object: the firewall test pins the gate to exactly the decode id, and the
+   * tag is measurement plumbing, not something the gate is told.
+   */
+  fbc?: string | null;
 }
 
 /**
@@ -801,7 +828,7 @@ ${view.reference ? `    <p class="reference">${escapeHtml(view.reference)}</p>\n
 
 ${view.assumption ? `  <p class="assumption">${escapeHtml(view.assumption)}</p>\n` : ''}${abstention}${
     view.footnote ? `  <p class="footnote">${escapeHtml(view.footnote)}</p>\n` : ''
-  }${emailGateBlock(view.gate)}${interestBlock(view.gate)}  <p class="no-print"><a href="/">Run another quote</a></p>
+  }${emailGateBlock(view.gate, view.fbc ?? null)}${interestBlock(view.gate, view.fbc ?? null)}  <p class="no-print"><a href="/">Run another quote</a></p>
 `);
 }
 

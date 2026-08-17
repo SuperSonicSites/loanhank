@@ -24,10 +24,15 @@ TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
 RESEND_API_KEY=
 EMAIL_FROM=hank@mail.loanhank.com
 
-# Meta Conversions API, server-side only, no pixel (spec.md Decision 8).
-# PIXEL_ID is what Meta now calls the dataset id.
-META_CAPI_ACCESS_TOKEN=
-META_PIXEL_ID=
+# Meta Conversions API, server-side only, no pixel (spec.md Decisions 8, 8a).
+# The dataset id (what Meta used to call a pixel id) is public; the token is a
+# Worker secret in production. An unset META_DATASET_ID switches the sender
+# off entirely. LOCAL RULE: this must point at a DEV dataset, never the
+# production one — Meta does not discard test_event_code traffic, so a test
+# against the production dataset is a test row in the pile (spec.md §7.2).
+META_DATASET_ID=
+META_CAPI_TOKEN=
+META_TEST_EVENT_CODE=
 
 # Salt for hashing IPs in the per-extract rate limiter. Any long random string.
 RATE_LIMIT_SALT=

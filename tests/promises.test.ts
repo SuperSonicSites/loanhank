@@ -48,6 +48,16 @@ const PROMISES: Promised[] = [
   // is the other half of the posture in spec.md §10.
   { phrase: "We'll follow up once about your deal", keptBy: 'day four goes out once and only once' },
 
+  // Ads measurement (spec.md §10). The privacy page's canon ads paragraph
+  // claims we can tell which ads work, which is a claim about a mechanism, so
+  // it carries a sender like every other one. Its negative paths are the four
+  // skips: disabled, synthetic, GPC honoured, and not from an ad. The phrase
+  // is registered ahead of the Track C copy that will carry it.
+  {
+    phrase: 'so we can tell which ads work',
+    keptBy: 'ad measurement fires from the worker, and every skip is a refusal',
+  },
+
   // The 404 on /email. It promises a teardown follows a fresh run, and fix 2
   // is what makes that true.
   {
