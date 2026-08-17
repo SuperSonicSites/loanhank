@@ -1,9 +1,11 @@
+import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 import { COHORT_MIN_N, PEER_POLICY_VERSION, VERDICT_BUFFER_VERSION } from '../src/finance/index.js';
 import {
   PRIVACY_VERSION,
   TERMS_VERSION,
   renderContact,
+  renderDoNotSell,
   renderHowWeFigureIt,
   renderHowWeMakeMoney,
   renderManifest,
@@ -32,6 +34,7 @@ const PAGES: Array<[string, string]> = [
   ['how-we-figure-it', renderHowWeFigureIt()],
   ['straight-answers', renderStraightAnswers()],
   ['contact', renderContact(POSTAL)],
+  ['do-not-sell', renderDoNotSell()],
   ['whos-behind-this', renderWhosBehindThis()],
   ['404', renderNotFound()],
   // Every note obeys every copy law the rest of the site does, so they join
@@ -421,5 +424,90 @@ describe('notes are papers, not a blog', () => {
     expect(prose(html)).toContain('Run the numbers');
     expect(prose(html)).not.toMatch(/!/);
     expect(prose(html)).not.toMatch(/—/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE PRIVACY SURFACE — spec.md §14, the gate on ads measurement.
+//
+// META_DATASET_ID stays unset in production until all of this is live, and
+// "live" has to mean something a test can check. CAPI is itself the CCPA share
+// that triggers these pages (§10, lawyer stone 2), so the code shipping before
+// the copy is fine and the secret being set before it is not.
+//
+// The two canon paragraphs are read OUT OF docs/spec.md rather than retyped,
+// so drift in either direction fails the build: paraphrasing the page breaks
+// it, and quietly editing the law without the page breaks it too.
+// ---------------------------------------------------------------------------
+
+const SPEC = new URL('../docs/spec.md', import.meta.url);
+
+/** A canon blockquote line from spec.md, stripped to the words themselves. */
+async function canon(contains: string): Promise<string> {
+  const spec = await readFile(SPEC, 'utf8');
+  const line = spec.split('\n').find((row) => row.trim().startsWith('> ') && row.includes(contains));
+  expect(line, `spec.md no longer carries a canon line containing "${contains}"`).toBeDefined();
+  return (line as string).trim().replace(/^>\s*/, '').replace(/\*\*/g, '');
+}
+
+describe('the privacy surface is live and says what the machinery does', () => {
+  it('privacy carries the canon ads paragraph, word for word', async () => {
+    const text = await canon('If you came here from a Facebook ad');
+    expect(prose(renderPrivacy())).toContain(text);
+  });
+
+  it('straight answers carries the canon Facebook answer, word for word', async () => {
+    const full = await canon('Do you tell Facebook about me?');
+    const answer = full.replace('Do you tell Facebook about me? ', '');
+    const html = renderStraightAnswers();
+    expect(html).toContain('<h2>Do you tell Facebook about me?</h2>');
+    expect(prose(html)).toContain(answer);
+  });
+
+  it('names the do-not-share signal, because a farmer cannot use a signal nobody names', () => {
+    // The canon paragraph says "a do-not-share signal" without naming it. The
+    // page has to say which one, or the sentence is a fact he cannot act on.
+    for (const html of [renderPrivacy(), renderDoNotSell()]) {
+      expect(prose(html)).toContain('Global Privacy Control');
+    }
+  });
+
+  it('links Do Not Sell or Share from every page, in the statute Title Case', () => {
+    // design.md §2: the one string exempt from sentence case, copied verbatim
+    // rather than tidied. A rights link nobody can find is not a rights path.
+    for (const [name, html] of PAGES) {
+      expect(html, `${name} has no Do Not Sell or Share link`)
+        .toContain('>Do Not Sell or Share My Personal Information<');
+      expect(html, `${name} does not point the link at the page`).toContain('href="/do-not-sell"');
+    }
+  });
+
+  it('offers only mechanisms that exist, and admits the one it does not have', () => {
+    const text = prose(renderDoNotSell());
+    // GPC is real: gpcHonoured reads sec-gpc on every request and both the
+    // sender and the carrier withhold on it.
+    expect(text).toContain('Global Privacy Control');
+    // The inbox is real and is the one printed on /contact.
+    expect(renderDoNotSell()).toContain('mailto:hank@mail.loanhank.com');
+    // And the honest limit: no cookie and no account means no remembered
+    // opt-out. Claiming otherwise would be the promise problem in a legal hat.
+    expect(text).toContain('cannot recognize your browser');
+  });
+
+  it('no longer claims the sharing has not started, because it has', () => {
+    // The old California paragraph reasoned from the Phase C lead handoff and
+    // said "That is not happening today". Sending identifiers to Meta is
+    // itself the share, and it fires the day CAPI does.
+    const text = prose(renderPrivacy());
+    expect(text).not.toContain('That is not happening today');
+    expect(text).toContain('California law treats the click tag');
+  });
+
+  it('keeps the footer trust line scoped to the numbers, not to everything', () => {
+    // design.md §2: a flat "nothing leaves here" would be a lie in the one
+    // place this product can least afford one, now that a click tag leaves.
+    const text = prose(renderPrivacy());
+    expect(text).toContain('Your numbers stay here unless you say go.');
+    expect(text).not.toContain('nothing leaves');
   });
 });
