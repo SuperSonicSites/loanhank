@@ -9,6 +9,9 @@ const NEWLINE = String.fromCharCode(10);
 /** Whole block comments, so a continuation line cannot pose as product copy. */
 const BLOCK_COMMENT = /\/\*[\s\S]*?\*\//g;
 
+/** After a full stop, question mark or bang, and the whitespace following it. */
+const SENTENCE_BREAK = /(?<=[.?!])\s+/;
+
 // NO PROMISE WITHOUT A SENDER — spec.md §7.3.
 //
 // Two defects in one session, the same species both times. The expiry opt-in
@@ -58,6 +61,17 @@ const PROMISES: Promised[] = [
     phrase: 'not a promise about every future version',
     notADelivery: 'says out loud that it is NOT a promise, which is the opposite of one',
   },
+
+  // Both found only once the sweep moved to sentence level. They shared a line
+  // with a registered phrase and were passing on its coat-tails.
+  {
+    phrase: 'it will be something you switch on deliberately',
+    keptBy: 'keeps consent language away from it entirely',
+  },
+  {
+    phrase: "Sometimes this tool will tell you the dealer's deal is good and you should take it.",
+    keptBy: 'produces a CHECKS OUT stamp from the shipped benchmark table',
+  },
   {
     phrase: 'We do not guarantee any saving',
     notADelivery: 'a refusal to promise, kept by refusing rather than by a mechanism',
@@ -73,6 +87,10 @@ const PROMISES: Promised[] = [
   {
     phrase: 'Because you were going to wonder',
     notADelivery: 'describes the reader, promises nothing',
+  },
+  {
+    phrase: 'we are not going to guess at a number we have not measured',
+    notADelivery: 'a refusal to predict, which is the opposite of a commitment',
   },
   {
     phrase: 'If a dealer will take six thousand dollars off for cash',
@@ -142,12 +160,19 @@ async function productCopy(): Promise<string[]> {
     // is how a CSS comment about print styling arrived here claiming to be a
     // promise. Same failure shape as the sweep that could not see past a '<'.
     const text = raw.replace(BLOCK_COMMENT, ' ');
-    for (const line of text.split('\n')) {
+    for (const line of text.split(NEWLINE)) {
       const trimmed = line.trim();
       // Line comments explain the rules and are allowed to quote them.
       if (trimmed.startsWith('//')) continue;
-      if (FUTURE.test(line)) found.push(line.trim());
-      FUTURE.lastIndex = 0;
+      // SENTENCE level, not line level. A line holding two sentences passed
+      // whole the moment one registered phrase appeared anywhere in it, so a
+      // registered sentence laundered every unregistered neighbour sharing
+      // its line. Split first and each claim answers for itself.
+      for (const sentence of trimmed.split(SENTENCE_BREAK)) {
+        if (sentence.trim() === '') continue;
+        if (FUTURE.test(sentence)) found.push(sentence.trim());
+        FUTURE.lastIndex = 0;
+      }
     }
   }
   return found;

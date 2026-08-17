@@ -16,11 +16,13 @@ import {
 } from '../finance/index.js';
 import { hashAccessKey } from './security.js';
 import {
-  centsToInput, confirmableField, emailGateSchema, ledgerFormSchema, quickPathFormSchema,
+  centsToInput, confirmableField, emailGateSchema, EQUIPMENT_BRANDS, ledgerFormSchema,
+  normalizeBrand, quickPathFormSchema,
   type ConfirmableField, type QuoteExtraction,
 } from '../shared/schema.js';
 import {
   renderConfirm, renderForm, renderNotice, renderTicket, renderUnpriceable, renderVerdictTicket,
+  setFooterPostalAddress,
   type ConfirmRow, type FormValues,
 } from '../web/page.js';
 import { assertUploadAllowed, PublicApiError } from './security.js';
@@ -160,6 +162,16 @@ function confirmRows(extraction: QuoteExtraction): ConfirmRow[] {
     // Read silently, never required. The expiry drives the only honest
     // deadline this product has, and the quote date keeps stale paper out of a
     // current-quarter median (spec.md 9.4: forage never blocks a decode).
+    // Offered as a list, never a free box. A name that is not a manufacturer
+    // has no path in (spec.md §9.5).
+    {
+      name: 'brand',
+      label: 'Make',
+      state: normalizeBrand(extraction.brand.value) === null ? 'unreadable' as const : 'read' as const,
+      value: normalizeBrand(extraction.brand.value) ?? '',
+      choices: [...EQUIPMENT_BRANDS],
+      hint: 'Pick the maker of the machine. Leave it blank if it is not on the list.',
+    },
     text('quoteDate', 'Date on the quote', extraction.quote_date, 'Like 2026-08-11. Leave empty if it is not printed.'),
     text('quoteExpiryDate', 'Quote valid until', extraction.quote_expiry_date, 'Leave empty if the paper does not say.'),
   ];
@@ -183,6 +195,27 @@ const WARNING_COPY: Record<string, string> = {
  * instead, and it is text and numbers only. Untrusted input, so it is size
  * capped and shape checked before anything is recorded.
  */
+/**
+ * The field names the confirm screen can legitimately carry back.
+ *
+ * Closed on purpose. This runs on a public route and the snapshot is a string
+ * the browser hands us, so without an allowlist any key at all could be posted
+ * and would be written verbatim into events.meta_json. "There is nowhere to
+ * put a dealer name" was true of every table and false of this one JSON blob,
+ * which is exactly the shape §9.5 exists to prevent.
+ */
+const CONFIRMABLE_FIELDS = new Set([
+  'quotedPrice', 'cashDiscount', 'payment', 'paymentCount', 'paymentFrequency',
+  'statedRate', 'downPayment', 'tradeAllowance', 'tradePayoff', 'deliverySetup',
+  'financeOnlyFee', 'quoteDate', 'quoteExpiryDate',
+]);
+
+/**
+ * What the model read against what the farmer confirmed, per field.
+ *
+ * Unknown keys are dropped BEFORE anything is computed or stored, so a posted
+ * key never reaches the diff, the event, or the database.
+ */
 function extractionDiff(
   rawSnapshot: string,
   confirmed: Record<string, unknown>,
@@ -198,6 +231,9 @@ function extractionDiff(
 
   const diff: Array<{ field: string; read: string; confirmed: string }> = [];
   for (const [field, readValue] of Object.entries(snapshot as Record<string, unknown>)) {
+    // The allowlist first. Everything after this line has already been vouched
+    // for by name, so a value can only be wrong, never unexpected.
+    if (!CONFIRMABLE_FIELDS.has(field)) continue;
     if (typeof readValue !== 'string' || readValue.length > 40) continue;
     const confirmedValue = String(confirmed[field] ?? '');
     // Normalize so "6000" and "6000.00" do not read as a correction.
@@ -703,6 +739,15 @@ export async function sendTeardown(
  */
 const UTM_FIELDS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content'] as const;
 
+/** The four permitted labels as the form carried them back (spec.md §9.5). */
+function campaignFromBody(body: Record<string, unknown>): Record<string, string> {
+  return Object.fromEntries(
+    UTM_FIELDS
+      .map((field) => [field, String(body[field] ?? '').slice(0, 60)])
+      .filter(([, value]) => value !== ''),
+  );
+}
+
 function campaignLabels(url: URL): Record<string, string> {
   const labels: Record<string, string> = {};
   for (const field of UTM_FIELDS) {
@@ -717,6 +762,9 @@ export const app = new Hono<{ Bindings: Env }>();
 // Stamped on every response, so any page a reviewer already has open answers
 // "which build is this" without a second request.
 app.use('*', async (c, next) => {
+  // The footer address is a public versioned var, identical on every request,
+  // so it is set once here rather than threaded through every renderer.
+  setFooterPostalAddress(typeof c.env.POSTAL_ADDRESS === 'string' ? c.env.POSTAL_ADDRESS : '');
   await next();
   const sha = typeof c.env.BUILD_SHA === 'string' ? c.env.BUILD_SHA : 'unset';
   c.header('x-loanhank-build', sha);
@@ -820,6 +868,11 @@ app.post('/decode', async (c) => {
     .run();
 
   await recordEvent(c.env, 'decode', decodeId, {
+    // The quick path carried no campaign labels, so a typed decode was
+    // invisible to the ad that produced it while the ledger path and the page
+    // view both kept theirs. Cost per completed decode is the round-one gate
+    // (spec.md §7.1) and it cannot be computed from two thirds of the decodes.
+    ...campaignFromBody(body),
     promo_price_rate_bps: result.promoPriceRateBps,
     payment_frequency: form.paymentFrequency,
   });
@@ -1078,8 +1131,8 @@ async function decodeFullLedger(c: {
        benchmark_at_ts, delta_vs_benchmark_bps,
        country, currency, province_or_state, out_of_bounds,
        quote_date, quote_expiry_date, launched_standalone,
-       price_band, term_band, referrer
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       price_band, term_band, referrer, brand
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).bind(
     decodeId, ts, quarterOf(ts),
     form.quotedPrice, form.cashDiscount, decoded.totals.cashOutlayCents,
@@ -1099,12 +1152,13 @@ async function decodeFullLedger(c: {
     String(body.standalone ?? '') === '1' ? 1 : null,
     bands.priceBand, bands.termBand,
     referringPage(c.req.header('referer')),
+    // Normalized, so a dealership name posted straight at the route lands as
+    // null rather than as a brand.
+    normalizeBrand(String(body.brand ?? '')),
   ).run();
 
   await recordEvent(c.env, 'decode', decodeId, {
-    ...Object.fromEntries(UTM_FIELDS
-      .map((field) => [field, String(body[field] ?? '')])
-      .filter(([, value]) => value !== '')),
+    ...campaignFromBody(body),
     path: 'ledger',
     real_rate_all_in_bps: decoded.realRateAllInBps,
     verdict: verdict.verdict,
@@ -1118,7 +1172,7 @@ async function decodeFullLedger(c: {
     c.executionCtx.waitUntil(recordEvent(c.env, 'extraction_diff', decodeId, {
       corrected_fields: diff.map((entry) => entry.field),
       corrections: diff,
-      field_count: Object.keys(JSON.parse(String(body.extracted))).length,
+      field_count: diff.length,
     }));
   }
 
@@ -1362,6 +1416,12 @@ app.get('/version', (c) => {
     buffer: VERDICT_BUFFER_VERSION,
     peer: PEER_POLICY_VERSION,
   });
+});
+
+app.onError((error, c) => {
+  // Surfaced in logs and in tests. A farmer still sees the plain page.
+  console.log(`route error ${c.req.path}: ${String(error)}`);
+  return c.html(renderNotFound(), 500);
 });
 
 app.notFound((c) => c.html(renderNotFound(), 404));

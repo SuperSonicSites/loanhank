@@ -326,6 +326,20 @@ const FOOTER_PAGES: Array<[string, string]> = [
   ['/contact', 'Contact'],
 ];
 
+/**
+ * The postal address printed in the site footer.
+ *
+ * Module-level rather than threaded through fifteen render functions. It is a
+ * versioned public var with the same value on every request in an isolate, so
+ * there is nothing per-request to leak between farmers. The worker sets it
+ * once in middleware.
+ */
+let footerPostalAddress = '';
+
+export function setFooterPostalAddress(value: string): void {
+  footerPostalAddress = value;
+}
+
 export function shell(title: string, body: string): string {
   return `<!doctype html>
 <html lang="en">
@@ -349,6 +363,8 @@ export function shell(title: string, body: string): string {
 ${body}
   <footer>
     <nav>${FOOTER_PAGES.map(([href, label]) => `<a href="${href}">${label}</a>`).join('')}</nav>
+${footerPostalAddress === '' ? '' : `    <address>${escapeHtml(footerPostalAddress)}</address>
+`}
     <p>Free tool. Your photo is never saved. Your numbers stay here unless you say go.</p>
   </footer>
 </main>
@@ -549,6 +565,8 @@ export interface ConfirmRow {
   state: 'read' | 'unreadable';
   value: string;
   hint?: string;
+  /** Present means offer these and nothing else, rather than a free box. */
+  choices?: string[];
 }
 
 export interface ConfirmView {
@@ -578,6 +596,26 @@ function extractedSnapshot(view: ConfirmView): string {
  * this screen exists: the model abstains, and the farmer fills the gap from
  * the paper in his hand.
  */
+/**
+ * A closed list renders as a select, everything else as a text box.
+ *
+ * A select can only return what we put in it, which is why `brand` uses one:
+ * a dealership name has no path in, rather than a prompt asking politely for a
+ * manufacturer and a free box accepting whatever arrives (spec.md 9.5).
+ */
+function control(row: ConfirmRow): string {
+  if (row.choices === undefined) {
+    return `      <input type="text" id="${row.name}" name="${row.name}" inputmode="decimal" value="${escapeHtml(row.value)}">`;
+  }
+  const options = row.choices
+    .map((choice) => `<option value="${escapeHtml(choice)}"${choice === row.value ? ' selected' : ''}>${escapeHtml(choice)}</option>`)
+    .join('');
+  return `      <select id="${row.name}" name="${row.name}">
+        <option value="">Not listed</option>
+        ${options}
+      </select>`;
+}
+
 export function renderConfirm(view: ConfirmView): string {
   const warningBlock = view.warnings.length === 0
     ? ''
@@ -593,8 +631,9 @@ export function renderConfirm(view: ConfirmView): string {
       <p class="${unreadable ? 'flag-unreadable' : 'flag-read'}">${
       unreadable ? 'Could not read it, type it in' : 'Read from your paper'
     }</p>
-      <input type="text" id="${row.name}" name="${row.name}" inputmode="decimal" value="${escapeHtml(row.value)}">
-${row.hint ? `      <p class="note">${escapeHtml(row.hint)}</p>\n` : ''}    </div>`;
+${control(row)}
+${row.hint ? `      <p class="note">${escapeHtml(row.hint)}</p>
+` : ''}    </div>`;
   };
 
   return shell('Check these · LoanHank', `${warningBlock}  <h1>Check these against your paper. Fix anything we got wrong.</h1>

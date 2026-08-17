@@ -27,8 +27,7 @@ ${plain('We keep the numbers off your quote, and your email if you hand it over.
   <p class="note">Version ${PRIVACY_VERSION}</p>
 
   <h2>Your photo</h2>
-  <p>Your photo is never saved. It goes straight to the reader and is gone when the answer comes back. It is not written to a disk, not put in a bucket, and not kept for training or review.</p>
-  <p>There is a second lock behind that one. The storage bucket the photo would land in, if a future version of this tool ever wrote one there, carries a rule that deletes everything in it after a day. Today nothing writes to it at all. We keep the rule anyway, because a promise with only one lock on it is a promise you are trusting us to remember.</p>
+  <p>We never save your photo. It goes to our reading service, the answer comes back, and our copy is gone. The reading service does not train on it and does not keep it for us. Their own abuse screening can hold a copy for up to 30 days under their policy.</p>
 
   <h2>What we keep</h2>
   <p>The numbers off the quote: the price, the discount, the payment, the term, the fees, the trade, and the equipment they describe. The state or province the deal is written in. What our engine computed from all that.</p>
@@ -165,7 +164,7 @@ export function renderStraightAnswers(): string {
   <p>We do not know who your dealer is. We do not extract or store the dealership name, and there is nowhere in our records to put it.</p>
 
   <h2>What if my deal is good?</h2>
-  <p>We say so and you should go sign it. That happens often with subsidized zero percent offers, and a tool that could not say it would not be worth trusting.</p>
+  <p>We say so and you should go sign it. The worked example on <a href="/how-we-figure-it">how we figure it</a> is one: an $84,500 quote with a $6,000 cash discount, taken at the dealer's zero percent over 60 months, prices at 2.94% against a published 7.25%, and it checks out. We have not run enough real quotes to tell you how common that is, and we are not going to guess at a number we have not measured.</p>
 
   <h2>Why do you sometimes refuse to give a verdict?</h2>
   <p>Because the numbers did not reconcile, or an amount was unexplained, or no published rate honestly matches your deal. We would rather hand you the arithmetic and admit the gap than invent a comparison.</p>

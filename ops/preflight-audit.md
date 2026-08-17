@@ -37,7 +37,15 @@ You are new auditor. You know nothing about this project. That is your power. Ev
 
 **9. The firewall.** Read the ticket and verdict screens: zero mentions of lenders, partners, refinancing, or the interest question. Read /interest: zero mentions of the verdict, and none of the words consent, agree, authorize, permission. Run `tests/firewall.test.ts` and confirm it actually asserts both directions.
 
-**10. Doors hold.** POST /extract with no Turnstile token, a forged token, an oversized body: all must fail closed. Fire 21 quick-path decodes from one IP: the 21st must 429. Scan git history for leaked secrets (`git log -p | grep -iE 'sk-|api[_-]?key|secret'` and a proper scan if available). Confirm `.env` and `.dev.vars` are gitignored and absent from history.
+**10. Doors hold.** POST /extract with no Turnstile token, a forged token, an oversized body: all must fail closed.
+
+The rate limiter is **best effort, not a counter** (spec.md launch checklist). The Workers binding is approximate at the boundary and a live run has let 21 through before refusing, which is documented behavior rather than a defect. So the gate is not "the 21st request must 429". The gate is three things that are exact:
+
+- **Sustained abuse is throttled.** Fire 60 quick-path decodes from one IP and confirm a substantial share are refused, not that any particular one is.
+- **An invalid request creates zero rows.** After the burst, `decodes` and `events` must have grown only by the requests that actually succeeded. A refused request writes nothing.
+- **The spend cap is confirmed as the real backstop.** The limiter protects the pile; the hard monthly cap on the model provider protects the bill, and it is what stands if the limiter is bypassed entirely. Confirm the cap exists in the provider console.
+
+Scan git history for leaked secrets (`git log -p | grep -iE 'sk-|api[_-]?key|secret'` and a proper scan if available). Confirm `.env` and `.dev.vars` are gitignored and absent from history.
 
 **11. Events tell the truth.** Run one full decode on the live site. Confirm every step wrote its event row with UTM fields intact. Confirm `ops/funnel.sql` runs and shows your decode. Confirm days-since-last-backup appears in that query's output. THEN flag your rows synthetic and prove real counts read zero again.
 

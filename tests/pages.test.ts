@@ -79,14 +79,24 @@ describe('privacy says what the machinery actually does', () => {
   const html = prose(renderPrivacy());
 
   it('states plainly that the photo is never saved', () => {
-    expect(html).toContain('Your photo is never saved.');
-    expect(html).toContain('gone when the answer comes back');
+    expect(html).toContain('We never save your photo.');
+    expect(html).toContain('our copy is gone');
   });
 
-  it('states the one-day backstop without pretending it is the promise', () => {
-    // The rule cannot express ten seconds. Saying so is the point.
-    expect(html).toContain('deletes everything in it after a day');
-    expect(html).toContain('Today nothing writes to it at all.');
+  it('names the reading service and what it may hold, rather than implying we are alone', () => {
+    // The old paragraph described our own machinery honestly and stopped
+    // there, which read as though nobody else ever touched the file. The
+    // provider's abuse screening is a real thing a farmer would want to know.
+    expect(html).toContain('does not train on it and does not keep it for us');
+    expect(html).toContain('up to 30 days under their policy');
+  });
+
+  it('follows the photo paragraph with no future-tense sentence', () => {
+    const start = html.indexOf('We never save your photo.');
+    const paragraph = html.slice(start, start + 600);
+    // A conditional about a future version of the tool used to sit here, and a
+    // promise about the future is not what a privacy statement is for.
+    expect(paragraph).not.toMatch(/will/);
   });
 
   it('names what can never be stored', () => {

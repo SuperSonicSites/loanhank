@@ -509,8 +509,42 @@ const extractedDate = z.object({
   confidence,
 });
 
+/**
+ * Equipment manufacturers, closed.
+ *
+ * `brand` was a free string with a prompt asking politely for a manufacturer,
+ * which meant a dealership name had a path in whenever the model was unsure.
+ * A closed list has no such path: a name that is not on it stores null, and
+ * the confirm screen offers the list so the farmer picks rather than types.
+ *
+ * Adding a manufacturer is a deliberate edit here, which is the point. The
+ * cost of a missing brand is a null in a forage column; the cost of an open
+ * field is a dealership name in the pile, and only one of those is reversible.
+ */
+export const EQUIPMENT_BRANDS = [
+  'John Deere', 'Case IH', 'New Holland', 'Kubota', 'AGCO', 'Massey Ferguson',
+  'Fendt', 'Challenger', 'Claas', 'Valtra', 'Deutz-Fahr', 'McCormick',
+  'Landini', 'Versatile', 'Gleaner', 'Krone', 'Kuhn', 'Vermeer', 'Bobcat',
+  'Caterpillar', 'Komatsu', 'JCB', 'Mahindra', 'Kioti', 'Branson', 'LS Tractor',
+  'Great Plains', 'Horsch', 'Amazone', 'Lemken', 'Sunflower', 'Salford',
+  'Bourgault', 'Seed Hawk', 'Morris', 'Degelman', 'MacDon', 'Honey Bee',
+] as const;
+
+export type EquipmentBrand = (typeof EQUIPMENT_BRANDS)[number];
+
+/** Case-insensitive match against the closed list. Anything else is null. */
+export function normalizeBrand(raw: string | null | undefined): EquipmentBrand | null {
+  if (raw === null || raw === undefined) return null;
+  const needle = raw.trim().toLowerCase();
+  return (EQUIPMENT_BRANDS as readonly string[])
+    .find((brand) => brand.toLowerCase() === needle) as EquipmentBrand | undefined ?? null;
+}
+
 const extractedBrand = z.object({
-  /** Manufacturer only, e.g. "John Deere". Never a dealership name. */
+  /**
+   * Manufacturer only. The model may return anything; `normalizeBrand` is what
+   * decides whether it lands, and a dealership name never does.
+   */
   value: z.string().max(40).nullable(),
   confidence,
 });

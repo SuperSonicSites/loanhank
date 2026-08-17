@@ -260,6 +260,7 @@ The pile is the company. These rules exist so nobody has to be individually corr
 
   Verification traffic is synthetic by definition, however real the pipes it proves. A send that genuinely reaches a real inbox is still a send nobody asked for, and three runs of the same canonical deal would seed the first cohort median with an echo of our own test.
 - **Production deletes require owner sign-off.** Any `DELETE` against `decodes`, `emails` or `events` on the remote database is an owner decision, asked for and answered in writing before it runs. This includes cleaning up a mess the agent itself made. On 2026-08-15 a session cleared 24 self-created rows on its own judgment. The judgment was right and the precedent is not. **The rule is asymmetric on purpose: flag freely, delete never.**
+- **Operational events are real even when an agent triggers them.** A `backup_completed` row records that the pile genuinely was written somewhere it can be restored from, and the alarm in `ops/funnel.sql` reads `synthetic = 0`. Flagging it synthetic because a human fired the cron by hand would blind the alarm to the only backup that ever ran. The rule is about *farmer traffic we manufactured*, not about the machine doing its job.
 - **The pile's first real row should be the first real farmer.**
 - **Benchmarks are the exception, and only through a migration.** Corrections to published-rate rows ship as a new numbered migration, never as an ad-hoc statement, because a verdict has to stay reproducible against what the table said on the day.
 

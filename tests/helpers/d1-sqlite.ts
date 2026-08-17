@@ -11,14 +11,17 @@ import { DatabaseSync } from 'node:sqlite';
 
 const MIGRATIONS = new URL('../../migrations/', import.meta.url);
 
+export interface D1Like {
+  all<T>(): Promise<{ results: T[] }>;
+  run(): Promise<{ meta: { changes: number } }>;
+  first<T>(): Promise<T | null>;
+}
+
 export interface FakeD1 {
-  prepare(sql: string): {
-    bind(...args: unknown[]): {
-      all<T>(): Promise<{ results: T[] }>;
-      run(): Promise<{ meta: { changes: number } }>;
-      first<T>(): Promise<T | null>;
-    };
-  };
+  // Real D1 lets a parameterless statement run straight off prepare(), and the
+  // benchmark lookup does exactly that. An adapter that only worked after
+  // bind() made a working route look like a 500, so it mirrors both shapes.
+  prepare(sql: string): D1Like & { bind(...args: unknown[]): D1Like };
 }
 
 export async function migratedDatabase(): Promise<{ db: DatabaseSync; d1: FakeD1 }> {
@@ -39,24 +42,24 @@ export async function migratedDatabase(): Promise<{ db: DatabaseSync; d1: FakeD1
     }
   }
 
+  const bound = (sql: string, args: unknown[]): D1Like => ({
+    async all<T>() {
+      return { results: db.prepare(sql).all(...(args as never[])) as T[] };
+    },
+    async run() {
+      const result = db.prepare(sql).run(...(args as never[]));
+      return { meta: { changes: Number(result.changes) } };
+    },
+    async first<T>() {
+      return (db.prepare(sql).get(...(args as never[])) ?? null) as T | null;
+    },
+  });
+
   const d1: FakeD1 = {
     prepare(sql: string) {
       return {
-        bind(...args: unknown[]) {
-          const statement = db.prepare(sql);
-          return {
-            async all<T>() {
-              return { results: statement.all(...(args as never[])) as T[] };
-            },
-            async run() {
-              const result = statement.run(...(args as never[]));
-              return { meta: { changes: Number(result.changes) } };
-            },
-            async first<T>() {
-              return (statement.get(...(args as never[])) ?? null) as T | null;
-            },
-          };
-        },
+        ...bound(sql, []),
+        bind: (...args: unknown[]) => bound(sql, args),
       };
     },
   };
