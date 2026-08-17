@@ -14,7 +14,7 @@ import { PEER_POLICY_VERSION, VERDICT_BUFFER_VERSION, COHORT_MIN_N } from '../fi
 import { escapeHtml, shell } from './page.js';
 
 export const TERMS_VERSION = 'v1 (2026-08-15, pre-counsel)';
-export const PRIVACY_VERSION = 'v1 (2026-08-15)';
+export const PRIVACY_VERSION = 'v2 (2026-08-17)';
 
 /** The text version stored beside any consent, once consent exists. */
 export const CONSENT_TEXT_VERSION = TERMS_VERSION;
@@ -41,14 +41,21 @@ ${plain('We keep the numbers off your quote, and your email if you hand it over.
   <p>We keep anonymized, aggregated market statistics from the quote numbers, and we keep them indefinitely. That is how a median for used tractors on a five year term comes to exist at all. We publish a statistic only when at least ${COHORT_MIN_N} quotes stand behind it, and we always print how many. Nothing published is ever traceable to one quote or one farmer.</p>
 
   <h2>Nothing moves</h2>
-  <p>We do not sell, share or hand your personal information to anybody. There is no lender on the other end of this today. If we are ever asked whether you would want to hear from an independent lender, that question moves nothing on its own, and we say so where we ask it.</p>
+  <p>We do not sell your personal information, and no lender receives anything about you. The one thing that ever leaves this site is the Facebook click tag described below, and only for a visit that arrived from one of our own ads. If we are ever asked whether you would want to hear from an independent lender, that question moves nothing on its own, and we say so where we ask it.</p>
   <p>If that ever changes, it changes with a button you press, with the exact wording recorded beside your answer, and after a lawyer has been through it.</p>
 
   <h2>California</h2>
-  <p>If we ever begin passing a farmer's details to a lender for money, California law treats that as selling or sharing personal information, and you get a right to say no to it. That is not happening today. On the day it does, this page carries a <span class="ui">Do Not Sell or Share My Personal Information</span> link and a rights process, and its version number at the top changes to say so.</p>
+  <p>California law treats the click tag we send to Meta as sharing personal information for advertising, so you have a right to tell us to stop. The <a href="/do-not-sell">Do Not Sell or Share My Personal Information</a> page says what stopping it does and how to ask, and there is a link to it in the footer of every page here.</p>
+  <p>If we ever begin passing a farmer's details to a lender for money, that is a second kind of sharing and it does not exist yet. On the day it does, this page says so and its version number at the top changes.</p>
 
   <h2>Measurement</h2>
   <p>There are no tracking cookies here, no third-party pixel and no advertising script, which is why there is no cookie banner on this site: there is nothing to ask you about. We count how many people reached each step, on our own server, without identifying anybody.</p>
+
+  <h2>Facebook ads</h2>
+  <p>If you came here from a Facebook ad, we send Meta the click tag that was already on your visit, plus the fact that a decode happened, so we can tell which ads work. Your numbers, your photo, and your email are never part of it. If your browser sends a do-not-share signal, we send Meta nothing at all.</p>
+  <p>The signal is Global Privacy Control. Browsers and extensions that support it send it on every request, and we read it on every request. A visit carrying it sends Meta nothing, you do not have to ask us, and there is nothing to switch on here.</p>
+  <p>The click tag is the one Facebook put on its own link before you ever reached us. It rides the page while you use the tool and it is never written down: not on the row we keep about your quote, not in our own counts, not anywhere.</p>
+  <p>Arrive any other way and Meta hears nothing about you, because there is no tag to send and we send no event without one.</p>
 
   <h2>Asking us</h2>
   <p>Write to us at the address on the <a href="/contact">contact page</a> and ask what we hold about you, or ask us to delete it. If you gave us an email we can find it. If you only ran numbers, there is nothing attached to you to find.</p>
@@ -160,14 +167,52 @@ export function renderStraightAnswers(): string {
   <h2>What happens to the photo?</h2>
   <p>It is read and gone. It is never saved anywhere. See <a href="/privacy">privacy</a>.</p>
 
+  <h2>Do you tell Facebook about me?</h2>
+  <p>Only if you arrived from one of our Facebook ads, and only that the visit led to a decode, using the click tag Facebook already attached. Never your numbers. Never your name.</p>
+  <p>If your browser sends a do-not-share signal we send nothing at all, and you can read what that means on the <a href="/do-not-sell">Do Not Sell or Share My Personal Information</a> page.</p>
+
   <h2>Will you tell my dealer?</h2>
   <p>We do not know who your dealer is. We do not extract or store the dealership name, and there is nowhere in our records to put it.</p>
 
   <h2>Are you on my side?</h2>
   <p>We are on the math's side. Most days that amounts to the same thing. When your deal is good we say so, and nobody pays us either way for the answer.</p>
 
-  <h2>Why do you sometimes refuse to give a verdict?</h2>
-  <p>Because the numbers did not reconcile, or an amount was unexplained, or no published rate honestly matches your deal. We would rather hand you the arithmetic and admit the gap than invent a comparison.</p>
+`);
+}
+
+/**
+ * The CCPA opt-out page (spec.md §10, lawyer stone 2).
+ *
+ * The heading and the footer link are Title Case because the statute writes
+ * the phrase that way. It is the one string in this product exempt from
+ * sentence case (design.md §2), and it is copied rather than tidied.
+ *
+ * Every mechanism named here EXISTS. Global Privacy Control is read on every
+ * request and gates the sender; the inbox is real and is the one on /contact.
+ * The honest limit is stated rather than papered over: with no cookie and no
+ * account there is nothing to attach a remembered opt-out to, so the signal is
+ * what carries it, on every visit, by itself. A link describing a mechanism
+ * the code does not have is the promise problem wearing a legal hat (§7.3).
+ */
+export function renderDoNotSell(): string {
+  return shell('Do Not Sell or Share My Personal Information · LoanHank', `  <h1>Do Not Sell or Share My Personal Information</h1>
+${plain('We never sell anything about you. One thing is shared: if you arrived from one of our Facebook ads, Meta is told the visit led to a decode. Turn on Global Privacy Control and even that stops.')}
+
+  <h2>What is shared, and that is all of it</h2>
+  <p>If you came here from one of our Facebook ads, we send Meta the click tag Facebook had already attached to that link, plus the fact that a decode happened. California law counts that as sharing personal information for advertising, so it is named here rather than buried.</p>
+  <p>Your quote numbers, your photo and your email are never part of it. Arrive any other way and nothing is sent, because there is no tag to send.</p>
+
+  <h2>The switch that works</h2>
+  <p>Global Privacy Control is a setting in some browsers and an extension in the rest. When it is on, your browser says so on every request it makes, we read it on every request, and a visit carrying it sends Meta nothing at all.</p>
+  <p>It needs no message to us and no account here, it works on your first visit rather than after we get around to it, and it covers every other site that honors it too. That is why it is the route we point at first.</p>
+
+  <h2>Asking us instead</h2>
+  <p>Write to <a href="mailto:hank@mail.loanhank.com">hank@mail.loanhank.com</a> and say you want out. A person reads that inbox. We hold no name and no account, so tell us the email address you gave us if you gave one, and we delete what is attached to it.</p>
+  <p>One plain limit, because a promise we cannot keep is worse than an awkward sentence: we set no cookie and keep no account, so we cannot recognize your browser on a later visit and cannot mark it opted out for the future. Global Privacy Control is what does that, and it does it every time.</p>
+
+  <h2>What never happens</h2>
+  <p>We do not sell personal information for money. No lender receives anything about you. There is no advertising script, no third-party pixel and no tracking cookie on this site, which is why you are not reading a cookie banner.</p>
+  <p class="note">More detail on the <a href="/privacy">privacy page</a>.</p>
 `);
 }
 

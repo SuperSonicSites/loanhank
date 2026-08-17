@@ -30,7 +30,7 @@ import { OpenAIQuoteExtractor } from './extractor.js';
 import { renderTeardownPdf, type TeardownLine } from './teardown-pdf.js';
 import { FOLLOWUP_TEXT_VERSION } from '../web/page.js';
 import {
-  renderContact, renderHowWeFigureIt, renderHowWeMakeMoney, renderManifest, renderNotFound,
+  renderContact, renderDoNotSell, renderHowWeFigureIt, renderHowWeMakeMoney, renderManifest, renderNotFound,
   renderNote, renderNotesIndex, renderPrivacy, renderSent, renderStraightAnswers, renderTerms,
   renderWhosBehindThis, NOTES, PRIVACY_VERSION, TERMS_VERSION,
 } from '../web/pages.js';
@@ -1494,6 +1494,9 @@ const STATIC_PAGES: Array<[string, () => string]> = [
   ['/how-we-make-money', renderHowWeMakeMoney],
   ['/how-we-figure-it', renderHowWeFigureIt],
   ['/straight-answers', renderStraightAnswers],
+  // CCPA opt-out. Footer-linked site-wide, because a rights link nobody can
+  // find is not a rights path (spec.md §10, lawyer stone 2).
+  ['/do-not-sell', renderDoNotSell],
   ['/whos-behind-this', renderWhosBehindThis],
 ];
 for (const [path, render] of STATIC_PAGES) {

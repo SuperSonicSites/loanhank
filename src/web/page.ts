@@ -221,6 +221,20 @@ button {
   .hero-manual { order: 0; }
 }
 
+/* One submit at a time. Both forms carry the canonical "Run the numbers"
+   label, and with the disclosure open the two land next to each other reading
+   as two identical buttons on one screen. Opening the disclosure is the
+   farmer choosing the typing path, so the photo path's submit, its challenge
+   widget and its note step aside until he closes it again.
+
+   :has() rather than a sibling combinator, because display:contents flattens
+   the camera form's BOXES and not the DOM: .camera-run is a child of the
+   form, never a sibling of the disclosure. Where :has() is unsupported both
+   buttons show, which is the behaviour this replaces rather than a new one. */
+.hero:has(.hero-manual[open]) .camera-run,
+.hero:has(.hero-manual[open]) .cf-turnstile,
+.hero:has(.hero-manual[open]) .camera-note { display: none; }
+
 /* The camera hero: a styled file input. The label is the big box; the input
    is visually hidden but still focusable, so validation and keyboards keep
    working. capture="environment" opens a phone camera with no JavaScript.
@@ -443,6 +457,9 @@ const FOOTER_PAGES: Array<[string, string]> = [
   ['/how-we-make-money', 'How we make money'],
   ['/straight-answers', 'Straight answers'],
   ['/privacy', 'Privacy'],
+  // Title Case verbatim: the statute writes the phrase this way and design.md
+  // §2 exempts this one string from sentence case rather than tidying it.
+  ['/do-not-sell', 'Do Not Sell or Share My Personal Information'],
   ['/terms', 'Terms'],
   ['/whos-behind-this', "Who's behind this"],
   ['/contact', 'Contact'],

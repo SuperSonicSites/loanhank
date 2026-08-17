@@ -500,6 +500,21 @@ describe('the homepage keeps the ruled shape', () => {
     }
   });
 
+  it('shows one submit at a time when the typing disclosure is open', () => {
+    // Both forms carry the canonical "Run the numbers" label, so with the
+    // disclosure open they render as two identical buttons on one screen. The
+    // photo path's submit, challenge and note step aside while it is open.
+    const sheet = html();
+    expect(sheet).toContain('.hero:has(.hero-manual[open]) .camera-run');
+    expect(sheet).toContain('.hero:has(.hero-manual[open]) .cf-turnstile');
+    expect(sheet).toContain('.hero:has(.hero-manual[open]) .camera-note');
+    // Both buttons still exist in the markup and both still say the canonical
+    // words: this is a display rule, never a relabelling of one of them.
+    const labels = [...sheet.matchAll(/<button type="submit"[^>]*>([^<]+)<\/button>/g)]
+      .map((match) => match[1]);
+    expect(labels.filter((label) => label === 'Run the numbers')).toHaveLength(2);
+  });
+
   it('leaves room for the fixed-width Turnstile widget on a 320px phone', () => {
     // The widget is a fixed 300px. At the standard 16px gutters a 320px screen
     // offers 288px, and the overflow is a scrollbar no farmer can dismiss.
