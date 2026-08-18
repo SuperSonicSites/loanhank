@@ -119,6 +119,35 @@ tests/design-canon.test.ts). If canon moves, the hook moves with it.
 - Exclusions: all mobile apps, all games categories, parked domains, below-the-fold
   only if controllable. Frequency cap 2/day/person.
 
+## Datasets and tokens
+
+Two datasets, both in the agency portfolio. Written down because nothing else in the
+repo names them and the failure mode is expensive.
+
+| use | name | id | where the id lives |
+|---|---|---|---|
+| production | `LoanHank` | `1770792024264156` | `wrangler.jsonc` vars, versioned in git |
+| verification | `LoanHank dev` | `1729093178341546` | `.dev.vars` only, read by `wrangler dev` |
+
+**Tokens are scoped per dataset and do not cross.** A production token posting to the
+dev dataset returns `GraphMethodException` code 100, subcode 33, and the message says
+the object "does not exist". It reads like a wrong dataset id and it is not, it is a
+permission error wearing the wrong coat. Cost a round trip on 2026-08-16. Generate each
+token from the Settings tab of the dataset it will post to, and never reuse one.
+
+Dataset ids are public and belong in this file. Tokens are secrets and never do.
+
+The production id is in `wrangler.jsonc` rather than in a Worker secret, because a
+plaintext variable set through the Cloudflare dashboard is overwritten by the next
+`wrangler deploy` while a secret is not. An id that vanishes on deploy stops
+measurement without an error anywhere. **`META_CAPI_TOKEN` is the switch**: the sender
+needs the id and the token, so measurement is off until the token is set.
+
+`.dev.vars` is read only by `wrangler dev`, so the values in it are the dev values by
+definition and carry no prefix. There is deliberately no runtime dev/prod switch: the
+only way a worker points at production is an owner running `wrangler secret put`, which
+is what §14 leans on.
+
 ## Measurement
 
 - Source of truth: our events table. Every landing URL carries

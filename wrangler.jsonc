@@ -82,6 +82,19 @@
     // in git rather than in a store nobody reads. Same reasoning as the R2
     // lifecycle rules: unversioned infra that enforces a promise is a promise
     // that can silently stop being true.
-    "POSTAL_ADDRESS": "LoanHank · 109b - 1917 Peninsula Rd, Ucluelet, BC V0R 3A0, Canada"
+    "POSTAL_ADDRESS": "LoanHank · 109b - 1917 Peninsula Rd, Ucluelet, BC V0R 3A0, Canada",
+    // Meta ads measurement (spec.md section 10). The dataset id is public by
+    // design: it is readable in the source of any site that runs a pixel, and
+    // ours never runs one. Same reasoning as POSTAL_ADDRESS above, so it lives
+    // in git rather than in a store nobody reads. It was briefly added through
+    // the Cloudflare dashboard instead, on 2026-08-18, which creates a version
+    // nobody deploys and a plaintext variable the next deploy silently drops.
+    // Measurement would have stopped without saying so.
+    //
+    // META_CAPI_TOKEN is the secret and it is the switch. The sender needs both
+    // values, so measurement stays off until the token is set with
+    // `wrangler secret put`. One thing to flip, and it is the one that is
+    // genuinely a secret.
+    "META_DATASET_ID": "1770792024264156"
   }
 }
