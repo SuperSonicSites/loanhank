@@ -121,13 +121,19 @@ main { max-width: var(--col-max); margin: 0 auto; padding: var(--s-32) var(--s-1
    clip or scale the widget: the challenge has to stay whole and tappable, and
    an iPhone SE is the screen design.md sizes the fold against. */
 @media (max-width: 339px) {
-  main { padding-left: var(--s-8); padding-right: var(--s-8); }
+  main, .banner-lockup { padding-left: var(--s-8); padding-right: var(--s-8); }
 }
 
-.wordmark { font-weight: 900; font-size: var(--text-h1); letter-spacing: -0.02em; text-transform: uppercase; margin: 0; }
-.wordmark a { color: var(--ink); text-decoration: none; }
-.wordmark-rule { border: 0; border-top: var(--hairline); margin: var(--s-8) 0 var(--s-4); }
-.tagline { font-size: var(--text-footnote); color: var(--ink-soft); margin: 0 0 var(--s-32); }
+/* Lockup 2 off the brand card: the full lockup at 28px, paper on ink. The band
+   runs the full width of the screen and the lockup inside it holds the column,
+   so the wordmark still lines up with the first letter of the H1. The rule runs
+   the width of the word, never the width of the column (design.md section 7). */
+.banner { background: var(--ink); }
+.banner-lockup { max-width: var(--col-max); margin: 0 auto; padding: var(--s-16); }
+.wordmark { font-weight: 900; font-size: var(--text-h1); letter-spacing: -0.02em; text-transform: uppercase; line-height: 1.1; margin: 0; }
+.wordmark a { color: var(--paper); text-decoration: none; }
+.wordmark-rule { border: 0; border-top: 1px solid var(--paper); width: 172px; margin: var(--s-4) 0; }
+.tagline { font-size: var(--text-footnote); color: var(--rule); margin: 0; }
 
 h1 { font-weight: 700; font-size: var(--text-h1); line-height: 1.3; margin: 0 0 var(--s-16); }
 /* The subhead under the H1. A heading by structure, body type by weight: it
@@ -167,17 +173,17 @@ input[type="email"]:focus { border: 2px solid var(--denim); outline: none; }
 button {
   width: 100%;
   min-height: var(--control-h);
-  border: 1px solid var(--denim);
+  border: 1px solid var(--ink);
   border-radius: var(--radius);
-  background: var(--denim);
-  color: var(--input-white);
+  background: var(--ink);
+  color: var(--paper);
   font-family: inherit;
   font-size: var(--text-body);
   font-weight: 700;
   cursor: pointer;
 }
 .secondary {
-  background: var(--paper); color: var(--denim); border: 2px solid var(--denim);
+  background: var(--paper); color: var(--ink); border: 2px solid var(--ink);
   margin-top: var(--s-12);
 }
 
@@ -240,15 +246,15 @@ button {
    working. capture="environment" opens a phone camera with no JavaScript.
    The camera glyph is the only icon in the product (design.md section 6).
 
-   Transparent, outlined in denim: the box reads as a target to put a photo
-   INTO, and the filled denim button below it stays the one action. Two solid
-   denim blocks stacked read as two competing buttons. */
+   Transparent, outlined in ink: the box reads as a target to put a photo
+   INTO, and the filled ink button below it stays the one action. Two solid
+   ink blocks stacked read as two competing buttons. */
 .camera-btn {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: var(--s-8);
   width: 100%; min-height: 96px; padding: var(--s-16);
-  background: transparent; color: var(--denim);
-  border: 2px solid var(--denim); border-radius: var(--radius);
+  background: transparent; color: var(--ink);
+  border: 2px solid var(--ink); border-radius: var(--radius);
   font-size: var(--text-body); font-weight: 700; cursor: pointer;
   margin: 0 0 var(--s-8);
 }
@@ -277,7 +283,7 @@ input[type="file"].camera-input {
 .shot img { width: 72px; height: 72px; object-fit: cover; border: var(--hairline); border-radius: var(--radius); background: var(--input-white); }
 .retake {
   width: auto; min-height: var(--tap-min); padding: 0 var(--s-8);
-  background: var(--paper); color: var(--denim); border: 1px solid var(--denim);
+  background: var(--paper); color: var(--ink); border: 1px solid var(--ink);
   font-weight: 400; font-size: var(--text-footnote);
 }
 
@@ -364,6 +370,9 @@ a { color: var(--denim); }
   body { background: #FFF; color: #000; font-size: 12pt; }
   main { max-width: none; padding: 0; }
   .no-print, form, footer { display: none; }
+  .banner { background: transparent; }
+  .banner-lockup { padding: 0; }
+  .banner .wordmark a, .banner .tagline { color: #000; }
   .ticket-rule, .wordmark-rule, .ticket-rule-double { border-top-color: #000; }
   .ticket td { border-bottom-color: #999; }
   .stamp { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -490,15 +499,22 @@ export function shell(title: string, body: string): string {
 <link rel="preload" as="font" type="font/woff2" href="/fonts/libre-franklin-latin-900-normal.woff2" crossorigin>
 <link rel="preload" as="font" type="font/woff2" href="/fonts/libre-franklin-latin-400-normal.woff2" crossorigin>
 <link rel="preload" as="font" type="font/woff2" href="/fonts/courier-prime-latin-400-normal.woff2" crossorigin>
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="manifest" href="/manifest.webmanifest">
 <style>${styles}</style>
 <script>${script}</script>
 </head>
 <body>
+<header class="banner">
+  <div class="banner-lockup">
+    <p class="wordmark"><a href="/">LoanHank</a></p>
+    <hr class="wordmark-rule">
+    <p class="tagline">Runs the numbers. Takes no side.</p>
+  </div>
+</header>
 <main>
-  <p class="wordmark"><a href="/">LoanHank</a></p>
-  <hr class="wordmark-rule">
-  <p class="tagline">Runs the numbers. Takes no side.</p>
 ${body}
   <footer>
     <nav>${FOOTER_PAGES.map(([href, label]) => `<a href="${href}">${label}</a>`).join('')}</nav>

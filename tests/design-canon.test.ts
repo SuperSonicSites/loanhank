@@ -13,6 +13,7 @@ import {
 } from '../src/finance/index.js';
 import { parseMoneyToCents } from '../src/shared/schema.js';
 import { renderForm } from '../src/web/page.js';
+import { renderManifest } from '../src/web/pages.js';
 
 // design.md §2¾ prints two worked deals. Every figure in them is engine
 // output, and this test is what makes that true rather than aspirational.
@@ -466,7 +467,7 @@ describe('the homepage keeps the ruled shape', () => {
   });
 
   it('draws the snap box as an outline, so one filled button stays the action', () => {
-    // Two solid denim blocks stacked read as two competing buttons. The box is
+    // Two solid ink blocks stacked read as two competing buttons. The box is
     // a target to put a photo into; Run the numbers is the action.
     //
     // Every .camera-btn rule, not the first one: the first is the flex
@@ -474,8 +475,8 @@ describe('the homepage keeps the ruled shape', () => {
     const rules = [...html().matchAll(/\.camera-btn \{[^}]*\}/g)].map((match) => match[0]).join('');
     expect(rules, 'the .camera-btn rules moved and this test can no longer see them').not.toBe('');
     expect(rules).toContain('background: transparent');
-    expect(rules).toContain('border: 2px solid var(--denim)');
-    // And the one filled denim block is still the submit button.
+    expect(rules).toContain('border: 2px solid var(--ink)');
+    // And the one filled ink block is still the submit button.
     expect(html()).toContain('<button type="submit" class="camera-run">');
   });
 
@@ -526,5 +527,71 @@ describe('the homepage keeps the ruled shape', () => {
     const html = renderForm(undefined, [], { turnstileSiteKey: 'canon-check' });
     expect(html).not.toContain('Here is one, worked.');
     expect(html).not.toContain('CHECKS OUT');
+  });
+});
+describe('the mark ships as a working icon', () => {
+  // A favicon fails silently: nothing throws, the tab just shows a blank page
+  // glyph and the install prompt never appears. So the head, the manifest and
+  // the files on disk are checked against each other rather than by eye.
+  const asset = (name: string) => new URL(`../public/${name}`, import.meta.url);
+
+  it('links the icon set from every page head', () => {
+    const head = renderForm(undefined, [], { turnstileSiteKey: 'canon-check' });
+    expect(head).toContain('<link rel="icon" href="/favicon.ico" sizes="48x48">');
+    expect(head).toContain('<link rel="icon" href="/favicon.svg" type="image/svg+xml">');
+    expect(head).toContain('<link rel="apple-touch-icon" href="/apple-touch-icon.png">');
+  });
+
+  it('ships every file the head and the manifest name', async () => {
+    const manifest = JSON.parse(renderManifest());
+    const named = [
+      'favicon.ico', 'favicon.svg', 'apple-touch-icon.png',
+      ...manifest.icons.map((icon: { src: string }) => icon.src.replace('/', '')),
+    ];
+    for (const name of named) {
+      const bytes = await readFile(asset(name));
+      expect(bytes.byteLength, `public/${name} is missing or empty`).toBeGreaterThan(0);
+    }
+    // 192 and 512 are what Chrome requires before it will offer the install
+    // this manifest exists to get (pages.ts).
+    const sizes = manifest.icons.map((icon: { sizes: string }) => icon.sizes);
+    expect(sizes).toContain('192x192');
+    expect(sizes).toContain('512x512');
+  });
+
+  it('cuts the icon from the wordmark, paper on ink', async () => {
+    // design.md §7: a crop of the wordmark, not a monogram and not a drawn
+    // mark. Outlines, so the icon never waits on a font.
+    const svg = await readFile(asset('favicon.svg'), 'utf8');
+    expect(svg).toContain('fill="#191813"');
+    expect(svg).toContain('fill="#F7F5EF"');
+    expect(svg).toContain('<path');
+    expect(svg).not.toContain('<text');
+  });
+});
+
+describe('the header is the lockup, paper on ink', () => {
+  it('bands the wordmark, the rule and the tagline in ink', () => {
+    const html = renderForm(undefined, [], { turnstileSiteKey: 'canon-check' });
+    // Brand card lockup 2. The band is above the column, so the order is
+    // asserted from the top of the body rather than from the h1.
+    const body = html.slice(html.indexOf('<body>'));
+    expect(body).toContain('<header class="banner">');
+    expect(body.indexOf('class="wordmark"')).toBeGreaterThan(body.indexOf('<header class="banner">'));
+    expect(body.indexOf('class="tagline"')).toBeLessThan(body.indexOf('<main>'));
+    expect(html).toContain('.banner { background: var(--ink); }');
+    expect(html).toContain('.wordmark a { color: var(--paper); text-decoration: none; }');
+    // A solid black band would print as a solid black band.
+    expect(html).toContain('.banner { background: transparent; }');
+  });
+
+  it('puts the buttons in ink, and keeps the blue for links', () => {
+    // Owner ruling 2026-08-18: buttons are black, not denim.
+    const html = renderForm(undefined, [], { turnstileSiteKey: 'canon-check' });
+    const button = /\nbutton \{[^}]*\}/.exec(html)?.[0] ?? '';
+    expect(button, 'the button rule moved and this test can no longer see it').not.toBe('');
+    expect(button).toContain('background: var(--ink)');
+    expect(button).not.toContain('var(--denim)');
+    expect(html).toContain('a { color: var(--denim); }');
   });
 });

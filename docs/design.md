@@ -187,7 +187,7 @@ Warm paper + ink + workwear. No gradient anywhere, ever.
 | `ink` | `#191813` | all body text, all numbers. warm near-black |
 | `ink-soft` | `#57534A` | secondary text, sources, dates |
 | `rule` | `#D8D4C8` | hairlines, borders, receipt rules |
-| `denim` | `#2F5D8A` | primary buttons, links. desaturated steel blue — chore coat, not SaaS |
+| `denim` | `#2F5D8A` | links, focus rings, the extraction progress line. desaturated steel blue — chore coat, not SaaS. **Not buttons**: owner ruling 2026-08-18 put every button in `ink` |
 | `field` | `#3F7A34` | good-verdict stamp + chip only |
 | `field-fill` | `#E4EDDC` | good-verdict chip background |
 | `amber-ink` | `#8A5A00` | caution-verdict text (AA-safe) |
@@ -243,18 +243,18 @@ Fallback stack: `"Libre Franklin", "Franklin Gothic Medium", "Segoe UI", Arial, 
 
 Spacing scale: 4 / 8 / 12 / 16 / 24 / 32 / 48. Section gaps 32-48. Nothing cramped, nothing floaty.
 
-Chrome: wordmark top-left, trust line footer. **No nav.** One page is one page.
+Chrome: the lockup runs across the top in a full-width `ink` band (brand card lockup 2, paper on ink, 28px, the rule the width of the word), trust line footer. **No nav.** One page is one page — the band carries the wordmark, not links.
 
 **Screen 1 — THE TOOL (this is the landing page). The hero is the camera:**
 ```
-[wordmark]
+[ink band: wordmark, rule, tagline — paper on ink]
 H1: 0% isn't 0%. Snap the quote and see the real rate.
 H2 subhead: Take a picture of the dealer's quote and we'll show you the
     number they didn't print. It's free, secured, we do not keep a copy of
     it and you get the truth about your quote.
 ┌────────────────────────────┐
 │         [camera]           │   ← the big snap box: TRANSPARENT with a 2px
-│      Snap the quote        │     denim outline, full width, ~96px tall, the
+│      Snap the quote        │     ink outline, full width, ~96px tall, the
 └────────────────────────────┘     camera glyph above the words. a styled file
                                    input with capture="environment": camera
                                    opens with no JS. outlined, not filled, so
@@ -334,7 +334,7 @@ Then email gate, then consent gate, in that order, each its own quiet block. Nev
 
 ## 6. ELEMENTS
 
-- **Buttons:** one primary (denim fill, white text), one secondary (denim outline on paper). 56px tall, full width mobile, **2px radius. Square-shouldered, like a toolbox drawer.** Friendly 8-12px rounding = every AI mock on earth. We do not round.
+- **Buttons:** one primary (`ink` fill, `paper` text), one secondary (`ink` outline on paper). 56px tall, full width mobile, **2px radius. Square-shouldered, like a toolbox drawer.** Friendly 8-12px rounding = every AI mock on earth. We do not round. Owner ruling 2026-08-18: buttons are black, and the blue is spent on links and focus rings only.
 - **Inputs:** 56px, white fill, 1px `rule` border, 2px denim border on focus. Big mono text inside. `inputmode="decimal"` on every money field. No steppers, no sliders — farmers type numbers.
 - **Verdict stamp:** stamp + one plain sentence. Never a score, never a gauge, never a percentage-ring donut. **Execution rule: stamp must look actually stamped** — scan a real rubber stamp impression once, use that texture. If that's not doable, plain bold text in a plain box. A pristine vector "distressed" stamp is fake antique, worse than nothing.
 - **Comparison strip:** single horizontal band (p25-p75 shaded `rule`), median tick, `you` dot in ink. Direct labels under, words not symbols. No axes, no gridlines, no legend. If n<20, element does not render — benchmark table renders instead.
@@ -349,6 +349,10 @@ Then email gate, then consent gate, in that order, each its own quiet block. Nev
 ## 7. LOGO / MARK
 
 Wordmark only, v1: **LOANHANK** set in Libre Franklin Black caps, tight-tracked, ink on paper, single hairline rule beneath. The register is feed-sack and grain-elevator lettering, not startup logo. Optional small tagline under rule: `Runs the numbers. Takes no side.`
+
+**Header lockup:** the site header is the full lockup paper on ink — a full-width `ink` band holding the wordmark at 28px, a `paper` hairline the width of the word, and the tagline in `rule`. Brand card lockup 2 (owner ruling 2026-08-18).
+
+**Favicon:** a 512px square crop of the wordmark — `HK`, same face, same weight, same -0.02em tracking, paper on ink. It is a crop, not a monogram: no letter is re-set or re-spaced to fit the square. `ops/make-icons.py` cuts the outlines straight out of the shipped font file into `public/favicon.svg` and the PNG sizes, so it can never drift from the wordmark. Run it after any change to either.
 
 No mascot drawing. No cartoon Hank — cartoon = costume = smell. Hank stays a voice and a stamp. If a mark is ever needed: the CHECKS OUT stamp is the mark.
 
