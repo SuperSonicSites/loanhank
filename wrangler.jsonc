@@ -5,9 +5,30 @@
   "compatibility_date": "2026-08-01",
   "compatibility_flags": ["nodejs_compat"],
 
-  // loanhank.com is still served by the ancestor Worker. This one stays on
-  // workers.dev until the decoder is the product; the cutover is a routes
-  // block added here in the same commit that retires the old Worker.
+  // The cutover happened on 2026-08-18. www.loanhank.com is a Custom Domain on
+  // this Worker and is now the canonical host. The apex is an A record at
+  // 192.0.2.1 (RFC 5737 documentation space, proxied, never receives traffic)
+  // plus a zone Redirect Rule that 301s loanhank.com/* to
+  // www.loanhank.com/${1} with the query string preserved. That checkbox is
+  // off by default in Cloudflare's own template, and leaving it off would drop
+  // an ad click's fbclid on the hop, so every apex arrival would decode as
+  // not_from_ad and the spend would look like it produced nothing.
+  //
+  // The route is written down here because it was not, and the deploy on
+  // 2026-08-18 offered to delete the live Custom Domain as config drift. It
+  // was declined by hand, in a diff. Config wins on every deploy, so anything
+  // real belongs in this file or it is one wall of green text away from gone.
+  //
+  // The apex is deliberately NOT a route. It is DNS plus a Redirect Rule, so
+  // the Worker never sees an apex request and there is exactly one canonical
+  // host in event_source_url.
+  "routes": [
+    { "pattern": "www.loanhank.com", "custom_domain": true }
+  ],
+
+  // workers.dev stays live until the Turnstile widget stops allowing that
+  // hostname (spec.md section 14). A retired host still issuing tokens the
+  // backend accepts is a hole, so the two moves happen together or not at all.
   "workers_dev": true,
 
   // Self-hosted font subsets only (design.md section 4 allows no third-party

@@ -42,9 +42,16 @@ export interface CapiInput {
  * The click parameter Meta attached to its own ad, folded into the fbc shape
  * Meta matches on.
  *
- * The subdomain index is the `1`: it means the apex domain. It becomes `2` if
- * this site is ever served from `www.`, and a wrong index breaks matching
- * SILENTLY, as fewer attributed conversions rather than any error.
+ * The subdomain index is the `1`, and it stays `1`. The rule people reach for
+ * counts labels on the cookie's domain (com = 0, loanhank.com = 1,
+ * www.loanhank.com = 2), and since the cutover on 2026-08-18 this site IS
+ * served from www. Do not change it to `2` on that basis. That rule describes
+ * an fbc read out of a `_fbc` cookie, and there is no cookie here: Meta's own
+ * guidance for generating fbc server-side without saving one says to use 1.
+ *
+ * A wrong index breaks matching SILENTLY, as fewer attributed conversions
+ * rather than any error, which is why the reasoning is written down instead of
+ * the value alone.
  */
 export function fbcFromUrl(url: URL, nowMs: number): string | null {
   const fbclid = url.searchParams.get('fbclid');
