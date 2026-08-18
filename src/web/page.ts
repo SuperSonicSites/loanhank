@@ -608,12 +608,11 @@ ${campaignFields(campaign)}${fbcField(fbc)}    <button type="submit">Run the num
 }
 
 /**
- * The whose-side block. Posture, never the label: canon in design.md §2, and
- * the how-we-make-money link sits beside it because a claimed allegiance and a
- * disclosed angle must always be visible together (design.md §10).
+ * The disclosed angle on the front door. The whose-side sentence that sat above
+ * this link was removed by owner ruling 2026-08-18; the link stays, because a
+ * disclosed angle belongs on the page that carries the tool (design.md §10).
  */
-const WHOSE_SIDE = `  <div class="block">
-    <p>The dealer's math sells the machine. The lender's math sells the money. This math just shows you the number.</p>
+const MONEY_LINK = `  <div class="block">
     <p class="note"><a href="/how-we-make-money">How we make money</a></p>
   </div>
 `;
@@ -649,7 +648,7 @@ ${typedForm(values, 'typed', campaign, fbc)}    </details>
   return shell('LoanHank', `${problemBlock}  <h1>0% isn't 0%. Snap the quote and see the real rate.</h1>
   <h2 class="subline">Take a picture of the dealer's quote and we'll show you the number they didn't print. It's free, secured, we do not keep a copy of it and you get the truth about your quote.</h2>
 
-${tool}${WHOSE_SIDE}`);
+${tool}${MONEY_LINK}`);
 }
 
 /**

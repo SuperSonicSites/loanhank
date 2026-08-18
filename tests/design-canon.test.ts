@@ -384,13 +384,14 @@ describe('rendered microcopy matches the canon table', () => {
   });
 
   it('renders the homepage redesign moments from the canon table, verbatim', async () => {
-    // The camera hero, the manual disclosure, the add-another line, the retake
-    // and the whose-side block all entered the table in the same commit that
-    // shipped them. This pins the render to the table.
+    // The camera hero, the manual disclosure, the add-another line and the
+    // retake all entered the table in the same commit that shipped them. This
+    // pins the render to the table. The whose-side sentence left the table and
+    // the page together on 2026-08-18; the how-we-make-money link stayed.
     const html = renderForm(undefined, [], { turnstileSiteKey: 'canon-check' });
     for (const label of [
       'h1', 'subhead', 'photo button', 'add another page', 'retake button',
-      'manual disclosure', 'whose side',
+      'manual disclosure',
     ]) {
       expect(html, `the homepage does not render the canon "${label}" words`)
         .toContain(await canonMicrocopy(label));
@@ -427,7 +428,7 @@ describe('the homepage keeps the ruled shape', () => {
   // /how-we-figure-it), the snap box is the big camera-glyph hero, the
   // disclosure sits directly under it, and Turnstile renders beneath the
   // Run the numbers button.
-  it('keeps the DOM order: hero, disclosure, whose side, footer', () => {
+  it('keeps the DOM order: hero, disclosure, money link, footer', () => {
     const html = renderForm(undefined, [], { turnstileSiteKey: 'canon-check' });
     // Measured from the h1, so the class names in the stylesheet up in the
     // head cannot shadow the body order being asserted.
@@ -436,7 +437,7 @@ describe('the homepage keeps the ruled shape', () => {
       body.indexOf('<h1>'),
       body.indexOf('hero-camera'),
       body.indexOf('hero-manual'),
-      body.indexOf('The dealer\'s math sells the machine.'),
+      body.indexOf('/how-we-make-money'),
       body.indexOf('<footer'),
     ];
     for (const position of positions) expect(position).toBeGreaterThan(-1);

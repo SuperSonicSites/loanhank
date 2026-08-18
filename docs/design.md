@@ -57,7 +57,6 @@ Hank = the neighbor who's good with numbers. Not mascot. Not cartoon. A voice.
 | add another page | `Add the next page, or the fine print.` |
 | retake button | `Retake` |
 | manual disclosure | `Type the numbers instead` (a native details summary, never a modal) |
-| whose side | `The dealer's math sells the machine. The lender's math sells the money. This math just shows you the number.` (renders within one screen of the how-we-make-money link, see §10) |
 | too many photos | `One decode reads up to four photos. Pick the four that show the whole deal.` |
 | extraction wait | `Reading your paper… about 10 seconds.` |
 | confirm screen header | `Check these against your paper. Fix anything we got wrong.` |
@@ -270,12 +269,13 @@ H2 subhead: Take a picture of the dealer's quote and we'll show you the
                                    the same plain no-JS POST
 [ Run the numbers ]              ← submits the photos
 (Turnstile widget)               ← beneath Run the numbers, never above it
-whose-side block                 ← canon three sentences, §2 table, with the
-                                   how-we-make-money link beside it
+how-we-make-money link           ← the disclosed angle, one tap from the
+                                   tool (owner ruling 2026-08-18 removed the
+                                   whose-side sentence that sat above it)
 footer trust line
 ```
 That is the mobile order, top to bottom (owner ruling 2026-08-17; an earlier
-version put a worked canon ticket below the whose-side block and it was
+version put a worked canon ticket below that link and it was
 removed the same day — canon example A stays on /how-we-figure-it). Desktop
 and wide viewports move only the disclosure to the top, by CSS media query:
 fields first, camera second. A calculator searcher wants fields; a phone at
@@ -402,4 +402,4 @@ Format that fits the psychology (suspicion-confirmation, native to feed):
 - The words "screwed", "ripped off", "scammed", "tricked", and any victim framing never appear in product copy. The farmer is the operator who checked, never the mark who got taken.
 - The phrases "consumer advocacy", "watchdog", and "on behalf of farmers" never appear as self-description.
 - Any side-taking sentence renders within one screen of the how-we-make-money link. A claimed allegiance and a disclosed angle must always be visible together.
-- The canon posture is the whose-side block in the §2 table, and it is the whole statement. Nothing extends it.
+- The canon posture is the `straight answer, whose side` line in the §2 table, and it is the whole statement. Nothing extends it. It lives on /how-we-make-money and /straight-answers; the homepage carries the link, not a side-taking sentence (owner ruling 2026-08-18).
