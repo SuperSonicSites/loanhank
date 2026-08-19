@@ -243,7 +243,7 @@ Fallback stack: `"Libre Franklin", "Franklin Gothic Medium", "Segoe UI", Arial, 
 
 Spacing scale: 4 / 8 / 12 / 16 / 24 / 32 / 48. Section gaps 32-48. Nothing cramped, nothing floaty.
 
-Chrome: the lockup runs across the top in a full-width `ink` band (brand card lockup 2, paper on ink, 28px, the rule the width of the word), trust line footer. **No nav.** One page is one page — the band carries the wordmark, not links.
+Chrome: the lockup runs across the top in a full-width `ink` band (brand card lockup 2, paper on ink, 28px, the rule the width of the word), and the footer closes the page in the same band. **No nav.** One page is one page — the band carries the wordmark, not links.
 
 **Screen 1 — THE TOOL (this is the landing page). The hero is the camera:**
 ```
@@ -272,7 +272,7 @@ H2 subhead: Take a picture of the dealer's quote and we'll show you the
 how-we-make-money link           ← the disclosed angle, one tap from the
                                    tool (owner ruling 2026-08-18 removed the
                                    whose-side sentence that sat above it)
-footer trust line
+[ink band: legal links, trust line - paper on ink]
 ```
 That is the mobile order, top to bottom (owner ruling 2026-08-17; an earlier
 version put a worked canon ticket below that link and it was
@@ -351,6 +351,8 @@ Then email gate, then consent gate, in that order, each its own quiet block. Nev
 Wordmark only, v1: **LOANHANK** set in Libre Franklin Black caps, tight-tracked, ink on paper, single hairline rule beneath. The register is feed-sack and grain-elevator lettering, not startup logo. Optional small tagline under rule: `Runs the numbers. Takes no side.`
 
 **Header lockup:** the site header is the full lockup paper on ink — a full-width `ink` band holding the wordmark at 28px, a `paper` hairline the width of the word, and the tagline in `rule`. Brand card lockup 2 (owner ruling 2026-08-18).
+
+**Footer band:** the footer closes the page in that same band, the same full-width `ink`, with the legal links in `paper` and the trust line and postal address in `rule`. It carries the same class as the header band rather than a second copy of the values, so the two cannot drift apart (owner ruling 2026-08-19). Neither band prints: a solid black slab is a waste of a farmer's toner.
 
 **Favicon:** a 512px square crop of the wordmark — `HK`, same face, same weight, same -0.02em tracking, paper on ink. It is a crop, not a monogram: no letter is re-set or re-spaced to fit the square. `ops/make-icons.py` cuts the outlines straight out of the shipped font file into `public/favicon.svg` and the PNG sizes, so it can never drift from the wordmark. Run it after any change to either.
 

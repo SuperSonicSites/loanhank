@@ -570,7 +570,7 @@ describe('the mark ships as a working icon', () => {
   });
 });
 
-describe('the header is the lockup, paper on ink', () => {
+describe('the bands are the lockup, paper on ink', () => {
   it('bands the wordmark, the rule and the tagline in ink', () => {
     const html = renderForm(undefined, [], { turnstileSiteKey: 'canon-check' });
     // Brand card lockup 2. The band is above the column, so the order is
@@ -583,6 +583,24 @@ describe('the header is the lockup, paper on ink', () => {
     expect(html).toContain('.wordmark a { color: var(--paper); text-decoration: none; }');
     // A solid black band would print as a solid black band.
     expect(html).toContain('.banner { background: transparent; }');
+  });
+
+  it('closes the page in that same band, not in a copy of it', () => {
+    const html = renderForm(undefined, [], { turnstileSiteKey: 'canon-check' });
+    const body = html.slice(html.indexOf('<body>'));
+    // Owner ruling 2026-08-19: the footer is the header band again, carrying
+    // the same class rather than a second copy of the values, so the two can
+    // never drift apart. A `footer` rule of its own painting ink is exactly
+    // the drift this test exists to catch.
+    expect(body).toContain('<footer class="banner">');
+    expect(body.indexOf('<footer class="banner">')).toBeGreaterThan(body.indexOf('</main>'));
+    expect(html).not.toMatch(/\nfooter \{[^}]*background/);
+    // Links in paper, the trust line and the address in rule, the way the
+    // wordmark and the tagline sit in the header.
+    expect(html).toContain('footer nav a { margin-right: var(--s-12); color: var(--paper); }');
+    expect(html).toContain('footer p { font-size: var(--text-footnote); color: var(--rule); margin: 0; }');
+    // Ink on ink is what a browser's default focus ring draws on either band.
+    expect(html).toContain('.banner a:focus-visible { outline: 2px solid var(--paper); outline-offset: 2px; }');
   });
 
   it('puts the buttons in ink, and keeps the blue for links', () => {

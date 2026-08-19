@@ -357,12 +357,19 @@ input[type="file"].camera-input {
 .gate { border-top: var(--hairline); margin: var(--s-32) 0 0; padding-top: var(--s-24); }
 .gate h2 { font-size: var(--text-verdict); font-weight: 600; margin: 0 0 var(--s-8); }
 
-footer { margin: var(--s-48) 0 0; padding-top: var(--s-16); border-top: var(--hairline); }
-footer p { font-size: var(--text-footnote); color: var(--ink-soft); margin: 0; }
+/* The footer is the same band as the header, the same class, so the two can
+   never drift apart. Main's own bottom padding is the gap above it, and the
+   band runs to the edge of the screen the way the header does. Links in paper,
+   the trust line and the address in rule, mirroring wordmark and tagline. */
+footer p { font-size: var(--text-footnote); color: var(--rule); margin: 0; }
+footer address { font-style: normal; font-size: var(--text-footnote); color: var(--rule); margin: 0 0 var(--s-8); }
 footer nav { font-size: var(--text-footnote); margin: 0 0 var(--s-8); }
-footer nav a { margin-right: var(--s-12); }
+footer nav a { margin-right: var(--s-12); color: var(--paper); }
 
 a { color: var(--denim); }
+/* Both bands are ink, so a browser's default focus ring lands black on black.
+   Paper is the only ring that can be seen on either one. */
+.banner a:focus-visible { outline: 2px solid var(--paper); outline-offset: 2px; }
 
 /* The printout negotiates for the farmer at the dealer desk. It is the best
    marketing this product will ever ship, so it prints like a shop ticket. */
@@ -516,13 +523,15 @@ export function shell(title: string, body: string): string {
 </header>
 <main>
 ${body}
-  <footer>
+</main>
+<footer class="banner">
+  <div class="banner-lockup">
     <nav>${FOOTER_PAGES.map(([href, label]) => `<a href="${href}">${label}</a>`).join('')}</nav>
 ${footerPostalAddress === '' ? '' : `    <address>${escapeHtml(footerPostalAddress)}</address>
 `}
     <p>Free tool. Your photo is never saved. Your numbers stay here unless you say go.</p>
-  </footer>
-</main>
+  </div>
+</footer>
 </body>
 </html>
 `;
