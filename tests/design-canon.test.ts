@@ -367,6 +367,40 @@ describe('rendered microcopy matches the canon table', () => {
     expect(page).toContain(canonical);
   });
 
+  it('says the canonical wait line while the model reads, and not before', async () => {
+    const canonical = await canonMicrocopy('extraction wait');
+    const html = renderForm(undefined, [], { turnstileSiteKey: 'canon-check' });
+    expect(html).toContain(canonical);
+    // design.md section 9 makes the no-JS form the requirement and the wait
+    // state the enhancement, so both elements ship hidden. A farmer without
+    // JavaScript never meets a bar that cannot move.
+    expect(html).toMatch(/<div class="progress" hidden/);
+    expect(html).toMatch(/<p class="note wait"[^>]*hidden>/);
+    // design.md section 6: one thin denim line, and it is the only animation
+    // in the product. Reduced motion still gets a line, it just stops moving.
+    const bar = /\.progress::after \{[^}]*\}/.exec(html)?.[0] ?? '';
+    expect(bar, 'the progress rule moved and this test can no longer see it').not.toBe('');
+    expect(bar).toContain('background: var(--denim)');
+    expect(bar).toContain('animation: crawl');
+    expect(html).toContain('@media (prefers-reduced-motion: reduce)');
+    // The typed path is arithmetic and answers instantly. A crawling bar on it
+    // would be motion for its own sake, which design.md section 3 forbids.
+    expect(renderForm()).not.toContain('class="progress"');
+  });
+
+  it('holds the second tap, without eating a named button value', () => {
+    const html = renderForm(undefined, [], { turnstileSiteKey: 'canon-check' });
+    // Every second tap on the photo path is a second vision call and a second
+    // bill, so the button dies on submit. It dies a tick late on purpose: a
+    // submit button disabled inside its own handler drops its name and value
+    // from the body the browser is still assembling, and the consent screen
+    // posts answer=yes on exactly that.
+    expect(html).toContain('if(b)setTimeout(function(){b.disabled=true;},0);');
+    // The back button lands on a bfcache-restored page with the DOM exactly as
+    // it left: button dead, line crawling, form unusable until this fires.
+    expect(html).toContain("addEventListener('pageshow'");
+  });
+
   it('uses the canonical primary button label on both submit paths', async () => {
     const canonical = await canonMicrocopy('primary button');
     const page = await readFile(new URL('../src/web/page.ts', import.meta.url), 'utf8');

@@ -223,6 +223,8 @@ button {
 .camera-run { order: 5; }
 .hero-camera .cf-turnstile { order: 6; margin: var(--s-8) 0 0; }
 .camera-note { order: 7; }
+.progress { order: 8; }
+.wait { order: 9; }
 @media (min-width: 700px) {
   .hero-manual { order: 0; }
 }
@@ -285,6 +287,31 @@ input[type="file"].camera-input {
   width: auto; min-height: var(--tap-min); padding: 0 var(--s-8);
   background: var(--paper); color: var(--ink); border: 1px solid var(--ink);
   font-weight: 400; font-size: var(--text-footnote);
+}
+
+/* THE ONLY MOTION IN THE PRODUCT (design.md section 6): one thin denim line,
+   crawling while the model reads the paper. Denim because the ruling on
+   2026-08-18 kept exactly three things blue and this is one of them.
+
+   Indeterminate on purpose. A percentage would be a lie: nothing on this page
+   knows how far through a vision call it is, and a bar that sits at 90% for
+   six seconds teaches a farmer that our numbers are decorative. It crawls to
+   say "working", and it says the rest in words underneath.
+
+   Both elements ship hidden. With JavaScript off nothing reveals them, which
+   is the point: a farmer who never gets the enhancement never sees a bar that
+   cannot move, and the form still posts (design.md section 9). */
+.progress { height: 2px; margin: var(--s-12) 0 var(--s-4); background: var(--rule); overflow: hidden; }
+.progress::after {
+  content: ""; display: block; height: 100%; width: 40%;
+  background: var(--denim);
+  animation: crawl 1.8s linear infinite;
+}
+@keyframes crawl { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+/* Reduced motion still has to say "working". The line stays and stops moving,
+   rather than disappearing and leaving the words on their own. */
+@media (prefers-reduced-motion: reduce) {
+  .progress::after { width: 100%; animation: none; }
 }
 
 /* Manual entry, demoted to a native disclosure under the snap box. Smaller
@@ -405,6 +432,19 @@ export /**
  * line inviting him to. That is the difference between an invitation and an
  * interruption, and design.md §10 only forbids the second one.
  *
+ * The fourth thing is the wait state on the photo path. That POST holds a
+ * vision call open for about ten seconds, and a farmer staring at a button
+ * that did nothing taps it again, which buys a second model call with real
+ * money. So the submit disables its own button, hides the pre-submit note and
+ * reveals the crawling line with the canonical wait words under it.
+ *
+ * The disable is deferred a tick on purpose. A submit button disabled inside
+ * its own handler drops its name and value from the body the browser is still
+ * assembling, and the consent screen posts answer=yes on exactly that.
+ *
+ * pageshow puts it all back, because bfcache restores this page from the back
+ * button exactly as it left: button dead, line crawling, form unusable.
+ *
  * The third thing is the many-photos enhancement on the camera hero. The
  * native input takes one photo (or a gallery multi-select where the OS allows)
  * with no JavaScript at all; this accumulates captures into the same input via
@@ -441,6 +481,20 @@ if(dt.items.length>=4)return;
 dt.items.add(f);});
 inp.files=dt.files;
 redrawShots(inp);
+});
+addEventListener('submit',function(ev){
+var f=ev.target;if(!f||!f.querySelector)return;
+var b=f.querySelector('button[type="submit"]');
+if(b)setTimeout(function(){b.disabled=true;},0);
+if(!f.className||f.className.indexOf('hero-camera')===-1)return;
+var n=f.querySelector('.camera-note');if(n)n.hidden=true;
+var p=f.querySelector('.progress');if(p)p.hidden=false;
+var w=f.querySelector('.wait');if(w)w.hidden=false;
+});
+addEventListener('pageshow',function(){
+Array.prototype.forEach.call(document.querySelectorAll('button[disabled]'),function(x){x.disabled=false;});
+Array.prototype.forEach.call(document.querySelectorAll('.progress,.wait'),function(x){x.hidden=true;});
+Array.prototype.forEach.call(document.querySelectorAll('.camera-note'),function(x){x.hidden=false;});
 });
 addEventListener('beforeinstallprompt',function(e){e.preventDefault();d=e;
 var b=document.getElementById('install');if(b)b.hidden=false;});
@@ -740,6 +794,8 @@ function cameraHero(photo: PhotoPath, campaign: Record<string, string>, fbc: str
 ${campaignFields(campaign)}${fbcField(fbc)}      <button type="submit" class="camera-run">Run the numbers</button>
       <div class="cf-turnstile" data-sitekey="${escapeHtml(photo.turnstileSiteKey)}" data-action="extract"></div>
       <p class="note camera-note">Reading your paper takes about 10 seconds. The photo is never saved.</p>
+      <div class="progress" hidden aria-hidden="true"></div>
+      <p class="note wait" role="status" hidden>Reading your paper… about 10 seconds.</p>
     </form>
 `;
 }
