@@ -136,6 +136,42 @@ Enforced by `tests/firewall.test.ts`, both directions and the independence prope
 
 **Single-source fragility, on the record:** AgDirect can reformat, pull, or object to being the reference. It is also Farm Credit-affiliated and a plausible future lead buyer — awkward or synergistic; decide knowingly before scale. Expansion path: add other published, date-stamped equipment programs under the same matching transparency; later, pile cohort medians (n ≥ 20) complement but do not replace tier 1 for verdicts.
 
+**Canada has no tier-1 supply, on the record (searched 2026-08-19):** there is no
+Canadian published equipment rate card. The lenders who actually write Canadian
+farm equipment paper (Farm Credit Canada, CNH Industrial Capital Canada, AGCO
+Finance Canada, DLL Canada, CWB National Leasing) price by file and post no
+rates at all; FCC's own equipment financing page, the single most on-point URL
+in the country, names no number and carries no date. The provincial boards
+either publish nothing (Nova Scotia, AFSC) or price every farm purpose off one
+term ladder (MASC, Manitoba residents only), which is not equipment-specific.
+
+What Canada does publish is captive promotional subvention, and it fails as a
+benchmark on its own terms rather than on a technicality. It is new-only,
+brand-restricted and named-model, so it says nothing about the used combine a
+real quote is most likely to be for, and John Deere Canada's own fine print
+concedes that taking the posted rate may mean forgoing cash discounts, "which
+may result in a higher effective interest rate" (deere.ca, offer window
+2026-08-05 to 2026-11-01). A 0% cell whose buy-down is absorbed by the machine's
+price is a price, not a rate. **A promo schedule is not tier 1, not tier 2, and
+not on this hierarchy at all. It never backs a verdict and never renders as a
+context line.** Canadian deals abstain with `no_matched_benchmark` and render
+stampless, which is the shipped behavior and is correct.
+
+Two things any future Canadian ingest has to carry, both found by that search:
+
+- **The convention is not on the page.** Not one Canadian source found states a
+  compounding or quoting convention. Deere Canada writes "APR/ACR" and defines
+  neither; CNH writes "per annum" on a 0% cell, where the basis is unobservable
+  anyway. `benchmarks` has no convention column, and under Interest Act s.6 a
+  Canadian rate quoted semi-annually is not the same number as an APR. So a
+  Canadian row needs the convention obtained from the lender, and a schema
+  change to hold it, before it can back a verdict. Until both exist, abstention
+  is the only correct handling.
+- **Canadian rate pages go stale in place, with no signal.** Kubota Canada was
+  still serving terms stamped "valid until 07-31-26" nineteen days after that
+  date, and a credit union card still read "Rates Effective: 2025-05-01".
+  A staleness gate must read the publisher's own date, never fetch time.
+
 ---
 
 ## 5. ARCHITECTURE
