@@ -991,7 +991,7 @@ ${view.rows.map(field).join('\n')}
       <p class="note">Tick this and we will show your rate but hold the verdict. We will not rate a deal with money in it that nobody can explain.</p>
     </div>
     <input type="hidden" name="standalone" value="">
-    <button type="submit">Looks right — run it</button>
+    <button type="submit">Looks right, run it</button>
   </form>
 `);
 }

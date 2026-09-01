@@ -18,7 +18,17 @@ import {
   renderWhosBehindThis,
   NOTES,
 } from '../src/web/pages.js';
-import { renderConfirm, renderForm, renderUnsubscribeConfirm } from '../src/web/page.js';
+import {
+  renderConfirm,
+  renderExtractFailure,
+  renderForm,
+  renderTicket,
+  renderUnpriceable,
+  renderUnsubscribeConfirm,
+  renderVerdictTicket,
+} from '../src/web/page.js';
+import { renderSent } from '../src/web/pages.js';
+import { promoPriceRate } from '../src/finance/index.js';
 
 /** The configured footer form, exactly as wrangler.jsonc carries it. */
 const POSTAL = 'LoanHank · 109b - 1917 Peninsula Rd, Ucluelet, BC V0R 3A0, Canada';
@@ -38,6 +48,54 @@ const PAGES: Array<[string, string]> = [
   ['whos-behind-this', renderWhosBehindThis()],
   ['404', renderNotFound()],
   ['unsubscribe-confirm', renderUnsubscribeConfirm('sweep-check')],
+  // The decode-flow screens, previously unswept, which is how a live em dash
+  // shipped on the confirm button. Representative view-models mirroring the
+  // worker's literals, so the sweep reads real copy.
+  ['confirm', renderConfirm({
+    rows: [
+      { name: 'quotedPrice', label: 'Quoted price', state: 'read', value: '84500.00' },
+      {
+        name: 'cashDiscount', label: 'Cash discount', state: 'unreadable', value: '',
+        hint: 'What they knock off if you pay cash instead of financing. Leave empty if there is none.',
+      },
+      {
+        name: 'brand', label: 'Make', state: 'unreadable', value: '', choices: ['John Deere'],
+        hint: 'Pick the maker of the machine. Leave it blank if it is not on the list.',
+      },
+    ],
+    frequency: '',
+    warnings: ['Too blurry to read. Try again in better light, or type the numbers.'],
+  })],
+  ['ticket', renderTicket({
+    rate: '2.94%',
+    result: promoPriceRate({
+      quotedPriceCents: 8_450_000, cashDiscountCents: 600_000,
+      paymentAmountCents: 140_833, paymentCount: 60, paymentFrequency: 'monthly',
+    }),
+    costSentence: 'Paying it out this way costs $5,999.80 more than paying cash today.',
+    missing: ['A trade-in, and whatever is still owed on it', 'Anything due at signing'],
+    lines: [{ label: 'Quoted price', amount: '$84,500.00' }],
+  })],
+  ['verdict-ticket', renderVerdictTicket({
+    rate: '2.94%', verdict: 'checks_out',
+    verdictLine: "This deal checks out. We'd take it.",
+    lines: [{ label: 'Quoted price', amount: '$84,500.00' }],
+    reference: 'Comparable published equipment rate: 7.25%, subject to approval. AgDirect, $25,000-$99,999, 5 years, fixed, as of 2026-08-01.',
+    footnote: 'This is not the legal APR. It is the annual cost of this deal against its cash alternative, using the costs we can verify.',
+    missing: [], assumption: null,
+    // Gate non-null so the email gate and interest blocks sweep too.
+    gate: { decodeId: 'sweep-check' },
+  })],
+  ['verdict-abstains', renderVerdictTicket({
+    rate: 'no rate yet', verdict: 'none',
+    verdictLine: 'We can show you the rate. We are not rating this deal yet.',
+    lines: [], reference: null, footnote: null, assumption: null, gate: null,
+    missing: ['An amount on this quote that nobody has explained yet. Find out what it is and run it again.'],
+  })],
+  ['unpriceable', renderUnpriceable('Those numbers do not add up to a deal we can price. Check the payment and how many there are against your paper, then run it again.')],
+  // Expiry non-null so the reminder-offer block sweeps as well.
+  ['sent', renderSent('sweep-check', '2026-08-31')],
+  ['extract-failure', renderExtractFailure('Too blurry to read. Try again in better light, or type the numbers.')],
   // Every note obeys every copy law the rest of the site does, so they join
   // the same sweep rather than getting their own softer one.
   ['notes-index', renderNotesIndex()],
