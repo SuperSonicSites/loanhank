@@ -16,6 +16,7 @@ const BASE: DealLedger = {
   paymentCount: 48,
   paymentFrequency: 'monthly',
   statedRateBps: 0,
+  balloonCents: 0,
   fees: [],
 };
 
@@ -101,6 +102,35 @@ describe('decodeLedger', () => {
   it('fails to reconcile when the payment does not match the ledger', () => {
     const decoded = decodeLedger({ ...BASE, paymentAmountCents: 172_000 });
     expect(decoded.reconciliation.reconciled).toBe(false);
+  });
+
+  // Balloon on the ledger (spec.md 2.2). At the dealer's stated 0% a $20,000
+  // balloon behind 48 payments means the payments cover $56,700 of the
+  // $76,700 financed: exactly $1,181.25 a payment, no rounding. Total out is
+  // 48 x 118_125 + 2_000_000 balloon + 500_000 down = 7_770_000 + 400_000,
+  // so financing costs exactly the forfeited discount. The real rate prices
+  // the $72,700 kept in pocket against that stream: 2.12% (independent IRR,
+  // derived before the code existed).
+  describe('balloon', () => {
+    const BALLOONED: DealLedger = {
+      ...BASE,
+      balloonCents: 2_000_000,
+      paymentAmountCents: 118_125,
+    };
+
+    it('reconciles a balloon ledger at the stated rate', () => {
+      const decoded = decodeLedger(BALLOONED);
+      expect(decoded.reconciliation.reconciled).toBe(true);
+      expect(decoded.costVersusCashCents).toBe(400_000);
+      expect(decoded.realRateAllInBps).toBe(212);
+    });
+
+    it('fails to reconcile when the balloon is left off the ledger', () => {
+      // The old behavior, now demonstrably the wrong answer: without the
+      // balloon these payments are far short of full amortization.
+      const decoded = decodeLedger({ ...BALLOONED, balloonCents: 0 });
+      expect(decoded.reconciliation.reconciled).toBe(false);
+    });
   });
 
   // Non-monthly pin for the definition of record (spec.md 2): the same deal

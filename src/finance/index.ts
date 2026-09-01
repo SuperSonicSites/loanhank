@@ -142,12 +142,25 @@ function paymentDollars(
   frequency: RegularFrequency,
   periods: number,
   convention: InterestRateConvention = 'nominal_payment_frequency',
+  balloon: Decimal = new Decimal(0),
 ): Decimal {
   if (periods <= 0) throw new ProjectionUnavailableError('Remaining payments must be greater than zero.');
   const periodicRate = periodicRateFor(annualRateBps, frequency, convention);
-  return periodicRate.isZero()
-    ? principal.div(periods)
-    : principal.mul(periodicRate).div(new Decimal(1).minus(new Decimal(1).plus(periodicRate).pow(-periods)));
+  // A balloon is principal the payments never have to cover; its present
+  // value comes off before the level payment is solved.
+  if (periodicRate.isZero()) {
+    const effective = principal.minus(balloon);
+    if (balloon.greaterThan(0) && effective.lessThanOrEqualTo(0)) {
+      throw new ProjectionUnavailableError('The stated balloon retires more than the amount financed.');
+    }
+    return effective.div(periods);
+  }
+  const discount = new Decimal(1).plus(periodicRate).pow(-periods);
+  const effective = principal.minus(balloon.mul(discount));
+  if (balloon.greaterThan(0) && effective.lessThanOrEqualTo(0)) {
+    throw new ProjectionUnavailableError('The stated balloon retires more than the amount financed.');
+  }
+  return effective.mul(periodicRate).div(new Decimal(1).minus(discount));
 }
 
 export function calculatePaymentCents(
@@ -156,8 +169,9 @@ export function calculatePaymentCents(
   frequency: RegularFrequency,
   periods: number,
   convention: InterestRateConvention = 'nominal_payment_frequency',
+  balloonCents = 0,
 ): number {
-  return cents(paymentDollars(dollars(principalCents), annualRateBps, frequency, periods, convention));
+  return cents(paymentDollars(dollars(principalCents), annualRateBps, frequency, periods, convention, dollars(balloonCents)));
 }
 
 function disclosure(
@@ -1207,6 +1221,8 @@ export interface QuickPathQuote {
   paymentAmountCents: number;
   paymentCount: number;
   paymentFrequency: RegularFrequency;
+  /** One large final payment after the regular ones. Absent means none. */
+  balloonCents?: number;
 }
 
 export type PromoPriceRateUnavailableReason =
@@ -1235,10 +1251,11 @@ function annuityPresentValue(payment: Decimal, rate: Decimal, periods: number): 
 export function promoPriceRate(quote: QuickPathQuote): PromoPriceRate {
   const cashPriceCents = quote.quotedPriceCents - quote.cashDiscountCents;
   const totalOfPaymentsCents = quote.paymentAmountCents * quote.paymentCount;
+  const balloonCents = quote.balloonCents ?? 0;
   const base = {
     cashPriceCents,
     totalOfPaymentsCents,
-    costVersusCashCents: totalOfPaymentsCents - cashPriceCents,
+    costVersusCashCents: totalOfPaymentsCents + balloonCents - cashPriceCents,
     assumptions: [QUICK_PATH_ASSUMPTION],
   };
 
@@ -1254,15 +1271,25 @@ export function promoPriceRate(quote: QuickPathQuote): PromoPriceRate {
 
   const periods = quote.paymentCount;
   const payment = new Decimal(quote.paymentAmountCents);
+  const balloon = new Decimal(balloonCents);
   const target = new Decimal(cashPriceCents);
   const perYear = periodsPerYear[quote.paymentFrequency];
   const periodicAt = (annualBps: number) => new Decimal(annualBps).div(10_000).div(perYear);
+  // Both legs of the PV fall as the rate rises, so the balloon term keeps the
+  // bracket monotonic.
+  const pvAt = (annualBps: number) => {
+    const rate = periodicAt(annualBps);
+    const annuity = annuityPresentValue(payment, rate, periods);
+    if (balloon.isZero()) return annuity;
+    if (rate.isZero()) return annuity.plus(balloon);
+    return annuity.plus(balloon.mul(new Decimal(1).plus(rate).pow(-periods)));
+  };
 
   // Present value falls as the rate rises, so the bracket is monotonic and a
   // bisection is exact enough. If the answer is not inside the bracket the
   // quote is not something we can price, and we say so.
-  const pvAtMin = annuityPresentValue(payment, periodicAt(PROMO_RATE_MIN_BPS), periods);
-  const pvAtMax = annuityPresentValue(payment, periodicAt(PROMO_RATE_MAX_BPS), periods);
+  const pvAtMin = pvAt(PROMO_RATE_MIN_BPS);
+  const pvAtMax = pvAt(PROMO_RATE_MAX_BPS);
   if (target.greaterThan(pvAtMin) || target.lessThan(pvAtMax)) {
     return { ...base, promoPriceRateBps: null, unavailableReason: 'rate_outside_supported_range' };
   }
@@ -1271,7 +1298,7 @@ export function promoPriceRate(quote: QuickPathQuote): PromoPriceRate {
   let high = new Decimal(PROMO_RATE_MAX_BPS);
   for (let step = 0; step < 200; step += 1) {
     const middle = low.plus(high).div(2);
-    if (annuityPresentValue(payment, periodicAt(middle.toNumber()), periods).greaterThan(target)) {
+    if (pvAt(middle.toNumber()).greaterThan(target)) {
       low = middle;
     } else {
       high = middle;
@@ -1389,12 +1416,15 @@ export function reconcileLedger(input: {
   paymentAmountCents: number;
   paymentCount: number;
   paymentFrequency: RegularFrequency;
+  balloonCents?: number;
 }): LedgerReconciliation {
   const expectedPaymentCents = calculatePaymentCents(
     input.amountFinancedCents,
     input.statedRateBps,
     input.paymentFrequency,
     input.paymentCount,
+    'nominal_payment_frequency',
+    input.balloonCents ?? 0,
   );
   const differenceCents = Math.abs(input.paymentAmountCents - expectedPaymentCents);
   return {
@@ -1534,15 +1564,21 @@ export function costAgainstBenchmark(input: {
   paymentCount: number;
   paymentFrequency: RegularFrequency;
   benchmarkRateBps: number;
+  balloonCents?: number;
 }): BenchmarkCostComparison {
+  // The same balloon rides behind both streams, so it cancels in the
+  // difference but keeps both printed totals honest.
+  const balloonCents = input.balloonCents ?? 0;
   const benchmarkPaymentCents = calculatePaymentCents(
     input.amountFinancedCents,
     input.benchmarkRateBps,
     input.paymentFrequency,
     input.paymentCount,
+    'nominal_payment_frequency',
+    balloonCents,
   );
-  const benchmarkTotalCents = benchmarkPaymentCents * input.paymentCount;
-  const dealTotalCents = input.paymentAmountCents * input.paymentCount;
+  const benchmarkTotalCents = benchmarkPaymentCents * input.paymentCount + balloonCents;
+  const dealTotalCents = input.paymentAmountCents * input.paymentCount + balloonCents;
   return {
     benchmarkPaymentCents,
     benchmarkTotalCents,
@@ -1576,6 +1612,8 @@ export interface DealLedger {
   paymentCount: number;
   paymentFrequency: RegularFrequency;
   statedRateBps: number;
+  /** One large final payment after the regular ones. Zero means none. */
+  balloonCents: number;
   fees: LedgerFee[];
 }
 
@@ -1656,6 +1694,7 @@ export function decodeLedger(ledger: DealLedger): LedgerDecode {
     paymentAmountCents: ledger.paymentAmountCents,
     paymentCount: ledger.paymentCount,
     paymentFrequency: ledger.paymentFrequency,
+    balloonCents: ledger.balloonCents,
   });
 
   // The rate is the IRR of what financing keeps in your pocket at signing
@@ -1666,6 +1705,7 @@ export function decodeLedger(ledger: DealLedger): LedgerDecode {
     paymentAmountCents: ledger.paymentAmountCents,
     paymentCount: ledger.paymentCount,
     paymentFrequency: ledger.paymentFrequency,
+    balloonCents: ledger.balloonCents,
   });
 
   const totalOfPaymentsCents = ledger.paymentAmountCents * ledger.paymentCount;
@@ -1675,7 +1715,8 @@ export function decodeLedger(ledger: DealLedger): LedgerDecode {
     realRateAllInBps: totals.hasUnknownFee ? null : rate.promoPriceRateBps,
     totalOfPaymentsCents,
     costVersusCashCents:
-      totalOfPaymentsCents + ledger.downPaymentCents + totals.upfrontFinanceOnlyFeesCents - totals.cashOutlayCents,
+      totalOfPaymentsCents + ledger.balloonCents + ledger.downPaymentCents
+      + totals.upfrontFinanceOnlyFeesCents - totals.cashOutlayCents,
     unavailableReason: rate.unavailableReason,
   };
 }

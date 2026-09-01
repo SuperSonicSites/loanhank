@@ -76,6 +76,59 @@ describe('promoPriceRate', () => {
     expect(result.promoPriceRateBps).toBe(600);
   });
 
+  // Balloon deals (spec.md 2.2: balloon is a ledger field, not an exotic).
+  // Payment hand-derived first with the balloon annuity formula
+  // PMT = (P - B*(1+r)^-n) * r / (1-(1+r)^-n):
+  // P = $78,500, B = $20,000, r = 0.07/12, n = 60 gives $1,275.04.
+  it('recovers a rate the engine itself priced with a balloon, monthly', () => {
+    const payment = calculatePaymentCents(7_850_000, 700, 'monthly', 60, 'nominal_payment_frequency', 2_000_000);
+    expect(payment).toBe(127_504);
+    const result = promoPriceRate({
+      quotedPriceCents: 7_850_000,
+      cashDiscountCents: 0,
+      paymentAmountCents: payment,
+      paymentCount: 60,
+      paymentFrequency: 'monthly',
+      balloonCents: 2_000_000,
+    });
+    expect(result.promoPriceRateBps).toBe(700);
+  });
+
+  it('prices a zero-rate balloon deal at exactly zero', () => {
+    // 60 payments of $1,000 plus a $12,000 balloon total exactly the $72,000
+    // cash price, so financing costs nothing and the rate is zero.
+    const result = promoPriceRate({
+      quotedPriceCents: 7_200_000,
+      cashDiscountCents: 0,
+      paymentAmountCents: 100_000,
+      paymentCount: 60,
+      paymentFrequency: 'monthly',
+      balloonCents: 1_200_000,
+    });
+    expect(result.promoPriceRateBps).toBe(0);
+    expect(result.costVersusCashCents).toBe(0);
+  });
+
+  it('prices the same payments higher when a balloon rides behind them', () => {
+    const flat = promoPriceRate({
+      quotedPriceCents: 7_850_000,
+      cashDiscountCents: 0,
+      paymentAmountCents: 140_833,
+      paymentCount: 60,
+      paymentFrequency: 'monthly',
+    });
+    const ballooned = promoPriceRate({
+      quotedPriceCents: 7_850_000,
+      cashDiscountCents: 0,
+      paymentAmountCents: 140_833,
+      paymentCount: 60,
+      paymentFrequency: 'monthly',
+      balloonCents: 2_000_000,
+    });
+    expect(ballooned.promoPriceRateBps).toBeGreaterThan(flat.promoPriceRateBps as number);
+    expect(ballooned.costVersusCashCents).toBe(flat.costVersusCashCents + 2_000_000);
+  });
+
   // The product in one case. An $84,500 quote with a $6,000 cash discount,
   // financed at the dealer's "0%" over 60 months on the full sticker.
   it('prices a 0% promo that is not 0%', () => {
