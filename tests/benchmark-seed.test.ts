@@ -1,6 +1,7 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 import { parseMoneyToCents } from '../src/shared/schema.js';
+import { migratedDatabase } from './helpers/d1-sqlite.js';
 
 // The benchmark seed is hand-transcribed from a published rate card, and a
 // hand-typed number is the one thing in this repo with no compiler behind it.
@@ -10,9 +11,12 @@ import { parseMoneyToCents } from '../src/shared/schema.js';
 // inserted cleanly, and the only symptom would have been every verdict quietly
 // abstaining because no quote on earth fell inside a band.
 //
-// These tests read the migrations as text and check each row against its own
-// label. The label and the number have to agree, so a typo in either one is a
-// failing test rather than a silent abstention.
+// These tests read the rows out of a real database migrated by the real
+// migrations, and check each row against its own label. The label and the
+// number have to agree, so a typo in either one is a failing test rather than
+// a silent abstention. An earlier version parsed the INSERT text with a regex,
+// which went silently blind to any row shape it could not match; the count
+// guard below is what makes that class of miss loud instead.
 
 const MIGRATIONS_DIR = new URL('../migrations/', import.meta.url);
 
@@ -27,6 +31,7 @@ interface SeededBenchmark {
   rateBps: number;
   rateKind: string;
   tier: number;
+  validThrough: string | null;
 }
 
 async function migrationText(): Promise<string> {
@@ -37,55 +42,49 @@ async function migrationText(): Promise<string> {
   return files.join('\n');
 }
 
-/** Pull the seeded benchmark tuples straight out of the INSERT in 0001. */
-function seededBenchmarks(sql: string): SeededBenchmark[] {
-  const rows: SeededBenchmark[] = [];
-  const tuple =
-    /\('([^']+)',\s*'[^']*',\s*'[^']*',\s*'[^']*',\s*'[^']*',\s*'([^']+)',\s*(\d+),\s*(\d+|NULL),\s*'([^']+)',\s*(\d+),\s*(\d+),\s*(\d+),\s*'([^']+)',\s*(\d+)\)/g;
-  for (const match of sql.matchAll(tuple)) {
-    rows.push({
-      id: match[1] as string,
-      amountBand: match[2] as string,
-      amountMinCents: Number(match[3]),
-      amountMaxCents: match[4] === 'NULL' ? null : Number(match[4]),
-      termBand: match[5] as string,
-      termMinMonths: Number(match[6]),
-      termMaxMonths: Number(match[7]),
-      rateBps: Number(match[8]),
-      rateKind: match[9] as string,
-      tier: Number(match[10]),
-    });
-  }
-  return rows;
-}
-
-/** Later UPDATEs win, the same way they do in the database. */
-function applyBandCorrections(sql: string, rows: SeededBenchmark[]): SeededBenchmark[] {
-  const update =
-    /UPDATE benchmarks SET amount_min_cents\s*=\s*(\d+),\s*amount_max_cents\s*=\s*(\d+|NULL)\s+WHERE amount_band\s*=\s*'([^']+)'/g;
-  const corrected = rows.map((row) => ({ ...row }));
-  for (const match of sql.matchAll(update)) {
-    for (const row of corrected) {
-      if (row.amountBand === match[3]) {
-        row.amountMinCents = Number(match[1]);
-        row.amountMaxCents = match[2] === 'NULL' ? null : Number(match[2]);
-      }
-    }
-  }
-  return corrected;
+/** Every benchmark row exactly as the migrations leave it in the database. */
+async function seededBenchmarks(): Promise<SeededBenchmark[]> {
+  const { db } = await migratedDatabase();
+  const rows = db.prepare('SELECT * FROM benchmarks').all() as Array<Record<string, unknown>>;
+  return rows.map((row) => ({
+    id: String(row.id),
+    amountBand: String(row.amount_band),
+    amountMinCents: Number(row.amount_min_cents),
+    amountMaxCents: row.amount_max_cents === null ? null : Number(row.amount_max_cents),
+    termBand: String(row.term_band),
+    termMinMonths: Number(row.term_min_months),
+    termMaxMonths: Number(row.term_max_months),
+    rateBps: Number(row.rate_bps),
+    rateKind: String(row.rate_kind),
+    tier: Number(row.tier),
+    validThrough: row.valid_through === null || row.valid_through === undefined
+      ? null
+      : String(row.valid_through),
+  }));
 }
 
 describe('benchmark seed', () => {
   it('seeds rows at all', async () => {
-    const rows = applyBandCorrections(await migrationText(), seededBenchmarks(await migrationText()));
-    expect(rows.length).toBeGreaterThan(0);
+    expect((await seededBenchmarks()).length).toBeGreaterThan(0);
+  });
+
+  it('holds every value tuple the migration text carries', async () => {
+    // The anti-silent guard. A future seed row written in a shape the database
+    // rejects fails the migration loudly, but a row the guards below never
+    // see because a parser skipped it is the quiet failure class 0002
+    // documents. So: count the raw value tuples in every INSERT INTO
+    // benchmarks statement and demand the database holds exactly that many
+    // rows. The column list opens with a bare identifier, so `(` followed by
+    // a quote counts only value tuples.
+    const sql = await migrationText();
+    const blocks = sql.match(/INSERT INTO benchmarks[\s\S]*?;/g) ?? [];
+    const counted = (blocks.join('\n').match(/\(\s*'/g) ?? []).length;
+    expect(counted).toBeGreaterThan(0);
+    expect((await seededBenchmarks()).length).toBe(counted);
   });
 
   it('matches every amount bound to the band printed on it', async () => {
-    const sql = await migrationText();
-    const rows = applyBandCorrections(sql, seededBenchmarks(sql));
-
-    for (const row of rows) {
+    for (const row of await seededBenchmarks()) {
       // "$25,000-$99,999" or "$250,000+"
       const open = /^(\$[\d,]+)\+$/.exec(row.amountBand);
       const closed = /^(\$[\d,]+)-(\$[\d,]+)$/.exec(row.amountBand);
@@ -105,8 +104,7 @@ describe('benchmark seed', () => {
   });
 
   it('matches every term bound to the band printed on it', async () => {
-    const sql = await migrationText();
-    for (const row of seededBenchmarks(sql)) {
+    for (const row of await seededBenchmarks()) {
       // "2-3 years", "4 years", "6-7 years"
       const range = /^(\d+)-(\d+) years$/.exec(row.termBand);
       const single = /^(\d+) years?$/.exec(row.termBand);
@@ -120,8 +118,7 @@ describe('benchmark seed', () => {
   });
 
   it('leaves no gap or overlap between neighbouring amount bands', async () => {
-    const sql = await migrationText();
-    const rows = applyBandCorrections(sql, seededBenchmarks(sql));
+    const rows = await seededBenchmarks();
     const bands = [...new Map(rows.map((row) => [row.amountBand, row])).values()]
       .sort((a, b) => a.amountMinCents - b.amountMinCents);
 
@@ -136,7 +133,7 @@ describe('benchmark seed', () => {
   });
 
   it('keeps every published rate inside a range a rate card can hold', async () => {
-    for (const row of seededBenchmarks(await migrationText())) {
+    for (const row of await seededBenchmarks()) {
       expect(row.rateBps, `${row.id} rate looks like a unit error`).toBeGreaterThan(0);
       expect(row.rateBps, `${row.id} rate looks like a unit error`).toBeLessThan(3_000);
       expect(['fixed', 'variable']).toContain(row.rateKind);
@@ -147,11 +144,20 @@ describe('benchmark seed', () => {
   it('carries a source, a date and an archived snapshot on every row', async () => {
     const sql = await migrationText();
     const inserts = sql.slice(sql.indexOf('INSERT INTO benchmarks'));
-    const seeded = seededBenchmarks(sql);
+    const seeded = await seededBenchmarks();
     expect(seeded.length).toBe(32);
     // Every verdict has to stay reproducible after the source page changes.
     expect(inserts).toContain("'https://www.agdirect.com/rates'");
     expect(inserts).toContain("'2026-08-01'");
     expect(inserts).toContain("'benchmarks/agdirect/2026-08-01.html'");
+  });
+
+  it('carries the printed end of validity on every AgDirect row', async () => {
+    // AgDirect prints one ("Rates effective August 01-31 2026"), so every row
+    // of a seeded AgDirect card must carry it or the staleness gate has
+    // nothing to read (spec.md section 4).
+    for (const row of await seededBenchmarks()) {
+      expect(row.validThrough, `${row.id} has no valid_through`).not.toBeNull();
+    }
   });
 });
