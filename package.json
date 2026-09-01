@@ -7,6 +7,7 @@
     "dev": "wrangler dev",
     "test": "vitest run",
     "test:eval": "vitest run tests/extraction-fixtures.test.ts tests/quote-eval.test.ts tests/photo-path.test.ts",
+    "test:eval:live": "vitest run --config vitest.live.config.ts",
     "typecheck": "tsc --noEmit",
     "deploy": "node ops/deploy.mjs",
     "infra:r2": "wrangler r2 bucket lifecycle set loanhank-quotes --file infra/r2-lifecycle-quotes.json && wrangler r2 bucket lifecycle set loanhank-backups --file infra/r2-lifecycle-backups.json && wrangler r2 bucket lifecycle set loanhank-snapshots --file infra/r2-lifecycle-snapshots.json && pnpm infra:verify",
