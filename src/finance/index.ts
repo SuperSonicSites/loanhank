@@ -1850,6 +1850,25 @@ const LADDER: LadderStep[] = [
   { quarters: 4, dropped: ['priceBand', 'termBand'] },
 ];
 
+/**
+ * The window the ladder widens into: this quarter and the ones before it,
+ * newest first. Cohort policy, so it lives beside the ladder, and pure: the
+ * caller supplies the anchor because the engine never reads a clock. The
+ * production caller used to pass a one-element window, which made the
+ * widen-to-2-and-4-quarter rungs unreachable dead code.
+ */
+export function quarterWindow(anchor: string, count = 4): string[] {
+  const match = /^(\d{4})Q([1-4])$/.exec(anchor);
+  if (match === null) {
+    throw new ProjectionUnavailableError(`Not a quarter label: ${anchor}`);
+  }
+  const start = Number(match[1]) * 4 + (Number(match[2]) - 1);
+  return Array.from({ length: count }, (_, offset) => {
+    const index = start - offset;
+    return `${Math.floor(index / 4)}Q${(index % 4) + 1}`;
+  });
+}
+
 function cohortLabel(subject: CohortSubject, dropped: Array<'priceBand' | 'termBand'>): string {
   const parts = [subject.newOrUsed, subject.equipCategory].filter(Boolean).join(' ');
   const term = dropped.includes('termBand') ? null : subject.termBand;

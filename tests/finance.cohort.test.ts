@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   COHORT_MIN_N,
   cohortLadder,
+  quarterWindow,
   quoteWithinSanityBounds,
   type CohortRow,
   type CohortSubject,
@@ -21,6 +22,24 @@ const SUBJECT: CohortSubject = {
 };
 
 const WINDOW = ['2026Q3', '2026Q2', '2026Q1', '2025Q4'];
+
+describe('quarterWindow', () => {
+  it('walks back from the anchor, newest first', () => {
+    expect(quarterWindow('2026Q3')).toEqual(['2026Q3', '2026Q2', '2026Q1', '2025Q4']);
+  });
+
+  it('crosses the year boundary', () => {
+    expect(quarterWindow('2026Q1')).toEqual(['2026Q1', '2025Q4', '2025Q3', '2025Q2']);
+  });
+
+  it('honors a shorter count', () => {
+    expect(quarterWindow('2026Q3', 2)).toEqual(['2026Q3', '2026Q2']);
+  });
+
+  it('throws on a label that is not a quarter', () => {
+    expect(() => quarterWindow('soon')).toThrow('Not a quarter label');
+  });
+});
 
 function rows(count: number, overrides: Partial<CohortRow> = {}, startBps = 100): CohortRow[] {
   return Array.from({ length: count }, (_, index) => ({

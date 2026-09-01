@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 import { sendDayFour, sendDayThirty, sendDueReminders, sendTeardown } from '../src/api/worker.js';
+import { PEER_POLICY_VERSION } from '../src/finance/index.js';
 import { migratedDatabase } from './helpers/d1-sqlite.js';
 import { collectTestNames, unresolvedCitations } from './helpers/test-names.js';
 
@@ -439,6 +440,7 @@ async function sequenceFixture(
   rows: Array<Record<string, unknown>>,
   pile = 0,
   benchmarkAtTs: string | null = null,
+  pileQuarter = '2026Q3',
 ) {
   const { db, d1 } = await migratedDatabase();
   // The verdict needs a benchmark to point at. The stamp-law CHECK refused an
@@ -459,9 +461,9 @@ async function sequenceFixture(
       `INSERT INTO decodes (id, ts, quarter, country, currency, reconciled, synthetic,
                             out_of_bounds, real_rate_all_in_bps, term_band, price_band,
                             equip_category, new_or_used)
-       VALUES (?, '2026-07-01T00:00:00Z', '2026Q3', 'US', 'USD', 1, 0, 0, ?, '49-72',
+       VALUES (?, '2026-07-01T00:00:00Z', ?, 'US', 'USD', 1, 0, 0, ?, '49-72',
                '25k-100k', 'tractor', 'used')`,
-    ).run(`peer${index}`, 300 + index * 10);
+    ).run(`peer${index}`, pileQuarter, 300 + index * 10);
   }
 
   for (const row of rows) {
@@ -609,6 +611,48 @@ describe('day thirty stays silent until a cohort qualifies', () => {
     expect(body).toContain('Unsubscribe: ');
     const row = db.prepare('SELECT day30_sent_at FROM emails WHERE id = ?').get('ready') as { day30_sent_at: string };
     expect(row.day30_sent_at).not.toBeNull();
+  });
+
+  it('widens into the prior quarter when this one is thin', async () => {
+    // The ladder's widen rungs were dead code for as long as the caller
+    // passed a one-quarter window: a farmer whose cohort qualified across two
+    // quarters was silently skipped, against the published five-rung method.
+    const fixture = await sequenceFixture(
+      [{ id: 'ready', createdAt: '2026-07-01T00:00:00Z' }], 25, null, '2026Q2',
+    );
+    const { result, posted } = await fixture.run(sendDayThirty, '2026-08-05');
+    expect((result as { sent: number }).sent).toBe(1);
+    expect(String(posted[0]?.text)).toMatch(/from \d+ real quotes/);
+  });
+
+  it('freezes what it told the farmer on his decode row', async () => {
+    // spec.md 9.3: every peer statistic shown is snapshotted on the decode
+    // row, same discipline as verdict_ref_id. The pile keeps growing under
+    // the cohort, so without the freeze the exact figures a farmer was
+    // emailed could never be reproduced or defended later.
+    const fixture = await sequenceFixture([{ id: 'ready', createdAt: '2026-07-01T00:00:00Z' }], 25);
+    const { db } = await fixture.run(sendDayThirty, '2026-08-05');
+    const row = db.prepare(
+      `SELECT peer_cohort_key, peer_n, peer_median_bps, peer_p25_bps, peer_p75_bps,
+              peer_computed_at, peer_policy_version
+         FROM decodes WHERE id = 'd1'`,
+    ).get() as Record<string, unknown>;
+    expect(row.peer_cohort_key).not.toBeNull();
+    expect(row.peer_n).toBe(26);
+    expect(row.peer_median_bps).not.toBeNull();
+    expect(row.peer_p25_bps).not.toBeNull();
+    expect(row.peer_p75_bps).not.toBeNull();
+    expect(row.peer_computed_at).not.toBeNull();
+    expect(row.peer_policy_version).toBe(PEER_POLICY_VERSION);
+  });
+
+  it('freezes nothing when nothing was shown', async () => {
+    const fixture = await sequenceFixture([{ id: 'thin', createdAt: '2026-07-01T00:00:00Z' }], 5);
+    const { db } = await fixture.run(sendDayThirty, '2026-08-05');
+    const row = db.prepare('SELECT peer_cohort_key, peer_n FROM decodes WHERE id = ?').get('d1') as
+      Record<string, unknown>;
+    expect(row.peer_cohort_key).toBeNull();
+    expect(row.peer_n).toBeNull();
   });
 
   it('refuses an unsubscribed address even with a qualifying cohort', async () => {

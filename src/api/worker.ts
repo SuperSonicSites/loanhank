@@ -10,7 +10,7 @@ import type {
 import { Hono } from 'hono';
 import {
   benchmarksCurrentOn, costAgainstBenchmark, decideVerdict, decodeLedger, formatCurrency, formatRate,
-  cohortBands, cohortLadder, matchBenchmark, PEER_POLICY_VERSION, promoPriceRate,
+  cohortBands, cohortLadder, matchBenchmark, PEER_POLICY_VERSION, promoPriceRate, quarterWindow,
   quoteWithinSanityBounds, VERDICT_BUFFER_VERSION,
   type BenchmarkRow, type DealLedger, type LedgerFee,
 } from '../finance/index.js';
@@ -791,7 +791,7 @@ export async function sendDayThirty(env: Env, today: string, transport?: MailTra
   if (sendable === null) return { sent: 0, skipped: 0 };
 
   const due = await env.DB.prepare(
-    `SELECT e.id, e.email, d.country, d.currency, d.quarter, d.equip_category,
+    `SELECT e.id, e.email, e.decode_id, d.country, d.currency, d.quarter, d.equip_category,
             d.new_or_used, d.term_band, d.price_band, d.real_rate_all_in_bps
        FROM emails e
        JOIN decodes d ON d.id = e.decode_id
@@ -835,7 +835,9 @@ export async function sendDayThirty(env: Env, today: string, transport?: MailTra
         termBand: (row.term_band as string | null) ?? null,
         priceBand: (row.price_band as string | null) ?? null,
       },
-      [String(row.quarter)],
+      // The full four-quarter window, so the ladder's widening rungs are
+      // reachable. A one-element window here once made them dead code.
+      quarterWindow(String(row.quarter)),
     );
 
     if (cohort === null) {
@@ -868,6 +870,18 @@ export async function sendDayThirty(env: Env, today: string, transport?: MailTra
     if (response.ok) {
       await env.DB.prepare('UPDATE emails SET day30_sent_at = ? WHERE id = ?')
         .bind(new Date().toISOString(), row.id).run();
+      // Freeze what he was shown on his decode row (spec.md 9.3). The pile
+      // keeps growing under the cohort, so without this the exact figures a
+      // farmer was emailed could never be reproduced or defended later.
+      // Written only on a successful send: the rule is about what was SHOWN.
+      await env.DB.prepare(
+        `UPDATE decodes SET peer_cohort_key = ?, peer_n = ?, peer_median_bps = ?,
+                peer_p25_bps = ?, peer_p75_bps = ?, peer_computed_at = ?, peer_policy_version = ?
+          WHERE id = ?`,
+      ).bind(
+        cohort.key, cohort.n, cohort.medianBps, cohort.p25Bps, cohort.p75Bps,
+        new Date().toISOString(), cohort.policyVersion, row.decode_id,
+      ).run();
       await recordEvent(env, 'day30_sent', null, { cohort: cohort.key, n: cohort.n });
       sent += 1;
     } else {
