@@ -39,7 +39,7 @@ import { fbcFromBody, fbcFromUrl, recordCapiOutcome, sendCapi, type CapiEventNam
 
 // Must match the crons in wrangler.jsonc. An unrecognized cron logs and does
 // nothing rather than falling into the wrong branch.
-const PUBLIC_ORIGIN = 'https://loanhank-decoder.supersonicworkers.workers.dev';
+const PUBLIC_ORIGIN = 'https://www.loanhank.com';
 
 const REAPER_CRON = '*/15 * * * *';
 const BACKUP_CRON = '0 7 * * *';
@@ -553,11 +553,34 @@ export async function sendDayFour(env: Env, today: string, transport?: MailTrans
       LIMIT 200`,
   ).bind(today, today).all<Record<string, string | number | null>>();
 
+  // One question, answered once per sweep: has a newer tier-1 card landed?
+  // The sentence below used to assert "has not been reissued" without ever
+  // checking, which made it a false factual statement any send after a new
+  // card. Now it is checked, and a decode that matched no card says nothing
+  // about a card at all.
+  const latest = await env.DB.prepare(
+    'SELECT MAX(as_of_date) AS latest FROM benchmarks WHERE tier = 1',
+  ).first<{ latest: string | null }>();
+
   let sent = 0;
   for (const row of due.results) {
     const rate = row.real_rate_all_in_bps === null
       ? 'the rate on your ticket'
       : formatRate(Number(row.real_rate_all_in_bps));
+    const cardLines = row.benchmark_at_ts === null
+      ? []
+      : latest?.latest != null && String(latest.latest) > String(row.benchmark_at_ts)
+        ? [
+          'A newer published card has come out since your teardown, so the',
+          'comparison on it is out of date. Worth running the quote again before',
+          'you decide.',
+          '',
+        ]
+        : [
+          'The published card we compared against has not been reissued since your',
+          'teardown, so nothing about the comparison has changed.',
+          '',
+        ];
     const lines = [
       'Four days ago you ran a quote through us and it came out at ' + rate + '.',
       '',
@@ -567,9 +590,7 @@ export async function sendDayFour(env: Env, today: string, transport?: MailTrans
         ? 'If you are still deciding, the teardown we sent has the whole receipt on it.'
         : `The paper says the quote is good until ${String(row.quote_expiry_date)}.`,
       '',
-      'The published card we compared against has not been reissued since your',
-      'teardown, so nothing about the comparison has changed.',
-      '',
+      ...cardLines,
       'P.S. If it checked out, go sign it. We said so for a reason.',
     ];
 
@@ -661,7 +682,6 @@ export async function sendDayThirty(env: Env, today: string, transport?: MailTra
       continue;
     }
 
-    const unsubscribe = `${PUBLIC_ORIGIN}/unsubscribe/${String(row.id)}`;
     const yours = row.real_rate_all_in_bps === null
       ? null
       : formatRate(Number(row.real_rate_all_in_bps));
@@ -1473,8 +1493,6 @@ app.post('/email', async (c) => {
     FOLLOWUP_TEXT_VERSION,
   ).run();
 
-  const origin = new URL(c.req.url).origin;
-  const unsubscribe = `${origin}/unsubscribe/${emailId}`;
   const sent = await sendTeardown(c.env, {
     emailId, to: parsed.data.email, row, origin: new URL(c.req.url).origin,
   });

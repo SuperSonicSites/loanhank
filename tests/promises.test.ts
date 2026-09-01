@@ -435,20 +435,25 @@ describe('the teardown send posts to the provider', () => {
 // cohort only when there actually is a cohort.
 // ---------------------------------------------------------------------------
 
-async function sequenceFixture(rows: Array<Record<string, unknown>>, pile = 0) {
+async function sequenceFixture(
+  rows: Array<Record<string, unknown>>,
+  pile = 0,
+  benchmarkAtTs: string | null = null,
+) {
   const { db, d1 } = await migratedDatabase();
   // The verdict needs a benchmark to point at. The stamp-law CHECK refused an
   // earlier version of this fixture that claimed checks_out with a null
   // verdict_ref_id, which is the constraint doing exactly its job on the person
   // who wrote it.
-  db.exec(
+  db.prepare(
     `INSERT INTO decodes (id, ts, quarter, country, currency, reconciled, synthetic,
                           out_of_bounds, real_rate_all_in_bps, verdict, verdict_ref_id,
-                          term_band, price_band, equip_category, new_or_used, quote_expiry_date)
+                          term_band, price_band, equip_category, new_or_used, quote_expiry_date,
+                          benchmark_at_ts)
      VALUES ('d1', '2026-07-01T00:00:00Z', '2026Q3', 'US', 'USD', 1, 0, 0, 294,
              'checks_out', 'agdirect-2026-08-01-25k-5y-fixed',
-             '49-72', '25k-100k', 'tractor', 'used', '2026-09-30')`,
-  );
+             '49-72', '25k-100k', 'tractor', 'used', '2026-09-30', ?)`,
+  ).run(benchmarkAtTs);
   for (let index = 0; index < pile; index += 1) {
     db.prepare(
       `INSERT INTO decodes (id, ts, quarter, country, currency, reconciled, synthetic,
@@ -531,6 +536,56 @@ describe('day four goes out once and only once', () => {
     const fixture = await sequenceFixture([{ id: 'ancient', createdAt: '2025-08-01T00:00:00Z' }]);
     const { result } = await fixture.run(sendDayFour, '2026-08-05');
     expect((result as { sent: number }).sent).toBe(0);
+  });
+});
+
+describe('day four tells the truth about the card', () => {
+  // The email used to assert "has not been reissued" without ever checking.
+  // AgDirect reissues monthly, so any send after a new card landed was a
+  // false factual statement about the one number this brand exists to get
+  // right, in a commercial email nudging the farmer to sign.
+  it('keeps the unchanged sentence while the card stands', async () => {
+    // The decode compared against the newest tier-1 card there is.
+    const fixture = await sequenceFixture(
+      [{ id: 'due', createdAt: '2026-08-01T00:00:00Z' }], 0, '2026-08-01',
+    );
+    const { posted } = await fixture.run(sendDayFour, '2026-08-05');
+    expect(String(posted[0]?.text)).toContain('has not been reissued');
+  });
+
+  it('says a newer card has come out when one has', async () => {
+    // The decode compared against a July card; the seeded table's newest is
+    // August. The old sentence would have been a lie.
+    const fixture = await sequenceFixture(
+      [{ id: 'due', createdAt: '2026-08-01T00:00:00Z' }], 0, '2026-07-01',
+    );
+    const { posted } = await fixture.run(sendDayFour, '2026-08-05');
+    const body = String(posted[0]?.text);
+    expect(body).toContain('A newer published card has come out');
+    expect(body).not.toContain('has not been reissued');
+  });
+
+  it('drops the card sentence when no benchmark was matched', async () => {
+    const fixture = await sequenceFixture([{ id: 'due', createdAt: '2026-08-01T00:00:00Z' }]);
+    const { posted } = await fixture.run(sendDayFour, '2026-08-05');
+    const body = String(posted[0]?.text);
+    expect(body).not.toContain('has not been reissued');
+    expect(body).not.toContain('A newer published card');
+    expect(body).toContain('Did you take it?');
+  });
+});
+
+describe('cron email links carry the canonical host', () => {
+  it('points every unsubscribe link at www.loanhank.com', async () => {
+    // The cutover to the custom domain happened 2026-08-18; a commercial
+    // email carrying links to a retired workers.dev host is a trust smell at
+    // best and a dead unsubscribe link at worst, which is a CAN-SPAM failure.
+    // One functional pin covers all the cron sends: they share the constant.
+    const fixture = await sequenceFixture([{ id: 'due', createdAt: '2026-08-01T00:00:00Z' }]);
+    const { posted } = await fixture.run(sendDayFour, '2026-08-05');
+    const headers = posted[0]?.headers as Record<string, string>;
+    expect(headers['List-Unsubscribe']).toContain('https://www.loanhank.com/unsubscribe/');
+    expect(String(posted[0]?.text)).toContain('https://www.loanhank.com/unsubscribe/');
   });
 });
 
