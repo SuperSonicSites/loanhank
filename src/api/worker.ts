@@ -295,11 +295,29 @@ const CONFIRMABLE_FIELDS = new Set([
   'deliverySetup', 'financeOnlyFee', 'quoteDate', 'quoteExpiryDate',
 ]);
 
+// The value shapes (spec.md 9.5, closed by value as well as by key). The
+// allowlist vouches for the field NAME; these vouch for what a value under it
+// may look like. Letters have no shape here, so a letterhead fragment or a
+// salesperson's name misread into a date box has no path into the pile. The
+// date shape is strict ISO or empty on purpose: a looser digits-and-dashes
+// shape would admit an SSN.
+const NUMERIC_VALUE = /^[0-9.,$% ]{0,40}$/;
+const DATE_VALUE = /^(\d{4}-\d{2}-\d{2})?$/;
+const FREQUENCY_VALUES = new Set(['', 'monthly', 'quarterly', 'semiannual', 'annual']);
+
+function valueShapeHolds(field: string, value: string): boolean {
+  if (field === 'quoteDate' || field === 'quoteExpiryDate') return DATE_VALUE.test(value);
+  if (field === 'paymentFrequency') return FREQUENCY_VALUES.has(value);
+  return NUMERIC_VALUE.test(value);
+}
+
 /**
  * What the model read against what the farmer confirmed, per field.
  *
  * Unknown keys are dropped BEFORE anything is computed or stored, so a posted
- * key never reaches the diff, the event, or the database.
+ * key never reaches the diff, the event, or the database. A value that fails
+ * its field's shape is blanked: the field name still feeds the flywheel count,
+ * and the value itself goes nowhere.
  */
 function extractionDiff(
   rawSnapshot: string,
@@ -325,7 +343,13 @@ function extractionDiff(
     const same = readValue.trim() === confirmedValue.trim()
       || (readValue !== '' && confirmedValue !== ''
         && Number(readValue.replace(/,/g, '')) === Number(confirmedValue.replace(/,/g, '')));
-    if (!same) diff.push({ field, read: readValue, confirmed: confirmedValue.slice(0, 40) });
+    if (!same) {
+      const shaped = valueShapeHolds(field, readValue.trim())
+        && valueShapeHolds(field, confirmedValue.slice(0, 40).trim());
+      diff.push(shaped
+        ? { field, read: readValue, confirmed: confirmedValue.slice(0, 40) }
+        : { field, read: '', confirmed: '' });
+    }
   }
   return diff;
 }

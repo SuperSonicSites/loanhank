@@ -116,6 +116,52 @@ describe('a hostile confirm screen cannot smuggle anything into the pile', () =>
     }
   });
 
+  it('drops hostile values hiding under allowlisted keys', async () => {
+    // The value-shaped hole: the allowlist vouched for the KEY, and any
+    // 40-character string rode in as the VALUE. Over thousands of decodes,
+    // date-field misreads of cluttered paper write letterhead fragments into
+    // the permanent pile, which is the exact liability spec 9.5 exists to
+    // prevent. Values now have shapes: money looks like money, dates like
+    // dates, frequency is the enum, and a value that fails its shape is
+    // blanked while the field name keeps feeding the flywheel.
+    const { db, post, everythingStored } = await harness();
+    const hostile = JSON.stringify({
+      quoteDate: 'Valley Ridge Equipment',
+      payment: 'D. Weller 555-0100',
+      paymentFrequency: 'dealer special',
+    });
+    const response = await post('/decode', { ...LEDGER, extracted: hostile });
+    expect(response.status).toBe(200);
+
+    const stored = everythingStored();
+    for (const secret of FORBIDDEN) {
+      expect(stored, `"${secret}" reached the database`).not.toContain(secret);
+    }
+
+    const row = db.prepare("SELECT meta_json FROM events WHERE event = 'extraction_diff'")
+      .get() as { meta_json: string };
+    const meta = JSON.parse(row.meta_json) as {
+      corrected_fields: string[];
+      corrections: Array<{ field: string; read: string; confirmed: string }>;
+    };
+    // The count survives; the values do not.
+    expect(meta.corrected_fields).toContain('quoteDate');
+    for (const entry of meta.corrections) {
+      if (['quoteDate', 'payment', 'paymentFrequency'].includes(entry.field)) {
+        expect(entry.read, `${entry.field} kept a mis-shaped read value`).toBe('');
+        expect(entry.confirmed, `${entry.field} kept a mis-shaped confirmed value`).toBe('');
+      }
+    }
+  });
+
+  it('blanks an identifier that would pass as a date', async () => {
+    // An SSN is digits and dashes, which a loose date shape would admit. The
+    // date shape is strict ISO or empty, so it cannot.
+    const { everythingStored, post } = await harness();
+    await post('/decode', { ...LEDGER, extracted: JSON.stringify({ quoteDate: '123-45-6789' }) });
+    expect(everythingStored()).not.toContain('123-45-6789');
+  });
+
   it('still records a real correction, so the allowlist did not just break it', async () => {
     // A closed list that drops everything is not a fix, it is a broken feature
     // that happens to be safe.
