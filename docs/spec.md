@@ -134,6 +134,8 @@ Enforced by `tests/firewall.test.ts`, both directions and the independence prope
 
 **Snapshot rule:** every benchmark row carries `source_url`, `as_of_date`, and an archived copy (R2, bucket `loanhank-snapshots`, no expiry rule). Any past verdict must be reproducible after the source page changes. Update cadence: on source change, minimum quarterly check. **AgDirect republishes its card monthly** ("Rates effective August 01-31 2026"), so the tier-1 table is checked monthly, not quarterly, or verdicts run against a card two months stale.
 
+**Staleness gate:** every tier-1 row also carries `valid_through`, the publisher's own printed end of validity. When the newest tier-1 card is past its `valid_through`, the decode abstains with `benchmark_lapsed`: a lapsed card is not a benchmark, and a verdict against a rate nobody is currently offering is a confidently wrong verdict. The gate reads the printed date, never fetch time. Null `valid_through` means the source printed no end date, and the monthly check is the only guard there. The morning funnel query prints `days_until_benchmark_expiry` so the lapse is visible before it happens, not after (added 2026-09-01, the day the August card lapsed with nothing watching).
+
 **Single-source fragility, on the record:** AgDirect can reformat, pull, or object to being the reference. It is also Farm Credit-affiliated and a plausible future lead buyer — awkward or synergistic; decide knowingly before scale. Expansion path: add other published, date-stamped equipment programs under the same matching transparency; later, pile cohort medians (n ≥ 20) complement but do not replace tier 1 for verdicts.
 
 **Canada has no tier-1 supply, on the record (searched 2026-08-19):** there is no

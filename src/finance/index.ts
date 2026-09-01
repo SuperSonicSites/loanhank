@@ -1340,6 +1340,8 @@ export interface BenchmarkRow {
   rateKind: 'fixed' | 'variable';
   tier: number;
   country: 'US' | 'CA';
+  /** The publisher's own printed end of validity. Null means none printed. */
+  validThrough: string | null;
 }
 
 export interface BenchmarkCriteria {
@@ -1347,6 +1349,24 @@ export interface BenchmarkCriteria {
   termMonths: number;
   rateKind: 'fixed' | 'variable';
   country: 'US' | 'CA';
+}
+
+/**
+ * The staleness gate (spec.md section 4). A lapsed card is not a benchmark:
+ * a verdict against a rate nobody is currently offering is a confidently
+ * wrong verdict. The gate reads the printed date only; the caller supplies
+ * today because the engine never reads a clock. `lapsed` means tier-1 rows
+ * existed but none are current, which abstains with its own named reason
+ * rather than masquerading as no_matched_benchmark.
+ */
+export function benchmarksCurrentOn(
+  rows: BenchmarkRow[],
+  today: string,
+): { current: BenchmarkRow[]; lapsed: boolean } {
+  const current = rows.filter((row) => row.validThrough === null || row.validThrough >= today);
+  const hadTierOne = rows.some((row) => row.tier === 1);
+  const lapsed = hadTierOne && !current.some((row) => row.tier === 1);
+  return { current, lapsed };
 }
 
 /**
@@ -1525,6 +1545,7 @@ export type NoVerdictReason =
   | 'no_rate'
   | 'unreconciled_ledger'
   | 'unknown_fee'
+  | 'benchmark_lapsed'
   | 'no_matched_benchmark';
 
 export interface VerdictResult {
@@ -1541,6 +1562,8 @@ export function decideVerdict(input: {
   reconciled: boolean;
   benchmark: BenchmarkRow | null;
   hasUnknownFee: boolean;
+  /** True when tier-1 cards exist but every one is past its printed validity. */
+  benchmarkLapsed?: boolean;
 }): VerdictResult {
   const base = {
     bufferBps: VERDICT_BUFFER_BPS,
@@ -1554,6 +1577,9 @@ export function decideVerdict(input: {
   if (input.realRateAllInBps === null) return abstain('no_rate');
   if (input.hasUnknownFee) return abstain('unknown_fee');
   if (!input.reconciled) return abstain('unreconciled_ledger');
+  // Before no_matched_benchmark: a lapsed card must not be reported as "no
+  // card matches your size and term", which would be the wrong reason.
+  if (input.benchmarkLapsed) return abstain('benchmark_lapsed');
   if (input.benchmark === null) return abstain('no_matched_benchmark');
 
   return {

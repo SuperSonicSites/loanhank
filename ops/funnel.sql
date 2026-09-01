@@ -37,4 +37,9 @@ SELECT
      FROM events WHERE event = 'backup_completed')       AS days_since_backup,
   (SELECT json_extract(meta_json, '$.rows') FROM events
      WHERE event = 'backup_completed'
-     ORDER BY ts DESC LIMIT 1)                           AS last_backup_rows;
+     ORDER BY ts DESC LIMIT 1)                           AS last_backup_rows,
+  /* The card clock. Zero or negative means the tier-1 card has lapsed and
+     every decode is abstaining with benchmark_lapsed until the next card is
+     entered. NULL means no dated card. */
+  (SELECT CAST(julianday(MAX(valid_through)) - julianday('now') AS INT)
+     FROM benchmarks WHERE tier = 1)                     AS days_until_benchmark_expiry;

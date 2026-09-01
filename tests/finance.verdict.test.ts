@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   VERDICT_BUFFER_BPS,
+  benchmarksCurrentOn,
   calculatePaymentCents,
   costAgainstBenchmark,
   decideVerdict,
@@ -28,6 +29,7 @@ function row(partial: Partial<BenchmarkRow> & { id: string }): BenchmarkRow {
     rateKind: 'fixed',
     tier: 1,
     country: 'US',
+    validThrough: '2026-08-31',
     ...partial,
   };
 }
@@ -94,6 +96,46 @@ describe('matchBenchmark', () => {
     // 96 months against a card that stops at 84. spec.md section 3: no matched
     // reference means rate yes, verdict no.
     expect(matchBenchmark(CARD, { amountCents: 7_850_000, termMonths: 96, rateKind: 'fixed', country: 'US' })).toBeNull();
+  });
+});
+
+describe('benchmarksCurrentOn', () => {
+  // The seeded card prints its own end of validity. A verdict against a rate
+  // nobody is currently offering is a confidently wrong verdict, so past
+  // valid_through the decode abstains with its own named reason.
+  it('lapses the whole card the day after the printed validity ends', () => {
+    const { current, lapsed } = benchmarksCurrentOn(CARD, '2026-09-01');
+    expect(current).toEqual([]);
+    expect(lapsed).toBe(true);
+  });
+
+  it('still stamps inside the printed validity', () => {
+    const { current, lapsed } = benchmarksCurrentOn(CARD, '2026-08-15');
+    expect(lapsed).toBe(false);
+    expect(current).toHaveLength(CARD.length);
+    const benchmark = matchBenchmark(current, { amountCents: 7_850_000, termMonths: 60, rateKind: 'fixed', country: 'US' });
+    const verdict = decideVerdict({
+      realRateAllInBps: 294, reconciled: true, benchmark, hasUnknownFee: false, benchmarkLapsed: lapsed,
+    });
+    expect(verdict.verdict).toBe('checks_out');
+  });
+
+  it('keeps an undated card current forever', () => {
+    const undated = CARD.map((entry) => ({ ...entry, validThrough: null }));
+    const { current, lapsed } = benchmarksCurrentOn(undated, '2027-01-01');
+    expect(lapsed).toBe(false);
+    expect(current).toHaveLength(CARD.length);
+  });
+
+  it('never reports a lapse as a missing card', () => {
+    // benchmark_lapsed must outrank no_matched_benchmark, or a lapsed card
+    // reads as "nothing matches your size and term", which would be the
+    // wrong reason confidently stated.
+    const verdict = decideVerdict({
+      realRateAllInBps: 294, reconciled: true, benchmark: null, hasUnknownFee: false, benchmarkLapsed: true,
+    });
+    expect(verdict.verdict).toBe('none');
+    expect(verdict.noVerdictReason).toBe('benchmark_lapsed');
   });
 });
 

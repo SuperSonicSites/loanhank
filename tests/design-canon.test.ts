@@ -39,6 +39,7 @@ const CARD_ROW = {
   rateKind: 'fixed' as const,
   tier: 1,
   country: 'US' as const,
+  validThrough: '2026-08-31',
 };
 const CARD: BenchmarkRow[] = [
   { ...CARD_ROW, id: '2to3y', termBand: '2-3 years', termMinMonths: 24, termMaxMonths: 36, rateBps: 725 },

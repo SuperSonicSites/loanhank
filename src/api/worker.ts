@@ -9,7 +9,7 @@ import type {
 } from '@cloudflare/workers-types';
 import { Hono } from 'hono';
 import {
-  costAgainstBenchmark, decideVerdict, decodeLedger, formatCurrency, formatRate,
+  benchmarksCurrentOn, costAgainstBenchmark, decideVerdict, decodeLedger, formatCurrency, formatRate,
   cohortBands, cohortLadder, matchBenchmark, PEER_POLICY_VERSION, promoPriceRate,
   quoteWithinSanityBounds, VERDICT_BUFFER_VERSION,
   type BenchmarkRow, type DealLedger, type LedgerFee,
@@ -1198,12 +1198,12 @@ async function decodeFullLedger(c: {
   // Tier-1 rows only, most recent card first. The engine picks the band.
   const rows = await c.env.DB.prepare(
     `SELECT id, source, source_url, as_of_date, amount_band, amount_min_cents, amount_max_cents,
-            term_band, term_min_months, term_max_months, rate_bps, rate_kind, tier, country
+            term_band, term_min_months, term_max_months, rate_bps, rate_kind, tier, country, valid_through
        FROM benchmarks
       WHERE tier = 1 AND as_of_date = (SELECT MAX(as_of_date) FROM benchmarks WHERE tier = 1)`,
   ).all<Record<string, string | number | null>>();
 
-  const benchmarks: BenchmarkRow[] = rows.results.map((row) => ({
+  const allBenchmarks: BenchmarkRow[] = rows.results.map((row) => ({
     id: String(row.id),
     source: String(row.source),
     sourceUrl: String(row.source_url),
@@ -1218,7 +1218,16 @@ async function decodeFullLedger(c: {
     rateKind: String(row.rate_kind) === 'variable' ? 'variable' : 'fixed',
     tier: Number(row.tier),
     country: String(row.country) === 'CA' ? 'CA' : 'US',
+    validThrough: row.valid_through === null ? null : String(row.valid_through),
   }));
+
+  // The staleness gate (spec.md section 4): a card past its own printed
+  // validity is not a benchmark, and the decode abstains rather than stamping
+  // against a rate nobody is offering.
+  const { current: benchmarks, lapsed: benchmarkLapsed } = benchmarksCurrentOn(
+    allBenchmarks,
+    new Date().toISOString().slice(0, 10),
+  );
 
   const termMonths = Math.round(form.paymentCount * (12 / PERIODS_PER_YEAR[form.paymentFrequency]));
   const country = form.country;
@@ -1246,6 +1255,7 @@ async function decodeFullLedger(c: {
     realRateAllInBps: decoded.realRateAllInBps,
     reconciled: decoded.reconciliation.reconciled,
     benchmark,
+    benchmarkLapsed,
     hasUnknownFee: decoded.totals.hasUnknownFee,
   });
 
@@ -1375,6 +1385,12 @@ function missingForVerdict(reason: string | null, differenceCents: number, count
     return [
       `The quoted total and the scheduled payments differ by ${formatCurrency(differenceCents)} a payment. `
       + 'A trade, down payment, tax, fee, balloon, or add-on may be missing. Confirm it before we rate this deal.',
+    ];
+  }
+  if (reason === 'benchmark_lapsed') {
+    return [
+      'The published card we compare against lapsed and the current one is not entered yet. '
+      + 'Your math is above; the stamp waits for a card that is actually on offer.',
     ];
   }
   if (reason === 'no_matched_benchmark') {
