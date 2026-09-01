@@ -55,7 +55,7 @@ export const regularPaymentFrequencySchema = z.enum([
   'quarterly',
   'semiannual',
   'annual',
-]);
+], { message: 'Pick how often you pay.' });
 
 export const provenanceSchema = z.enum([
   'KNOWN',
@@ -636,6 +636,16 @@ export function confirmableField(
     state: readable ? 'read' : 'unreadable',
     value: readable ? format(source.value as never) : '',
   };
+}
+
+/**
+ * The same floor, applied to the frequency select. Frequency multiplies the
+ * annualized rate and reconciliation cannot catch a wrong one, so a read the
+ * model is not sure of must arrive as a choice, never as a preselected guess.
+ * Empty means the confirm screen renders a required "Pick how often".
+ */
+export function confirmFrequency(source: { value: string | null; confidence: number }): string {
+  return source.value !== null && source.confidence >= EXTRACTION_CONFIDENCE_FLOOR ? source.value : '';
 }
 
 // ---------------------------------------------------------------------------

@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 
 const NEWLINE = String.fromCharCode(10);
-import { parseMoneyToCents, quickPathFormSchema } from '../src/shared/schema.js';
+import { confirmFrequency, parseMoneyToCents, quickPathFormSchema } from '../src/shared/schema.js';
 
 describe('parseMoneyToCents', () => {
   it('reads the shapes a farmer actually types', () => {
@@ -77,6 +77,26 @@ describe('quickPathFormSchema', () => {
       payment: '1408.33', paymentFrequency: 'weekly',
     });
     expect(result.success).toBe(false);
+  });
+
+  it('rejects a missing frequency with a plain ask instead of assuming monthly', () => {
+    // A silently assumed frequency is a rate multiplier guessed on the
+    // farmer's behalf, the fatal bug class in a quieter coat.
+    const result = quickPathFormSchema.safeParse({
+      quotedPrice: '84500', cashDiscount: '', paymentCount: '60',
+      payment: '1408.33', paymentFrequency: '', balloon: '',
+    });
+    expect(result.success).toBe(false);
+    expect(result.success ? '' : result.error.issues.map((issue) => issue.message).join(' '))
+      .toContain('Pick how often you pay.');
+  });
+});
+
+describe('confirmFrequency', () => {
+  it('passes a confident read through and floors everything else', () => {
+    expect(confirmFrequency({ value: 'annual', confidence: 0.9 })).toBe('annual');
+    expect(confirmFrequency({ value: 'annual', confidence: 0.5 })).toBe('');
+    expect(confirmFrequency({ value: null, confidence: 1 })).toBe('');
   });
 });
 

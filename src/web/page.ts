@@ -964,9 +964,10 @@ ${campaignFields(view.campaign ?? {})}${fbcField(view.fbc)}
 ${view.rows.map(field).join('\n')}
     <div class="field">
       <label for="paymentFrequency">How often you pay</label>
-      <p class="flag-read">Check this one carefully</p>
-      <select id="paymentFrequency" name="paymentFrequency">
-        ${frequencyOptions(view.frequency)}
+      <p class="${view.frequency === '' ? 'flag-unreadable' : 'flag-read'}">${
+      view.frequency === '' ? 'Could not read it, pick it' : 'Check this one carefully'}</p>
+      <select id="paymentFrequency" name="paymentFrequency"${view.frequency === '' ? ' required' : ''}>
+        ${view.frequency === '' ? '<option value="" selected>Pick how often</option>' : ''}${frequencyOptions(view.frequency)}
       </select>
     </div>
     <div class="field">

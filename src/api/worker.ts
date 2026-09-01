@@ -16,7 +16,7 @@ import {
 } from '../finance/index.js';
 import { hashAccessKey } from './security.js';
 import {
-  centsToInput, confirmableField, emailGateSchema, EQUIPMENT_BRANDS, ledgerFormSchema,
+  centsToInput, confirmableField, confirmFrequency, emailGateSchema, EQUIPMENT_BRANDS, ledgerFormSchema,
   normalizeBrand, quickPathFormSchema,
   type ConfirmableField, type QuoteExtraction,
 } from '../shared/schema.js';
@@ -892,7 +892,9 @@ app.post('/decode', async (c) => {
     cashDiscount: String(body.cashDiscount ?? ''),
     paymentCount: String(body.paymentCount ?? ''),
     payment: String(body.payment ?? ''),
-    paymentFrequency: String(body.paymentFrequency ?? 'monthly'),
+    // A missing frequency is rejected with a plain ask, never assumed monthly:
+    // an assumed frequency is a rate multiplier guessed on the farmer's behalf.
+    paymentFrequency: String(body.paymentFrequency ?? ''),
     balloon: String(body.balloon ?? ''),
   };
 
@@ -1092,7 +1094,7 @@ app.post('/extract', async (c) => {
 
   return c.html(renderConfirm({
     rows: confirmRows(extraction),
-    frequency: extraction.payment_frequency.value ?? 'monthly',
+    frequency: confirmFrequency(extraction.payment_frequency),
     warnings: extraction.warnings.map((code) => WARNING_COPY[code] ?? code),
     fbc,
     photoCount: files.length,
@@ -1115,7 +1117,7 @@ async function decodeFullLedger(c: {
     quotedPrice: String(body.quotedPrice ?? ''),
     cashDiscount: String(body.cashDiscount ?? ''),
     payment: String(body.payment ?? ''),
-    paymentFrequency: String(body.paymentFrequency ?? 'monthly'),
+    paymentFrequency: String(body.paymentFrequency ?? ''),
     paymentCount: String(body.paymentCount ?? ''),
     statedRate: String(body.statedRate ?? ''),
     downPayment: String(body.downPayment ?? ''),

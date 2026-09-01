@@ -18,7 +18,7 @@ import {
   renderWhosBehindThis,
   NOTES,
 } from '../src/web/pages.js';
-import { renderForm } from '../src/web/page.js';
+import { renderConfirm, renderForm } from '../src/web/page.js';
 
 /** The configured footer form, exactly as wrangler.jsonc carries it. */
 const POSTAL = 'LoanHank · 109b - 1917 Peninsula Rd, Ucluelet, BC V0R 3A0, Canada';
@@ -92,6 +92,27 @@ describe('Hank voice holds on every page', () => {
     for (const href of ['/privacy', '/terms', '/how-we-figure-it', '/contact']) {
       expect(html).toContain(`href="${href}"`);
     }
+  });
+});
+
+describe('the confirm screen refuses to guess the frequency', () => {
+  // Frequency multiplies the annualized rate and reconciliation cannot catch
+  // a wrong one, so it obeys the same floor as every money box: a read the
+  // model is not sure of arrives as a choice the farmer must make, never as
+  // a preselected guess he has to notice.
+  const view = (frequency: string) => renderConfirm({ rows: [], frequency, warnings: [] });
+
+  it('refuses to preseed a frequency the model did not read', () => {
+    const html = view('');
+    expect(html).toContain('<option value="" selected>Pick how often</option>');
+    expect(html).toContain('Could not read it, pick it');
+    expect(html).toMatch(/<select id="paymentFrequency" name="paymentFrequency" required>/);
+  });
+
+  it('preseeds a frequency the model read confidently', () => {
+    const html = view('annual');
+    expect(html).toContain('<option value="annual" selected>');
+    expect(html).not.toContain('Pick how often');
   });
 });
 
