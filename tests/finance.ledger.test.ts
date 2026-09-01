@@ -17,6 +17,7 @@ const BASE: DealLedger = {
   paymentFrequency: 'monthly',
   statedRateBps: 0,
   balloonCents: 0,
+  country: 'US',
   fees: [],
 };
 

@@ -34,6 +34,7 @@ const GOLDEN_CHECKS_OUT: DealLedger = {
   paymentFrequency: 'monthly',
   statedRateBps: 0,
   balloonCents: 0,
+  country: 'US',
   fees: [],
 };
 
@@ -51,6 +52,7 @@ const GOLDEN_LOOK_CLOSER: DealLedger = {
   paymentFrequency: 'monthly',
   statedRateBps: 990,
   balloonCents: 0,
+  country: 'US',
   fees: [],
 };
 

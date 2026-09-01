@@ -1401,6 +1401,8 @@ export interface LedgerReconciliation {
   reconciled: boolean;
   expectedPaymentCents: number;
   differenceCents: number;
+  /** Which compounding reading the dealer's own arithmetic satisfied. */
+  convention: InterestRateConvention;
 }
 
 /**
@@ -1409,6 +1411,11 @@ export interface LedgerReconciliation {
  * When it does not, something is missing from the ledger: a trade, a down
  * payment, a tax, a fee, an add-on. We never name it a junk fee. We say the
  * numbers do not meet and ask the farmer to confirm what is missing.
+ *
+ * A Canadian stated rate can lawfully mean semiannual compounding (Interest
+ * Act s.6) and the paper never says which, so a Canadian ledger tries both
+ * readings in a fixed order and reports the first that reconciles. Asking the
+ * farmer would be asking him something his paper cannot answer.
  */
 export function reconcileLedger(input: {
   amountFinancedCents: number;
@@ -1417,21 +1424,35 @@ export function reconcileLedger(input: {
   paymentCount: number;
   paymentFrequency: RegularFrequency;
   balloonCents?: number;
+  country?: 'US' | 'CA';
 }): LedgerReconciliation {
-  const expectedPaymentCents = calculatePaymentCents(
-    input.amountFinancedCents,
-    input.statedRateBps,
-    input.paymentFrequency,
-    input.paymentCount,
-    'nominal_payment_frequency',
-    input.balloonCents ?? 0,
-  );
-  const differenceCents = Math.abs(input.paymentAmountCents - expectedPaymentCents);
-  return {
-    expectedPaymentCents,
-    differenceCents,
-    reconciled: differenceCents <= RECONCILE_TOLERANCE_CENTS,
-  };
+  const candidates: InterestRateConvention[] = input.country === 'CA'
+    ? ['nominal_payment_frequency', 'nominal_semiannual']
+    : ['nominal_payment_frequency'];
+
+  let best: LedgerReconciliation | null = null;
+  for (const convention of candidates) {
+    const expectedPaymentCents = calculatePaymentCents(
+      input.amountFinancedCents,
+      input.statedRateBps,
+      input.paymentFrequency,
+      input.paymentCount,
+      convention,
+      input.balloonCents ?? 0,
+    );
+    const differenceCents = Math.abs(input.paymentAmountCents - expectedPaymentCents);
+    const candidate: LedgerReconciliation = {
+      expectedPaymentCents,
+      differenceCents,
+      convention,
+      reconciled: differenceCents <= RECONCILE_TOLERANCE_CENTS,
+    };
+    if (candidate.reconciled) return candidate;
+    if (best === null || candidate.differenceCents < best.differenceCents) best = candidate;
+  }
+  // Nothing reconciled; report the fairest available number so the refusal
+  // line names the smallest real gap.
+  return best as LedgerReconciliation;
 }
 
 /** One line of `fees_json` (spec.md section 2.1). */
@@ -1614,6 +1635,8 @@ export interface DealLedger {
   statedRateBps: number;
   /** One large final payment after the regular ones. Zero means none. */
   balloonCents: number;
+  /** Where the deal is, which decides which compounding readings are lawful. */
+  country: 'US' | 'CA';
   fees: LedgerFee[];
 }
 
@@ -1695,6 +1718,7 @@ export function decodeLedger(ledger: DealLedger): LedgerDecode {
     paymentCount: ledger.paymentCount,
     paymentFrequency: ledger.paymentFrequency,
     balloonCents: ledger.balloonCents,
+    country: ledger.country,
   });
 
   // The rate is the IRR of what financing keeps in your pocket at signing

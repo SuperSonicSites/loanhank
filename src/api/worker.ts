@@ -1172,6 +1172,7 @@ async function decodeFullLedger(c: {
     statedRateBps: form.statedRate,
     // The form does not carry a balloon yet; zero until the ledger form does.
     balloonCents: 0,
+    country: form.country,
     fees,
   };
 

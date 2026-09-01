@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   VERDICT_BUFFER_BPS,
+  calculatePaymentCents,
   costAgainstBenchmark,
   decideVerdict,
   matchBenchmark,
@@ -132,6 +133,55 @@ describe('reconcileLedger', () => {
       paymentFrequency: 'monthly',
     });
     expect(result.reconciled).toBe(true);
+  });
+
+  // Canada (Interest Act s.6): a stated rate can lawfully mean semiannual
+  // compounding, and the paper never says which. A Canadian ledger tries both
+  // readings and reports the one the dealer's own arithmetic satisfies.
+  // Payment hand-derived first: $76,700 at 9% compounded semiannually paid
+  // monthly is r = 1.045^(1/6) - 1 per month, $1,902.71 a payment, which is
+  // $5.97 a payment away from the nominal reading, far past tolerance.
+  it('reconciles a Canadian quote written under semiannual compounding', () => {
+    const payment = calculatePaymentCents(7_670_000, 900, 'monthly', 48, 'nominal_semiannual');
+    expect(payment).toBe(190_271);
+    const result = reconcileLedger({
+      amountFinancedCents: 7_670_000,
+      statedRateBps: 900,
+      paymentAmountCents: payment,
+      paymentCount: 48,
+      paymentFrequency: 'monthly',
+      country: 'CA',
+    });
+    expect(result.reconciled).toBe(true);
+    expect(result.convention).toBe('nominal_semiannual');
+  });
+
+  it('never applies the Canadian convention to an American quote', () => {
+    const payment = calculatePaymentCents(7_670_000, 900, 'monthly', 48, 'nominal_semiannual');
+    const result = reconcileLedger({
+      amountFinancedCents: 7_670_000,
+      statedRateBps: 900,
+      paymentAmountCents: payment,
+      paymentCount: 48,
+      paymentFrequency: 'monthly',
+      country: 'US',
+    });
+    expect(result.reconciled).toBe(false);
+  });
+
+  it('reports the nominal reading when both conventions reconcile', () => {
+    // At 0% the two readings are the same payment, so the tie must break
+    // deterministically toward the engine default.
+    const result = reconcileLedger({
+      amountFinancedCents: 8_450_000,
+      statedRateBps: 0,
+      paymentAmountCents: 140_833,
+      paymentCount: 60,
+      paymentFrequency: 'monthly',
+      country: 'CA',
+    });
+    expect(result.reconciled).toBe(true);
+    expect(result.convention).toBe('nominal_payment_frequency');
   });
 });
 
