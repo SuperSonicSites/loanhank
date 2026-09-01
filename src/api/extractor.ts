@@ -120,6 +120,42 @@ export interface QuoteDocumentExtractor {
   extractQuote(pages: QuotePage[]): Promise<QuoteExtraction>;
 }
 
+export type ExtractFailureKind = 'auth' | 'timeout' | 'provider' | 'unparseable';
+
+/**
+ * What actually went wrong, so the route can tell the farmer the truth. An
+ * outage, a dead key, and a genuinely unreadable page are different failures:
+ * two of them are ours, and blaming his photo for our provider being down
+ * burns his retries on a camera that cannot succeed.
+ */
+export class ExtractionFailedError extends Error {
+  constructor(
+    public readonly kind: ExtractFailureKind,
+    public readonly attemptedFallback: boolean,
+    cause?: unknown,
+  ) {
+    super(`extraction failed: ${kind}`);
+    this.name = 'ExtractionFailedError';
+    this.cause = cause;
+  }
+}
+
+function classifyExtractionError(error: unknown): ExtractFailureKind {
+  const status = (error as { status?: unknown } | null)?.status;
+  if (typeof status === 'number') {
+    if (status === 401 || status === 403) return 'auth';
+    if (status === 408) return 'timeout';
+    return 'provider';
+  }
+  const name = error instanceof Error ? error.name : '';
+  if (name === 'AbortError' || name === 'APIUserAbortError' || name === 'TimeoutError') return 'timeout';
+  if (name === 'ZodError' || (error instanceof Error && error.message.includes('no structured result'))) {
+    return 'unparseable';
+  }
+  // No status and no known name is a connection that never completed.
+  return 'provider';
+}
+
 export class OpenAIQuoteExtractor implements QuoteDocumentExtractor {
   private readonly client: Pick<OpenAI, 'responses'>;
 
@@ -132,6 +168,22 @@ export class OpenAIQuoteExtractor implements QuoteDocumentExtractor {
   }
 
   async extractQuote(pages: QuotePage[]): Promise<QuoteExtraction> {
+    try {
+      return await this.attempt(this.config.PRIMARY_EXTRACTION_MODEL, pages);
+    } catch (error) {
+      const kind = classifyExtractionError(error);
+      // auth gets no retry: the same key fails on the fallback too.
+      // unparseable gets no retry: that is a photo problem, not a provider one.
+      if (kind !== 'timeout' && kind !== 'provider') throw new ExtractionFailedError(kind, false, error);
+      try {
+        return await this.attempt(this.config.FALLBACK_EXTRACTION_MODEL, pages);
+      } catch (second) {
+        throw new ExtractionFailedError(classifyExtractionError(second), true, second);
+      }
+    }
+  }
+
+  private async attempt(model: string, pages: QuotePage[]): Promise<QuoteExtraction> {
     // One merged call, all pages of one paper. Never one call per image: the
     // reconciliation and multi-option laws apply across the pages as one deal,
     // and a reader shown one page at a time cannot apply them.
@@ -144,7 +196,7 @@ export class OpenAIQuoteExtractor implements QuoteDocumentExtractor {
     let response;
     try {
       response = await this.client.responses.parse({
-        model: this.config.PRIMARY_EXTRACTION_MODEL,
+        model,
         // Never retained by the provider. Same privacy boundary as the
         // ancestor, and openai-privacy.test.ts guards it.
         store: false,

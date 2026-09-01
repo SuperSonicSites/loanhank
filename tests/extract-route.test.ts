@@ -135,18 +135,116 @@ describe('no farmer meets a dead end on the photo path', () => {
     }
   });
 
-  it('renders the typed fields beside an extraction failure, on canon', async () => {
+  it('says the reader is down when the provider is unreachable, typed fields beside', async () => {
     // The provider is unreachable in tests, so this exercises the real catch
-    // branch: the read failed, the message is the canonical blurry line, and
-    // the four fields render beside it.
-    const { post, restore } = await harness(true);
+    // branch: primary fails, the fallback is tried and fails too, and the
+    // farmer is told the truth instead of being blamed for his photo.
+    const { db, post, restore } = await harness(true);
     try {
       const response = await post(photosForm(2));
       expect(response.status).toBe(502);
       const body = await response.text();
-      expect(body).toContain('Too blurry to read. Try again in better light, or type the numbers.');
+      expect(body).toContain('Our reader is down right now, not your photo.');
+      expect(body).not.toContain('Too blurry');
       expect(body).toContain('name="quotedPrice"');
       expect(body).toContain('value="recovery"');
+      const event = db.prepare("SELECT meta_json FROM events WHERE event = 'extract_failed'").get() as
+        { meta_json: string } | undefined;
+      const meta = JSON.parse(event?.meta_json ?? '{}') as Record<string, unknown>;
+      expect(meta.kind).toBe('provider');
+      expect(meta.fallback_tried).toBe(true);
+    } finally {
+      restore();
+    }
+  });
+});
+
+// A schema-valid extraction for driving the route with a stubbed client.
+function stubExtraction() {
+  const money = (value: number | null) => ({ value_cents: value, confidence: value === null ? 0 : 0.99 });
+  const plain = <T>(value: T | null) => ({ value, confidence: value === null ? 0 : 0.99 });
+  return {
+    document_type: 'equipment_quote' as const,
+    quoted_price: money(8_450_000),
+    cash_discount: money(600_000),
+    payment_amount: money(140_833),
+    payment_frequency: plain<'monthly'>('monthly'),
+    payment_count: plain(60),
+    stated_rate_bps: plain(0),
+    down_payment: money(0),
+    trade_allowance: money(0),
+    trade_payoff: money(null),
+    balloon: money(null),
+    delivery_setup: money(0),
+    quote_date: plain('2026-08-11'),
+    quote_expiry_date: plain('2026-08-31'),
+    brand: plain('John Deere'),
+    model_year: plain(2021),
+    hours: plain(1_240),
+    list_price: money(9_120_000),
+    new_or_used: plain<'used'>('used'),
+    warnings: [],
+  };
+}
+
+describe('the reader recovers and abstains through the route', () => {
+  it('recovers through the fallback model end to end', async () => {
+    const { post, restore } = await harness(true);
+    try {
+      let calls = 0;
+      const client = {
+        responses: {
+          parse: async () => {
+            calls += 1;
+            if (calls === 1) throw Object.assign(new Error('server error'), { status: 500 });
+            return { output_parsed: stubExtraction() };
+          },
+        },
+      };
+      const { d1 } = await migratedDatabase();
+      const response = await app.fetch(
+        new Request('https://loanhank.test/extract', { method: 'POST', body: photosForm(1) }),
+        {
+          DB: d1,
+          DECODE_LIMIT: { limit: async () => ({ success: true }) },
+          RATE_LIMIT_SALT: 'test-salt-16-chars-plus',
+          TURNSTILE_SITE_KEY: 'site',
+          TURNSTILE_SECRET_KEY: 'secret',
+          OPENAI_API_KEY: 'key',
+          OPENAI_CLIENT: client,
+        } as never,
+        { waitUntil: () => {}, passThroughOnException: () => {} } as never,
+      );
+      expect(response.status).toBe(200);
+      expect(await response.text()).toContain('Check these against your paper.');
+      expect(calls).toBe(2);
+    } finally {
+      restore();
+    }
+  });
+
+  it('shows the blurry line for an unreadable result', async () => {
+    const { post, restore } = await harness(true);
+    try {
+      const client = { responses: { parse: async () => ({ output_parsed: null }) } };
+      const { d1 } = await migratedDatabase();
+      const response = await app.fetch(
+        new Request('https://loanhank.test/extract', { method: 'POST', body: photosForm(1) }),
+        {
+          DB: d1,
+          DECODE_LIMIT: { limit: async () => ({ success: true }) },
+          RATE_LIMIT_SALT: 'test-salt-16-chars-plus',
+          TURNSTILE_SITE_KEY: 'site',
+          TURNSTILE_SECRET_KEY: 'secret',
+          OPENAI_API_KEY: 'key',
+          OPENAI_CLIENT: client,
+        } as never,
+        { waitUntil: () => {}, passThroughOnException: () => {} } as never,
+      );
+      expect(response.status).toBe(502);
+      const body = await response.text();
+      expect(body).toContain('Too blurry to read.');
+      expect(body).not.toContain('reader is down');
     } finally {
       restore();
     }

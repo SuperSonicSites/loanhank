@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { OpenAIQuoteExtractor } from '../src/api/extractor.js';
+import { ExtractionFailedError, OpenAIQuoteExtractor } from '../src/api/extractor.js';
 import { assertUploadAllowed, MAX_FILE_SIZE_BYTES, PublicApiError } from '../src/api/security.js';
 import type { AppConfig } from '../src/api/env.js';
 
@@ -114,6 +114,78 @@ describe('the live photo path never lets the provider retain a quote', () => {
     expect(content.filter((part) => part.type === 'input_file')).toHaveLength(1);
     // The instruction that binds the pages into one paper travels with them.
     expect(JSON.stringify(calls[0])).toContain('one paper');
+  });
+});
+
+describe('the reader fails honestly and falls back once', () => {
+  const page = [{ dataUrl: 'data:image/jpeg;base64,AAAA', contentType: 'image/jpeg' }];
+  const failing = (first: unknown, second?: () => unknown) => {
+    let calls = 0;
+    const models: string[] = [];
+    const client = {
+      responses: {
+        parse: vi.fn(async (body: { model: string }) => {
+          models.push(body.model);
+          calls += 1;
+          if (calls === 1) throw first;
+          if (second) return second();
+          throw first;
+        }),
+      },
+    };
+    return { client, models, callCount: () => calls };
+  };
+
+  it('retries a provider failure on the fallback model and returns its read', async () => {
+    const { client, models } = failing(
+      Object.assign(new Error('server error'), { status: 500 }),
+      () => ({ output_parsed: extraction() }),
+    );
+    const result = await new OpenAIQuoteExtractor(config, client as never).extractQuote(page);
+    expect(models).toEqual(['test-primary', 'test-fallback']);
+    expect(result.quoted_price.value_cents).toBe(8_450_000);
+  });
+
+  it('classifies a timeout and retries on the fallback model', async () => {
+    const abort = new Error('aborted');
+    abort.name = 'AbortError';
+    const { client, models } = failing(abort, () => ({ output_parsed: extraction() }));
+    await new OpenAIQuoteExtractor(config, client as never).extractQuote(page);
+    expect(models).toEqual(['test-primary', 'test-fallback']);
+  });
+
+  it('raises the second failure with the fallback marked attempted', async () => {
+    const { client } = failing(Object.assign(new Error('down'), { status: 503 }));
+    const failure = await new OpenAIQuoteExtractor(config, client as never)
+      .extractQuote(page).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(ExtractionFailedError);
+    expect((failure as ExtractionFailedError).kind).toBe('provider');
+    expect((failure as ExtractionFailedError).attemptedFallback).toBe(true);
+  });
+
+  it('does not retry an auth failure', async () => {
+    const { client, callCount } = failing(Object.assign(new Error('bad key'), { status: 401 }));
+    const failure = await new OpenAIQuoteExtractor(config, client as never)
+      .extractQuote(page).catch((error: unknown) => error);
+    expect((failure as ExtractionFailedError).kind).toBe('auth');
+    expect((failure as ExtractionFailedError).attemptedFallback).toBe(false);
+    expect(callCount()).toBe(1);
+  });
+
+  it('treats a missing structured result as unparseable and does not retry', async () => {
+    let calls = 0;
+    const client = {
+      responses: {
+        parse: vi.fn(async () => {
+          calls += 1;
+          return { output_parsed: null };
+        }),
+      },
+    };
+    const failure = await new OpenAIQuoteExtractor(config, client as never)
+      .extractQuote(page).catch((error: unknown) => error);
+    expect((failure as ExtractionFailedError).kind).toBe('unparseable');
+    expect(calls).toBe(1);
   });
 });
 

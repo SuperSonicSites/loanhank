@@ -26,7 +26,7 @@ import {
   type ConfirmRow, type FormValues,
 } from '../web/page.js';
 import { assertUploadBytes, MAX_PHOTOS_PER_DECODE, MAX_TOTAL_UPLOAD_BYTES, PublicApiError } from './security.js';
-import { OpenAIQuoteExtractor } from './extractor.js';
+import { ExtractionFailedError, OpenAIQuoteExtractor } from './extractor.js';
 import { renderTeardownPdf, type TeardownLine } from './teardown-pdf.js';
 import { FOLLOWUP_TEXT_VERSION } from '../web/page.js';
 import {
@@ -1088,17 +1088,29 @@ app.post('/extract', async (c) => {
   // delete, nothing to leak, nothing for a retention sweep to miss.
   let extraction;
   try {
-    extraction = await new OpenAIQuoteExtractor(getConfig(c.env)).extractQuote(pages);
+    // OPENAI_CLIENT is the test seam; production never sets it.
+    extraction = await new OpenAIQuoteExtractor(
+      getConfig(c.env),
+      c.env.OPENAI_CLIENT as ConstructorParameters<typeof OpenAIQuoteExtractor>[1],
+    ).extractQuote(pages);
   } catch (error) {
     // A failed read is a re-snap the farmer has to do, and the only place we
     // would ever see it. Losing it means losing the signal that the extractor
     // is drifting on some quote format we have never met.
+    const kind = error instanceof ExtractionFailedError ? error.kind : 'unknown';
     c.executionCtx.waitUntil(recordEvent(c.env, 'extract_failed', null, {
       photo_count: files.length,
       size_bytes: pages.reduce((total, page) => total + page.dataUrl.length, 0),
-      reason: error instanceof Error ? error.name : 'unknown',
+      kind,
+      fallback_tried: error instanceof ExtractionFailedError ? error.attemptedFallback : false,
     }));
-    return fail('Too blurry to read. Try again in better light, or type the numbers.', 502);
+    // An outage, a dead key, and an unreadable page are different failures,
+    // and two of them are ours. Blaming the photo for a provider being down
+    // burns the farmer's retries on a camera that cannot succeed.
+    const readerDown = kind === 'auth' || kind === 'timeout' || kind === 'provider';
+    return fail(readerDown
+      ? 'Our reader is down right now, not your photo. Type the numbers off your paper instead.'
+      : 'Too blurry to read. Try again in better light, or type the numbers.', 502);
   }
 
   c.executionCtx.waitUntil(recordEvent(c.env, 'extract', null, {
