@@ -337,6 +337,91 @@ describe('a balloon rides the quick path whole', () => {
   });
 });
 
+const LEDGER = {
+  ledger: '1',
+  quotedPrice: '84500',
+  cashDiscount: '6000',
+  payment: '1408.33',
+  paymentFrequency: 'monthly',
+  paymentCount: '60',
+  balloon: '',
+  statedRate: '0',
+  region: 'NE',
+  extracted: '{"quotedPrice":"84500"}',
+};
+
+describe('a refused ledger keeps the farmer’s numbers on the screen', () => {
+  // A farmer who snapped photos, waited for the read, and corrected a dozen
+  // fields used to lose all of it to one typo: the refusal dumped him on an
+  // empty four-field form that can never earn a verdict. A refusal now
+  // re-renders the confirm screen with everything he posted.
+  it('re-renders the confirm screen with every value he typed', async () => {
+    const { post } = await decodeHarness();
+    const response = await post({ ...LEDGER, region: '' });
+    expect(response.status).toBe(422);
+    const body = await response.text();
+    expect(body).toContain('value="84500"');
+    expect(body).toContain('value="1408.33"');
+    expect(body).toContain('We could not read a couple of these.');
+    expect(body).toContain('Pick the state or province the deal is in.');
+    expect(body).toContain('name="ledger" value="1"');
+    // The original snapshot rides through, so the retry still records
+    // corrections and takes the verdict path.
+    expect(body).toContain('&quot;quotedPrice&quot;');
+  });
+
+  it('re-renders an unpriceable ledger the same way', async () => {
+    const { post } = await decodeHarness();
+    const response = await post({ ...LEDGER, payment: '1' });
+    expect(response.status).toBe(422);
+    const body = await response.text();
+    expect(body).toContain('value="84500"');
+    expect(body).toContain('do not add up to a deal we can price');
+    expect(body).toContain('name="ledger" value="1"');
+  });
+
+  it('keeps the checkboxes and the region he picked', async () => {
+    const { post } = await decodeHarness();
+    const response = await post({ ...LEDGER, payment: '1', unexplainedAmount: 'on' });
+    const body = await response.text();
+    expect(body).toContain('name="unexplainedAmount" checked');
+    expect(body).toContain('<option value="NE" selected>');
+  });
+
+  it('never claims a retyped value was read from the paper', async () => {
+    const { post } = await decodeHarness();
+    const response = await post({ ...LEDGER, region: '' });
+    expect(await response.text()).not.toContain('Read from your paper');
+  });
+});
+
+describe('the typed retry keeps what the farmer gave it', () => {
+  it('keeps the campaign labels on a validation retry', async () => {
+    // The same defect the codebase fixed for fbc and for refuseDecode and
+    // missed here: a farmer from an ad who mistypes once must still count as
+    // the ad-attributed decode he is (spec 7.1).
+    const { post } = await decodeHarness();
+    const response = await post({
+      quotedPrice: '84500', cashDiscount: '', payment: 'garbage', balloon: '',
+      paymentFrequency: 'monthly', paymentCount: '60', utm_campaign: 'august-tractor', entry: 'typed',
+    });
+    expect(response.status).toBe(422);
+    expect(await response.text()).toContain('name="utm_campaign" value="august-tractor"');
+  });
+
+  it('keeps the typed values when the deal cannot be priced', async () => {
+    const { post } = await decodeHarness();
+    const response = await post({
+      quotedPrice: '84500', cashDiscount: '', payment: '1', balloon: '',
+      paymentFrequency: 'monthly', paymentCount: '60', entry: 'typed',
+    });
+    expect(response.status).toBe(422);
+    const body = await response.text();
+    expect(body).toContain('value="84500"');
+    expect(body).toContain('do not add up to a deal we can price');
+  });
+});
+
 describe('decode events name their door', () => {
   it('marks a disclosure decode as typed', async () => {
     const { post, decodeMeta } = await decodeHarness();

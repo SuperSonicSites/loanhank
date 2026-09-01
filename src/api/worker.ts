@@ -159,6 +159,37 @@ function refuseDecode<R>(
 }
 
 /**
+ * A refused LEDGER decode re-renders the confirm screen with everything the
+ * farmer posted: his dozen corrections, his region, his checkboxes, and the
+ * original extraction snapshot, so one typo no longer destroys the whole
+ * photo-path session and dumps him on an empty four-field form that can
+ * never earn a verdict.
+ */
+function refuseLedger<R>(
+  c: Pick<MeasurableRequest, 'req'> & { html: (body: string, status?: never) => R },
+  body: Record<string, unknown>,
+  problems: string[],
+  issues: Map<string, string>,
+): R {
+  return c.html(
+    renderConfirm({
+      rows: confirmRowsFromBody(body, issues),
+      frequency: String(body.paymentFrequency ?? ''),
+      warnings: [],
+      problems,
+      region: String(body.region ?? ''),
+      financeOnlyFeeRolled: body.financeOnlyFeeRolled !== undefined,
+      unexplainedAmount: body.unexplainedAmount !== undefined,
+      extractedJson: typeof body.extracted === 'string' ? body.extracted : undefined,
+      photoCount: Math.min(4, Math.max(0, Math.trunc(Number(body.photoCount)) || 0)),
+      fbc: gpcHonoured(c) ? null : fbcFromBody(body.fbc),
+      campaign: campaignFromBody(body),
+    }),
+    422 as never,
+  );
+}
+
+/**
  * Meta CAPI, fired behind waitUntil so measurement never stands in the request
  * path, and the outcome patched onto the events row so every send is logged,
  * success, failure or skip (spec.md §10).
@@ -233,51 +264,90 @@ async function turnstilePassed(
 }
 
 /**
+ * The confirm screen's field order, labels, hints, and closed lists, in one
+ * table so the extraction render and the refusal re-render cannot drift.
+ */
+const CONFIRM_FIELDS: Array<{ name: string; label: string; hint?: string; choices?: readonly string[] }> = [
+  { name: 'quotedPrice', label: 'Quoted price' },
+  { name: 'cashDiscount', label: 'Cash discount', hint: 'What they knock off if you pay cash instead of financing. Leave empty if there is none.' },
+  { name: 'payment', label: 'Payment' },
+  { name: 'paymentCount', label: 'How many payments' },
+  { name: 'statedRate', label: 'Rate printed on the quote', hint: 'As a percentage. A 0% promo is 0.' },
+  { name: 'downPayment', label: 'Due at signing' },
+  { name: 'tradeAllowance', label: 'Trade allowance' },
+  { name: 'tradePayoff', label: 'Still owed on the trade' },
+  { name: 'balloon', label: 'Balloon at the end', hint: 'One big payment due after the regular ones. Leave it empty if there is none.' },
+  { name: 'deliverySetup', label: 'Delivery and setup' },
+  { name: 'financeOnlyFee', label: 'Fees you only pay if you finance', hint: 'Doc, origination, or required insurance. Leave empty if there are none.' },
+  // Offered as a list, never a free box. A name that is not a manufacturer
+  // has no path in (spec.md §9.5).
+  { name: 'brand', label: 'Make', hint: 'Pick the maker of the machine. Leave it blank if it is not on the list.', choices: EQUIPMENT_BRANDS },
+  // Read silently, never required. The expiry drives the only honest deadline
+  // this product has, and the quote date keeps stale paper out of a
+  // current-quarter median (spec.md 9.4: forage never blocks a decode).
+  { name: 'quoteDate', label: 'Date on the quote', hint: 'Like 2026-08-11. Leave empty if it is not printed.' },
+  { name: 'quoteExpiryDate', label: 'Quote valid until', hint: 'Leave empty if the paper does not say.' },
+];
+
+const CONFIRM_FIELD_META = new Map(CONFIRM_FIELDS.map((field) => [field.name, field]));
+
+/**
  * The confirm screen, built from what the model could and could not read.
  * Exported for the eval gate: null in, empty amber box out.
  */
 export function confirmRows(extraction: QuoteExtraction): ConfirmRow[] {
-  const money = (name: string, label: string, source: { value_cents: number | null; confidence: number }, hint?: string): ConfirmRow => ({
-    ...(confirmableField(name, label, { value: source.value_cents, confidence: source.confidence }, centsToInput) as ConfirmableField),
-    ...(hint ? { hint } : {}),
-  });
-  const text = (name: string, label: string, source: { value: string | null; confidence: number }, hint?: string): ConfirmRow => ({
-    ...(confirmableField(name, label, source) as ConfirmableField),
-    ...(hint ? { hint } : {}),
-  });
-  const plain = (name: string, label: string, source: { value: number | null; confidence: number }, hint?: string): ConfirmRow => ({
-    ...(confirmableField(name, label, source) as ConfirmableField),
-    ...(hint ? { hint } : {}),
-  });
+  const decorate = (name: string, row: ConfirmableField): ConfirmRow => {
+    const meta = CONFIRM_FIELD_META.get(name);
+    return { ...row, ...(meta?.hint ? { hint: meta.hint } : {}) };
+  };
+  const label = (name: string) => CONFIRM_FIELD_META.get(name)?.label ?? name;
+  const money = (name: string, source: { value_cents: number | null; confidence: number }): ConfirmRow =>
+    decorate(name, confirmableField(name, label(name), { value: source.value_cents, confidence: source.confidence }, centsToInput) as ConfirmableField);
+  const text = (name: string, source: { value: string | null; confidence: number }): ConfirmRow =>
+    decorate(name, confirmableField(name, label(name), source) as ConfirmableField);
+  const plain = (name: string, source: { value: number | null; confidence: number }): ConfirmRow =>
+    decorate(name, confirmableField(name, label(name), source) as ConfirmableField);
 
   return [
-    money('quotedPrice', 'Quoted price', extraction.quoted_price),
-    money('cashDiscount', 'Cash discount', extraction.cash_discount, 'What they knock off if you pay cash instead of financing. Leave empty if there is none.'),
-    money('payment', 'Payment', extraction.payment_amount),
-    plain('paymentCount', 'How many payments', extraction.payment_count),
-    plain('statedRate', 'Rate printed on the quote', { value: extraction.stated_rate_bps.value === null ? null : extraction.stated_rate_bps.value / 100, confidence: extraction.stated_rate_bps.confidence }, 'As a percentage. A 0% promo is 0.'),
-    money('downPayment', 'Due at signing', extraction.down_payment),
-    money('tradeAllowance', 'Trade allowance', extraction.trade_allowance),
-    money('tradePayoff', 'Still owed on the trade', extraction.trade_payoff),
-    money('balloon', 'Balloon at the end', extraction.balloon, 'One big payment due after the regular ones. Leave it empty if there is none.'),
-    money('deliverySetup', 'Delivery and setup', extraction.delivery_setup),
-    money('financeOnlyFee', 'Fees you only pay if you finance', { value_cents: null, confidence: 0 }, 'Doc, origination, or required insurance. Leave empty if there are none.'),
-    // Read silently, never required. The expiry drives the only honest
-    // deadline this product has, and the quote date keeps stale paper out of a
-    // current-quarter median (spec.md 9.4: forage never blocks a decode).
-    // Offered as a list, never a free box. A name that is not a manufacturer
-    // has no path in (spec.md §9.5).
+    money('quotedPrice', extraction.quoted_price),
+    money('cashDiscount', extraction.cash_discount),
+    money('payment', extraction.payment_amount),
+    plain('paymentCount', extraction.payment_count),
+    plain('statedRate', { value: extraction.stated_rate_bps.value === null ? null : extraction.stated_rate_bps.value / 100, confidence: extraction.stated_rate_bps.confidence }),
+    money('downPayment', extraction.down_payment),
+    money('tradeAllowance', extraction.trade_allowance),
+    money('tradePayoff', extraction.trade_payoff),
+    money('balloon', extraction.balloon),
+    money('deliverySetup', extraction.delivery_setup),
+    money('financeOnlyFee', { value_cents: null, confidence: 0 }),
     {
       name: 'brand',
-      label: 'Make',
+      label: label('brand'),
       state: normalizeBrand(extraction.brand.value) === null ? 'unreadable' as const : 'read' as const,
       value: normalizeBrand(extraction.brand.value) ?? '',
       choices: [...EQUIPMENT_BRANDS],
-      hint: 'Pick the maker of the machine. Leave it blank if it is not on the list.',
+      hint: CONFIRM_FIELD_META.get('brand')?.hint as string,
     },
-    text('quoteDate', 'Date on the quote', extraction.quote_date, 'Like 2026-08-11. Leave empty if it is not printed.'),
-    text('quoteExpiryDate', 'Quote valid until', extraction.quote_expiry_date, 'Leave empty if the paper does not say.'),
+    text('quoteDate', extraction.quote_date),
+    text('quoteExpiryDate', extraction.quote_expiry_date),
   ];
+}
+
+/**
+ * The same screen, rebuilt from what the farmer just posted, so a refusal
+ * hands his work back instead of an empty form. Every value is his own typed
+ * string, so no row claims it was read from the paper.
+ */
+function confirmRowsFromBody(body: Record<string, unknown>, issues: Map<string, string>): ConfirmRow[] {
+  return CONFIRM_FIELDS.map((field) => ({
+    name: field.name,
+    label: field.label,
+    ...(field.hint ? { hint: field.hint } : {}),
+    ...(field.choices ? { choices: [...field.choices] } : {}),
+    state: 'read' as const,
+    value: String(body[field.name] ?? ''),
+    ...(issues.has(field.name) ? { problem: issues.get(field.name) as string } : {}),
+  }));
 }
 
 const WARNING_COPY: Record<string, string> = {
@@ -1022,7 +1092,11 @@ app.post('/decode', async (c) => {
   if (!parsed.success) {
     const problems = parsed.error.issues.map((issue) => issue.message);
     c.executionCtx.waitUntil(recordEvent(c, 'decode_rejected', null, { problems }));
-    return c.html(renderForm(raw, problems, null, {}, gpcHonoured(c) ? null : fbc), 422);
+    // The campaign labels ride the retry, or a farmer who fixes one stray
+    // character stops counting as the ad-attributed decode he is (spec 7.1).
+    // The camera hero stays off on purpose: he is mid-typed-flow with
+    // problems to fix in these exact boxes.
+    return c.html(renderForm(raw, problems, null, campaignFromBody(body), gpcHonoured(c) ? null : fbc), 422);
   }
 
   const form = parsed.data;
@@ -1037,16 +1111,18 @@ app.post('/decode', async (c) => {
 
   if (result.promoPriceRateBps === null) {
     // Abstaining is success. We say we could not read the deal rather than
-    // printing a number we do not stand behind.
+    // printing a number we do not stand behind, and the farmer keeps every
+    // value he typed for the fix.
     c.executionCtx.waitUntil(
       recordEvent(c, 'decode_unpriceable', null, { reason: result.unavailableReason }),
     );
-    return refuseDecode(
-      c,
-      body,
-      'Those numbers do not add up to a deal we can price. Check the payment and how many there are against your paper, then run it again.',
-      422,
-    );
+    return c.html(renderForm(
+      raw,
+      ['Those numbers do not add up to a deal we can price. Check the payment and how many there are against your paper, then run it again.'],
+      null,
+      campaignFromBody(body),
+      gpcHonoured(c) ? null : fbc,
+    ), 422);
   }
 
   const decodeId = crypto.randomUUID();
@@ -1278,8 +1354,15 @@ async function decodeFullLedger(c: {
 
   if (!parsed.success) {
     const problems = parsed.error.issues.map((issue) => issue.message);
+    // Per-field messages attach to their rows; everything lands in the banner
+    // too, because region and frequency issues have no row of their own.
+    const issues = new Map<string, string>();
+    for (const issue of parsed.error.issues) {
+      const field = String(issue.path[0] ?? '');
+      if (field !== '' && !issues.has(field)) issues.set(field, issue.message);
+    }
     c.executionCtx.waitUntil(recordEvent(c, 'decode_rejected', null, { problems, path: 'ledger' }));
-    return refuseDecode(c, body, problems.join(' '), 422);
+    return refuseLedger(c, body, problems, issues);
   }
 
   const form = parsed.data;
@@ -1328,11 +1411,11 @@ async function decodeFullLedger(c: {
   const decoded = decodeLedger(ledger);
   if (decoded.realRateAllInBps === null && decoded.unavailableReason !== null) {
     c.executionCtx.waitUntil(recordEvent(c, 'decode_unpriceable', null, { reason: decoded.unavailableReason }));
-    return refuseDecode(
+    return refuseLedger(
       c,
       body,
-      'Those numbers do not add up to a deal we can price. Check the payment and how many there are against your paper.',
-      422,
+      ['Those numbers do not add up to a deal we can price. Check the payment and how many there are against your paper.'],
+      new Map(),
     );
   }
 

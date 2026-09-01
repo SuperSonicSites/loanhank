@@ -878,6 +878,8 @@ export interface ConfirmRow {
   hint?: string;
   /** Present means offer these and nothing else, rather than a free box. */
   choices?: string[];
+  /** A refusal message for this row, rendered in place of the read flag. */
+  problem?: string;
 }
 
 export interface ConfirmView {
@@ -890,6 +892,17 @@ export interface ConfirmView {
   photoCount?: number;
   /** Campaign labels carried through, spec.md §9.5's four and nothing else. */
   campaign?: Record<string, string>;
+  /**
+   * Present marks a refusal re-render: the banner lists every message, the
+   * values are the farmer's own, and no flag claims they came off the paper.
+   */
+  problems?: string[];
+  /** The region the farmer picked, carried back on a re-render. */
+  region?: string;
+  financeOnlyFeeRolled?: boolean;
+  unexplainedAmount?: boolean;
+  /** The original extraction snapshot, carried through a re-render unchanged. */
+  extractedJson?: string;
 }
 
 /**
@@ -934,6 +947,14 @@ function control(row: ConfirmRow): string {
 }
 
 export function renderConfirm(view: ConfirmView): string {
+  const problemBlock = !view.problems || view.problems.length === 0
+    ? ''
+    : `  <div class="problem">
+    <p>We could not read a couple of these. Fix them and run it again.</p>
+    <ul>${view.problems.map((problem) => `<li>${escapeHtml(problem)}</li>`).join('')}</ul>
+  </div>
+`;
+
   const warningBlock = view.warnings.length === 0
     ? ''
     : `  <div class="problem">
@@ -943,22 +964,31 @@ export function renderConfirm(view: ConfirmView): string {
 
   const field = (row: ConfirmRow): string => {
     const unreadable = row.state === 'unreadable';
+    // On a re-render the values are the farmer's own typed strings, so
+    // claiming they were read from the paper would be a lie; only a row's
+    // refusal message earns a flag line there.
+    const flag = row.problem !== undefined
+      ? `      <p class="flag-unreadable">${escapeHtml(row.problem)}</p>
+`
+      : view.problems !== undefined
+        ? ''
+        : `      <p class="${unreadable ? 'flag-unreadable' : 'flag-read'}">${
+          unreadable ? 'Could not read it, type it in' : 'Read from your paper'
+        }</p>
+`;
     return `    <div class="field">
       <label for="${row.name}">${escapeHtml(row.label)}</label>
-      <p class="${unreadable ? 'flag-unreadable' : 'flag-read'}">${
-      unreadable ? 'Could not read it, type it in' : 'Read from your paper'
-    }</p>
-${control(row)}
+${flag}${control(row)}
 ${row.hint ? `      <p class="note">${escapeHtml(row.hint)}</p>
 ` : ''}    </div>`;
   };
 
-  return shell('Check these · LoanHank', `${warningBlock}  <h1>Check these against your paper. Fix anything we got wrong.</h1>
+  return shell('Check these · LoanHank', `${problemBlock}${warningBlock}  <h1>Check these against your paper. Fix anything we got wrong.</h1>
   <p>Your photo is gone already. It was read and never saved.</p>
 
   <form method="post" action="/decode">
     <input type="hidden" name="ledger" value="1">
-    <input type="hidden" name="extracted" value="${extractedSnapshot(view)}">
+    <input type="hidden" name="extracted" value="${view.extractedJson !== undefined ? escapeHtml(view.extractedJson) : extractedSnapshot(view)}">
     <input type="hidden" name="photoCount" value="${view.photoCount ?? 1}">
 ${campaignFields(view.campaign ?? {})}${fbcField(view.fbc)}
 ${view.rows.map(field).join('\n')}
@@ -974,18 +1004,18 @@ ${view.rows.map(field).join('\n')}
       <label for="region">State or province</label>
       <p class="flag-read">Where the deal is written</p>
       <select id="region" name="region" required>
-        ${regionOptions('')}
+        ${regionOptions(view.region ?? '')}
       </select>
     </div>
     <div class="field checkbox">
       <label for="financeOnlyFeeRolled">
-        <input type="checkbox" id="financeOnlyFeeRolled" name="financeOnlyFeeRolled">
+        <input type="checkbox" id="financeOnlyFeeRolled" name="financeOnlyFeeRolled"${view.financeOnlyFeeRolled ? ' checked' : ''}>
         That fee is rolled into the payments rather than due at signing
       </label>
     </div>
     <div class="field checkbox">
       <label for="unexplainedAmount">
-        <input type="checkbox" id="unexplainedAmount" name="unexplainedAmount">
+        <input type="checkbox" id="unexplainedAmount" name="unexplainedAmount"${view.unexplainedAmount ? ' checked' : ''}>
         There is an amount on this quote I cannot account for
       </label>
       <p class="note">Tick this and we will show your rate but hold the verdict. We will not rate a deal with money in it that nobody can explain.</p>
