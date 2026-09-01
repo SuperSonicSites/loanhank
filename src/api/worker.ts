@@ -214,8 +214,11 @@ async function turnstilePassed(
     && result.hostname === expectedHostname;
 }
 
-/** The confirm screen, built from what the model could and could not read. */
-function confirmRows(extraction: QuoteExtraction): ConfirmRow[] {
+/**
+ * The confirm screen, built from what the model could and could not read.
+ * Exported for the eval gate: null in, empty amber box out.
+ */
+export function confirmRows(extraction: QuoteExtraction): ConfirmRow[] {
   const money = (name: string, label: string, source: { value_cents: number | null; confidence: number }, hint?: string): ConfirmRow => ({
     ...(confirmableField(name, label, { value: source.value_cents, confidence: source.confidence }, centsToInput) as ConfirmableField),
     ...(hint ? { hint } : {}),
