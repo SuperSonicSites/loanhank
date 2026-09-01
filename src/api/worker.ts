@@ -84,17 +84,35 @@ function quarterOf(isoTimestamp: string): string {
   return `${year}Q${Math.floor((month - 1) / 3) + 1}`;
 }
 
+type EventContext = { env: Env; req: { header: (name: string) => string | undefined } };
+
+/**
+ * Verification traffic announces itself (spec.md 7.2) and the announcement
+ * must land on every row the request writes, at insert time. Two mop-up
+ * migrations exist because flagging used to be a memory.
+ */
+function isSynthetic(c: { req: { header: (name: string) => string | undefined } }): boolean {
+  return c.req.header('x-loanhank-synthetic') === '1';
+}
+
+/**
+ * Route call sites pass the request context so the row self-flags; cron call
+ * sites pass the bare env, and a cron is never synthetic.
+ */
 async function recordEvent(
-  env: Env,
+  source: Env | EventContext,
   event: string,
   decodeId: string | null = null,
   meta: Record<string, unknown> = {},
 ): Promise<string> {
+  const fromRequest = typeof (source as EventContext).req?.header === 'function';
+  const env = fromRequest ? (source as EventContext).env : source as Env;
+  const synthetic = fromRequest && isSynthetic(source as EventContext) ? 1 : 0;
   const id = crypto.randomUUID();
   await env.DB.prepare(
-    'INSERT INTO events (id, event, decode_id, ts, meta_json) VALUES (?, ?, ?, ?, ?)',
+    'INSERT INTO events (id, event, decode_id, ts, meta_json, synthetic) VALUES (?, ?, ?, ?, ?, ?)',
   )
-    .bind(id, event, decodeId, new Date().toISOString(), JSON.stringify(meta))
+    .bind(id, event, decodeId, new Date().toISOString(), JSON.stringify(meta), synthetic)
     .run();
   return id;
 }
@@ -909,7 +927,7 @@ app.get('/', async (c) => {
     // The funnel denominator. Written behind waitUntil so measuring never
     // stands between a farmer on rural LTE and the form.
     c.executionCtx.waitUntil(
-      recordEvent(c.env, 'page_view', null, { came_from: cameFrom, ...campaign }),
+      recordEvent(c, 'page_view', null, { came_from: cameFrom, ...campaign }),
     );
   }
   const siteKey = typeof c.env.TURNSTILE_SITE_KEY === 'string' ? c.env.TURNSTILE_SITE_KEY : '';
@@ -952,7 +970,7 @@ app.post('/decode', async (c) => {
   const parsed = quickPathFormSchema.safeParse(raw);
   if (!parsed.success) {
     const problems = parsed.error.issues.map((issue) => issue.message);
-    c.executionCtx.waitUntil(recordEvent(c.env, 'decode_rejected', null, { problems }));
+    c.executionCtx.waitUntil(recordEvent(c, 'decode_rejected', null, { problems }));
     return c.html(renderForm(raw, problems, null, {}, gpcHonoured(c) ? null : fbc), 422);
   }
 
@@ -970,7 +988,7 @@ app.post('/decode', async (c) => {
     // Abstaining is success. We say we could not read the deal rather than
     // printing a number we do not stand behind.
     c.executionCtx.waitUntil(
-      recordEvent(c.env, 'decode_unpriceable', null, { reason: result.unavailableReason }),
+      recordEvent(c, 'decode_unpriceable', null, { reason: result.unavailableReason }),
     );
     return refuseDecode(
       c,
@@ -992,8 +1010,8 @@ app.post('/decode', async (c) => {
        id, ts, quarter,
        finance_price_cents, cash_discount_cents, cash_price_cents,
        payment_amount_cents, payment_frequency, payment_count, balloon_cents,
-       promo_price_rate_bps, reconciled, assumptions_json, verdict
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'none')`,
+       promo_price_rate_bps, reconciled, assumptions_json, verdict, synthetic
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'none', ?)`,
   )
     .bind(
       decodeId,
@@ -1009,10 +1027,11 @@ app.post('/decode', async (c) => {
       form.balloon,
       result.promoPriceRateBps,
       JSON.stringify(result.assumptions),
+      isSynthetic(c) ? 1 : 0,
     )
     .run();
 
-  const eventId = await recordEvent(c.env, 'decode', decodeId, {
+  const eventId = await recordEvent(c, 'decode', decodeId, {
     // The quick path carried no campaign labels, so a typed decode was
     // invisible to the ad that produced it while the ledger path and the page
     // view both kept theirs. Cost per completed decode is the round-one gate
@@ -1084,7 +1103,7 @@ app.post('/extract', async (c) => {
     new URL(c.req.url).hostname,
   );
   if (!passed) {
-    c.executionCtx.waitUntil(recordEvent(c.env, 'extract_rejected', null, { reason: 'turnstile' }));
+    c.executionCtx.waitUntil(recordEvent(c, 'extract_rejected', null, { reason: 'turnstile' }));
     return fail('We could not confirm that came from a person. Reload the page and try once more, or type the numbers.', 403);
   }
 
@@ -1094,7 +1113,7 @@ app.post('/extract', async (c) => {
     return fail('Pick a photo of the quote first.', 422);
   }
   if (files.length > MAX_PHOTOS_PER_DECODE) {
-    c.executionCtx.waitUntil(recordEvent(c.env, 'extract_rejected', null, { reason: 'too_many_photos' }));
+    c.executionCtx.waitUntil(recordEvent(c, 'extract_rejected', null, { reason: 'too_many_photos' }));
     return fail('One decode reads up to four photos. Pick the four that show the whole deal.', 413);
   }
 
@@ -1108,7 +1127,7 @@ app.post('/extract', async (c) => {
     const bytes = new Uint8Array(await file.arrayBuffer());
     totalBytes += bytes.byteLength;
     if (totalBytes > MAX_TOTAL_UPLOAD_BYTES) {
-      c.executionCtx.waitUntil(recordEvent(c.env, 'extract_rejected', null, { reason: 'total_too_large' }));
+      c.executionCtx.waitUntil(recordEvent(c, 'extract_rejected', null, { reason: 'total_too_large' }));
       return fail('Those photos add up to more than we can take in one upload. Send fewer pages, or type the numbers.', 413);
     }
     try {
@@ -1119,7 +1138,7 @@ app.post('/extract', async (c) => {
       const message = error instanceof PublicApiError
         ? 'One of those files is either too large or not a photo we can read. Send JPGs, PNGs, or PDFs under 20 MB each.'
         : 'We could not read one of those files.';
-      c.executionCtx.waitUntil(recordEvent(c.env, 'extract_rejected', null, {
+      c.executionCtx.waitUntil(recordEvent(c, 'extract_rejected', null, {
         reason: error instanceof PublicApiError ? error.code : 'unreadable',
       }));
       return fail(message, error instanceof PublicApiError && error.status === 413 ? 413 : 422);
@@ -1142,7 +1161,7 @@ app.post('/extract', async (c) => {
     // would ever see it. Losing it means losing the signal that the extractor
     // is drifting on some quote format we have never met.
     const kind = error instanceof ExtractionFailedError ? error.kind : 'unknown';
-    c.executionCtx.waitUntil(recordEvent(c.env, 'extract_failed', null, {
+    c.executionCtx.waitUntil(recordEvent(c, 'extract_failed', null, {
       photo_count: files.length,
       size_bytes: pages.reduce((total, page) => total + page.dataUrl.length, 0),
       kind,
@@ -1157,7 +1176,7 @@ app.post('/extract', async (c) => {
       : 'Too blurry to read. Try again in better light, or type the numbers.', 502);
   }
 
-  c.executionCtx.waitUntil(recordEvent(c.env, 'extract', null, {
+  c.executionCtx.waitUntil(recordEvent(c, 'extract', null, {
     document_type: extraction.document_type,
     warnings: extraction.warnings,
     photo_count: files.length,
@@ -1208,7 +1227,7 @@ async function decodeFullLedger(c: {
 
   if (!parsed.success) {
     const problems = parsed.error.issues.map((issue) => issue.message);
-    c.executionCtx.waitUntil(recordEvent(c.env, 'decode_rejected', null, { problems, path: 'ledger' }));
+    c.executionCtx.waitUntil(recordEvent(c, 'decode_rejected', null, { problems, path: 'ledger' }));
     return refuseDecode(c, body, problems.join(' '), 422);
   }
 
@@ -1257,7 +1276,7 @@ async function decodeFullLedger(c: {
 
   const decoded = decodeLedger(ledger);
   if (decoded.realRateAllInBps === null && decoded.unavailableReason !== null) {
-    c.executionCtx.waitUntil(recordEvent(c.env, 'decode_unpriceable', null, { reason: decoded.unavailableReason }));
+    c.executionCtx.waitUntil(recordEvent(c, 'decode_unpriceable', null, { reason: decoded.unavailableReason }));
     return refuseDecode(
       c,
       body,
@@ -1344,8 +1363,8 @@ async function decodeFullLedger(c: {
        benchmark_at_ts, delta_vs_benchmark_bps,
        country, currency, province_or_state, out_of_bounds,
        quote_date, quote_expiry_date, launched_standalone,
-       price_band, term_band, referrer, brand
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       price_band, term_band, referrer, brand, synthetic
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).bind(
     decodeId, ts, quarterOf(ts),
     form.quotedPrice, form.cashDiscount, decoded.totals.cashOutlayCents,
@@ -1371,9 +1390,10 @@ async function decodeFullLedger(c: {
     // Normalized, so a dealership name posted straight at the route lands as
     // null rather than as a brand.
     normalizeBrand(String(body.brand ?? '')),
+    isSynthetic(c) ? 1 : 0,
   ).run();
 
-  const eventId = await recordEvent(c.env, 'decode', decodeId, {
+  const eventId = await recordEvent(c, 'decode', decodeId, {
     ...campaignFromBody(body),
     path: 'ledger',
     // The ledger arrives off the confirm screen, which is the camera hero's
@@ -1391,7 +1411,7 @@ async function decodeFullLedger(c: {
   // The extraction flywheel. Only written when the ledger came off a photo.
   const diff = extractionDiff(String(body.extracted ?? ''), body);
   if (diff !== null) {
-    c.executionCtx.waitUntil(recordEvent(c.env, 'extraction_diff', decodeId, {
+    c.executionCtx.waitUntil(recordEvent(c, 'extraction_diff', decodeId, {
       corrected_fields: diff.map((entry) => entry.field),
       corrections: diff,
       field_count: diff.length,
@@ -1511,10 +1531,10 @@ app.post('/email', async (c) => {
 
   const emailId = crypto.randomUUID();
   await c.env.DB.prepare(
-    'INSERT INTO emails (id, email, decode_id, created_at, followup_text_version) VALUES (?, ?, ?, ?, ?)',
+    'INSERT INTO emails (id, email, decode_id, created_at, followup_text_version, synthetic) VALUES (?, ?, ?, ?, ?, ?)',
   ).bind(
     emailId, parsed.data.email, parsed.data.decodeId, new Date().toISOString(),
-    FOLLOWUP_TEXT_VERSION,
+    FOLLOWUP_TEXT_VERSION, isSynthetic(c) ? 1 : 0,
   ).run();
 
   const sent = await sendTeardown(c.env, {
@@ -1522,7 +1542,7 @@ app.post('/email', async (c) => {
   });
 
   if (!sent.ok) {
-    c.executionCtx.waitUntil(recordEvent(c.env, 'email_failed', parsed.data.decodeId, { status: sent.status }));
+    c.executionCtx.waitUntil(recordEvent(c, 'email_failed', parsed.data.decodeId, { status: sent.status }));
     // No retry exists, so none is promised. The earlier wording here said the
     // teardown would follow shortly, which nothing in this product would have
     // done: the same defect as an opt-in with no sender, and more comfortable
@@ -1536,7 +1556,7 @@ app.post('/email', async (c) => {
 
   // Measured in the events table only. Meta hears about decodes and nothing
   // else (spec.md §10, one event not three), so nothing fires here.
-  await recordEvent(c.env, 'email', parsed.data.decodeId, {});
+  await recordEvent(c, 'email', parsed.data.decodeId, {});
 
   // The confirmation screen carries the second opt-in, and only when the
   // farmer's own paper gives us a date to remind him about. No date, no offer.
@@ -1562,7 +1582,7 @@ app.post('/unsubscribe/:id', async (c) => {
       WHERE email = (SELECT email FROM emails WHERE id = ?)
         AND unsubscribed_at IS NULL`,
   ).bind(new Date().toISOString(), c.req.param('id')).run();
-  c.executionCtx.waitUntil(recordEvent(c.env, 'unsubscribe', null, {
+  c.executionCtx.waitUntil(recordEvent(c, 'unsubscribe', null, {
     changed: result.meta.changes,
   }));
   return c.html(renderNotice(
@@ -1588,7 +1608,7 @@ app.post('/interest', async (c) => {
 
   // Measured in the events table only. Meta hears about decodes and nothing
   // else (spec.md §10, one event not three), so nothing fires here either way.
-  await recordEvent(c.env, answer === 'yes' ? 'interest_yes' : 'interest_not_now', decodeId || null, {});
+  await recordEvent(c, answer === 'yes' ? 'interest_yes' : 'interest_not_now', decodeId || null, {});
 
   return c.html(renderNotice(
     answer === 'yes' ? 'Noted' : 'Understood',
@@ -1704,7 +1724,7 @@ app.post('/remind', async (c) => {
     ), 422);
   }
 
-  c.executionCtx.waitUntil(recordEvent(c.env, 'reminder_opt_in', null, { remind_on: remindOn }));
+  c.executionCtx.waitUntil(recordEvent(c, 'reminder_opt_in', null, { remind_on: remindOn }));
 
   return c.html(renderNotice(
     'We will remind you',
@@ -1728,7 +1748,7 @@ app.post('/event', async (c) => {
   if (!(await withinRateLimit(c, 'event'))) return c.body(null, 429);
   const name = (await c.req.text()).trim().slice(0, 40);
   if (!BEACON_EVENTS.has(name)) return c.body(null, 422);
-  await recordEvent(c.env, name);
+  await recordEvent(c, name);
   return c.body(null, 204);
 });
 

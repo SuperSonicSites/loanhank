@@ -41,17 +41,21 @@ async function harness() {
     // is being exercised here is the route logic rather than the limiter.
     DECODE_LIMIT: { limit: async () => ({ success: true }) },
     RATE_LIMIT_SALT: 'test-salt',
+    // Sendable, so /email inserts its row; the synthetic test stubs fetch.
+    RESEND_API_KEY: 'test',
+    EMAIL_FROM: 'hank@mail.test',
+    POSTAL_ADDRESS: 'LoanHank, somewhere',
   } as never;
 
-  const post = (path: string, form: Record<string, string>) =>
+  const post = (path: string, form: Record<string, string>, headers: Record<string, string> = {}) =>
     app.fetch(
       new Request(`https://loanhank.test${path}`, {
         method: 'POST',
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        headers: { 'content-type': 'application/x-www-form-urlencoded', ...headers },
         body: new URLSearchParams(form).toString(),
       }),
       env,
-      { waitUntil: () => {}, passThroughOnException: () => {} } as never,
+      { waitUntil: (p: Promise<unknown>) => p, passThroughOnException: () => {} } as never,
     );
 
   const get = (path: string) =>
@@ -101,6 +105,58 @@ describe('POST /remind', () => {
     const response = await post('/remind', { emailId: 'live', remindOn: 'soon' });
     expect(response.status).toBe(422);
     expect(await response.text()).toContain('No date to work from');
+  });
+});
+
+describe('synthetic traffic flags itself at insert', () => {
+  // spec.md 7.2: verification traffic is flagged in the same session that
+  // creates it. The x-loanhank-synthetic header suppressed ad measurement but
+  // flagged nothing, which is why two mop-up migrations already exist. Now
+  // the header flags every row the request writes, at insert time.
+  const SYNTHETIC = { 'x-loanhank-synthetic': '1' };
+  const QUICK = {
+    quotedPrice: '84500', cashDiscount: '6000', payment: '1408.33',
+    paymentFrequency: 'monthly', paymentCount: '60', balloon: '',
+  };
+
+  it('flags the decode and its events when the header rides in', async () => {
+    const { db, post } = await harness();
+    await post('/decode', QUICK, SYNTHETIC);
+    const decode = db.prepare("SELECT synthetic FROM decodes WHERE verdict = 'none' AND id <> 'd1'")
+      .get() as { synthetic: number };
+    expect(decode.synthetic).toBe(1);
+    const event = db.prepare("SELECT synthetic FROM events WHERE event = 'decode'").get() as { synthetic: number };
+    expect(event.synthetic).toBe(1);
+  });
+
+  it('leaves real traffic at zero', async () => {
+    const { db, post } = await harness();
+    await post('/decode', QUICK);
+    const decode = db.prepare("SELECT synthetic FROM decodes WHERE verdict = 'none' AND id <> 'd1'")
+      .get() as { synthetic: number };
+    expect(decode.synthetic).toBe(0);
+    const event = db.prepare("SELECT synthetic FROM events WHERE event = 'decode'").get() as { synthetic: number };
+    expect(event.synthetic).toBe(0);
+  });
+
+  it('flags the email row too', async () => {
+    const { db, post } = await harness();
+    db.exec(
+      `INSERT INTO decodes (id, ts, quarter)
+       VALUES ('11111111-1111-4111-8111-111111111111', '2026-08-16T00:00:00Z', '2026Q3')`,
+    );
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => ({ ok: true, status: 200 })) as never;
+    try {
+      await post('/email', {
+        email: 'checker@example.test', decodeId: '11111111-1111-4111-8111-111111111111',
+      }, SYNTHETIC);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+    const row = db.prepare("SELECT synthetic FROM emails WHERE email = 'checker@example.test'")
+      .get() as { synthetic: number };
+    expect(row.synthetic).toBe(1);
   });
 });
 
