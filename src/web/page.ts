@@ -1125,6 +1125,20 @@ ${view.assumption ? `  <p class="assumption">${escapeHtml(view.assumption)}</p>\
 `);
 }
 
+/**
+ * The landing for the plain unsubscribe link. It mutates nothing: corporate
+ * mail filters prefetch every link in an email body with GET, so the actual
+ * opt-out is the button's POST. RFC 8058 one-click never lands here.
+ */
+export function renderUnsubscribeConfirm(emailId: string): string {
+  return shell('Stop the emails · LoanHank', `  <h1>Stop the emails</h1>
+  <p>One press and every email we send to this address stops. Nothing else happens and nothing else is kept.</p>
+  <form method="post" action="/unsubscribe/${escapeHtml(emailId)}">
+    <button type="submit">Unsubscribe</button>
+  </form>
+`);
+}
+
 /** Plain confirmations. One line, on voice, nothing to click. */
 export function renderNotice(heading: string, body: string): string {
   return shell(`${heading} · LoanHank`, `  <h1>${escapeHtml(heading)}</h1>

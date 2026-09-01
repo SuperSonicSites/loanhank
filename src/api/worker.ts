@@ -21,7 +21,7 @@ import {
   type ConfirmableField, type QuoteExtraction,
 } from '../shared/schema.js';
 import {
-  renderConfirm, renderExtractFailure, renderForm, renderNotice, renderTicket, renderUnpriceable,
+  renderConfirm, renderExtractFailure, renderForm, renderNotice, renderTicket, renderUnpriceable, renderUnsubscribeConfirm,
   renderVerdictTicket, setFooterPostalAddress,
   type ConfirmRow, type FormValues,
 } from '../web/page.js';
@@ -1475,11 +1475,23 @@ app.post('/email', async (c) => {
   return c.html(renderSent(emailId, expiry));
 });
 
-// One click, both ways: the RFC 8058 POST and a plain link somebody can click.
 // The row id is the token, so no address is ever put in a URL.
-app.all('/unsubscribe/:id', async (c) => {
+//
+// The plain link in an email body lands on GET, which renders a confirm page
+// and touches nothing: mail security scanners prefetch every link with GET,
+// and a GET that mutated was a phantom unsubscribe machine. It renders the
+// same page whatever the id, so it cannot confirm which addresses we hold.
+app.get('/unsubscribe/:id', (c) => c.html(renderUnsubscribeConfirm(c.req.param('id'))));
+
+// The mutation. RFC 8058 one-click POSTs land here directly; the confirm page
+// button lands here too. The opt-out law is about the address, not the row: a
+// farmer with three teardowns has three rows and one no, and it means all of
+// them.
+app.post('/unsubscribe/:id', async (c) => {
   const result = await c.env.DB.prepare(
-    'UPDATE emails SET unsubscribed_at = ? WHERE id = ? AND unsubscribed_at IS NULL',
+    `UPDATE emails SET unsubscribed_at = ?
+      WHERE email = (SELECT email FROM emails WHERE id = ?)
+        AND unsubscribed_at IS NULL`,
   ).bind(new Date().toISOString(), c.req.param('id')).run();
   c.executionCtx.waitUntil(recordEvent(c.env, 'unsubscribe', null, {
     changed: result.meta.changes,

@@ -24,6 +24,16 @@ async function harness() {
     `INSERT INTO emails (id, email, decode_id, created_at, unsubscribed_at)
      VALUES ('already-gone', 'gone@example.test', 'd1', '2026-08-16T00:00:00Z', '2026-08-16T01:00:00Z')`,
   );
+  // A second teardown for the same farmer, and one for somebody else. The
+  // opt-out law is about the address, not the row.
+  db.exec(
+    `INSERT INTO emails (id, email, decode_id, created_at)
+     VALUES ('live-2', 'farmer@example.test', 'd1', '2026-08-17T00:00:00Z')`,
+  );
+  db.exec(
+    `INSERT INTO emails (id, email, decode_id, created_at)
+     VALUES ('neighbor', 'neighbor@example.test', 'd1', '2026-08-17T00:00:00Z')`,
+  );
 
   const env = {
     DB: d1,
@@ -44,7 +54,14 @@ async function harness() {
       { waitUntil: () => {}, passThroughOnException: () => {} } as never,
     );
 
-  return { db, post };
+  const get = (path: string) =>
+    app.fetch(
+      new Request(`https://loanhank.test${path}`),
+      env,
+      { waitUntil: () => {}, passThroughOnException: () => {} } as never,
+    );
+
+  return { db, post, get };
 }
 
 describe('POST /remind', () => {
@@ -87,6 +104,31 @@ describe('POST /remind', () => {
   });
 });
 
+describe('GET /unsubscribe shows a button and changes nothing', () => {
+  // Corporate mail filters prefetch every link in a body with GET before the
+  // farmer ever sees the email. A GET that mutated was a phantom unsubscribe
+  // machine; the plain link now lands on a confirm page whose button POSTs,
+  // and RFC 8058 one-click POSTs stay immediate.
+  it('renders the confirm page without touching any row', async () => {
+    const { db, get } = await harness();
+    const response = await get('/unsubscribe/live');
+    expect(response.status).toBe(200);
+    const body = await response.text();
+    expect(body).toContain('Stop the emails');
+    expect(body).toContain('action="/unsubscribe/live"');
+    const gone = db.prepare('SELECT COUNT(*) AS n FROM emails WHERE unsubscribed_at IS NOT NULL').get() as { n: number };
+    expect(gone.n).toBe(1); // only the seeded already-gone row
+  });
+
+  it('renders the same page for an id that matches nothing', async () => {
+    // Anti-enumeration: the page must not reveal whether the id is real.
+    const { get } = await harness();
+    const real = await (await get('/unsubscribe/live')).text();
+    const fake = await (await get('/unsubscribe/not-a-real-id')).text();
+    expect(fake.replaceAll('not-a-real-id', 'live')).toBe(real);
+  });
+});
+
 describe('POST /unsubscribe', () => {
   it('marks the row and confirms', async () => {
     const { db, post } = await harness();
@@ -97,6 +139,25 @@ describe('POST /unsubscribe', () => {
     const row = db.prepare('SELECT unsubscribed_at FROM emails WHERE id = ?').get('live') as
       { unsubscribed_at: string | null };
     expect(row.unsubscribed_at).not.toBeNull();
+  });
+
+  it('silences every row sharing the address, not just the token row', async () => {
+    // CAN-SPAM is about the address. A farmer with two teardowns has two rows
+    // and one opt-out, and clicking it once must stop all of it.
+    const { db, post } = await harness();
+    await post('/unsubscribe/live', {});
+    const farmer = db.prepare(
+      "SELECT COUNT(*) AS n FROM emails WHERE email = 'farmer@example.test' AND unsubscribed_at IS NOT NULL",
+    ).get() as { n: number };
+    expect(farmer.n).toBe(2);
+  });
+
+  it('does not silence a different address', async () => {
+    const { db, post } = await harness();
+    await post('/unsubscribe/live', {});
+    const neighbor = db.prepare('SELECT unsubscribed_at FROM emails WHERE id = ?').get('neighbor') as
+      { unsubscribed_at: string | null };
+    expect(neighbor.unsubscribed_at).toBeNull();
   });
 
   it('confirms the same way for an id that matches nothing', async () => {

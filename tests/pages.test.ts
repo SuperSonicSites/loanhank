@@ -18,7 +18,7 @@ import {
   renderWhosBehindThis,
   NOTES,
 } from '../src/web/pages.js';
-import { renderConfirm, renderForm } from '../src/web/page.js';
+import { renderConfirm, renderForm, renderUnsubscribeConfirm } from '../src/web/page.js';
 
 /** The configured footer form, exactly as wrangler.jsonc carries it. */
 const POSTAL = 'LoanHank · 109b - 1917 Peninsula Rd, Ucluelet, BC V0R 3A0, Canada';
@@ -37,6 +37,7 @@ const PAGES: Array<[string, string]> = [
   ['do-not-sell', renderDoNotSell()],
   ['whos-behind-this', renderWhosBehindThis()],
   ['404', renderNotFound()],
+  ['unsubscribe-confirm', renderUnsubscribeConfirm('sweep-check')],
   // Every note obeys every copy law the rest of the site does, so they join
   // the same sweep rather than getting their own softer one.
   ['notes-index', renderNotesIndex()],
