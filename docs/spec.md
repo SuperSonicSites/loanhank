@@ -45,7 +45,7 @@ Never say or imply "they hid it." Say "it is not required, so we compute it."
 
 **Headline number: "Your real rate" = the all-in annualized cost of choosing this financing deal instead of the cash deal.**
 
-Formally: the annual IRR (XIRR for non-monthly or irregular schedules) of the DIFFERENCE between the all-in cash-purchase cash flows and the all-in financing cash flows. Decision math, not a claimed Reg-Z APR, and we say so.
+Formally: the periodic IRR of the DIFFERENCE between the all-in cash-purchase cash flows and the all-in financing cash flows, annualized nominally at the payment frequency: periodic rate times periods per year. Nominal at the payment frequency is the definition of record because every tier-1 benchmark card quotes a nominal annual rate, and nominal against nominal is the like-for-like comparison; an effective-annual (XIRR style) headline would read higher than the card at every non-annual frequency without the deal being any worse. An earlier wording here named XIRR for non-monthly schedules; the engine never computed that, the engine was right, and the sentence was wrong (amended 2026-09-01, pinned by the quarterly and semiannual tests). Schedules outside the four regular frequencies cannot be entered, so no irregular-schedule rate exists. Decision math, not a claimed Reg-Z APR, and we say so.
 
 **Two computed views, one headline:**
 - `real_rate_all_in` — includes every mandatory finance-only cost, upfront or rolled. **This is the only number that gets the 48px treatment.**

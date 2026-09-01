@@ -45,6 +45,37 @@ describe('promoPriceRate', () => {
     expect(result.promoPriceRateBps).toBe(650);
   });
 
+  // Non-monthly pins for the definition of record (spec.md 2): nominal
+  // annualization at the payment frequency. Payments hand-derived with the
+  // annuity formula PMT = P*r/(1-(1+r)^-n) before running the engine:
+  // r = 0.08/4 = 0.02, n = 12, P = $100,000 gives $9,455.96;
+  // r = 0.06/2 = 0.03, n = 10, P = $50,000 gives $5,861.53.
+  it('recovers a rate the engine itself priced, quarterly', () => {
+    const payment = calculatePaymentCents(10_000_000, 800, 'quarterly', 12);
+    expect(payment).toBe(945_596);
+    const result = promoPriceRate({
+      quotedPriceCents: 10_000_000,
+      cashDiscountCents: 0,
+      paymentAmountCents: payment,
+      paymentCount: 12,
+      paymentFrequency: 'quarterly',
+    });
+    expect(result.promoPriceRateBps).toBe(800);
+  });
+
+  it('recovers a rate the engine itself priced, semiannual', () => {
+    const payment = calculatePaymentCents(5_000_000, 600, 'semiannual', 10);
+    expect(payment).toBe(586_153);
+    const result = promoPriceRate({
+      quotedPriceCents: 5_000_000,
+      cashDiscountCents: 0,
+      paymentAmountCents: payment,
+      paymentCount: 10,
+      paymentFrequency: 'semiannual',
+    });
+    expect(result.promoPriceRateBps).toBe(600);
+  });
+
   // The product in one case. An $84,500 quote with a $6,000 cash discount,
   // financed at the dealer's "0%" over 60 months on the full sticker.
   it('prices a 0% promo that is not 0%', () => {

@@ -102,4 +102,23 @@ describe('decodeLedger', () => {
     const decoded = decodeLedger({ ...BASE, paymentAmountCents: 172_000 });
     expect(decoded.reconciliation.reconciled).toBe(false);
   });
+
+  // Non-monthly pin for the definition of record (spec.md 2): the same deal
+  // paid quarterly. Payment hand-derived first: $76,700 financed at 800bps
+  // nominal quarterly (r = 0.02) over 16 quarters is $5,648.96 a quarter.
+  // The real rate prices the $72,700 kept in pocket at signing against that
+  // stream, annualized nominally at the quarterly frequency: 10.74%.
+  it('prices and reconciles a quarterly ledger', () => {
+    const payment = calculatePaymentCents(7_670_000, 800, 'quarterly', 16);
+    expect(payment).toBe(564_896);
+    const decoded = decodeLedger({
+      ...BASE,
+      paymentAmountCents: payment,
+      paymentCount: 16,
+      paymentFrequency: 'quarterly',
+      statedRateBps: 800,
+    });
+    expect(decoded.reconciliation.reconciled).toBe(true);
+    expect(decoded.realRateAllInBps).toBe(1074);
+  });
 });
