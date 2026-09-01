@@ -135,4 +135,65 @@ describe('canary: the positive path is reachable', () => {
     expect(verdict.verdict).toBe('none');
     expect(verdict.noVerdictReason).toBe('unreconciled_ledger');
   });
+
+  it('stamps a balloon deal from the shipped benchmark table', async () => {
+    // The golden deal with a $12,000 balloon behind it. At the stated 0% the
+    // payments cover the rest: (8,450,000 - 1,200,000) / 60 is $1,208.33.
+    // The real rate, derived independently: 2.58%, still under the 7.25%
+    // card plus buffer, so the stamp must land. Every new engine path gets
+    // its positive-path canary (spec.md 7.3).
+    const { decoded, benchmark, verdict } = await stampFor({
+      ...GOLDEN_CHECKS_OUT,
+      balloonCents: 1_200_000,
+      paymentAmountCents: 120_833,
+    }, 60);
+    expect(decoded.reconciliation.reconciled).toBe(true);
+    expect(decoded.realRateAllInBps).toBe(258);
+    expect(benchmark, 'the balloon canary found no reference and abstained').not.toBeNull();
+    expect(verdict.verdict).toBe('checks_out');
+  });
+
+  it('reconciles a Canadian semiannual deal to an exact rate, and abstains honestly', async () => {
+    // The Canadian expansion path's canary: the semiannual reading must be
+    // reachable from a real ledger, the rate must pin exactly (11.67%,
+    // derived independently), and the abstention must be the benchmark step
+    // and nowhere earlier, because no Canadian tier-1 card exists yet.
+    const benchmarks = await seededBenchmarks();
+    const decoded = decodeLedger({
+      quotedPriceCents: 9_200_000,
+      cashDiscountCents: 400_000,
+      downPaymentCents: 500_000,
+      tradeAllowanceCents: 1_800_000,
+      tradePayoffCents: 650_000,
+      deliverySetupCents: 120_000,
+      taxCashCents: 0,
+      taxFinanceCents: 0,
+      // $76,700 financed at 9% compounded semiannually, 48 monthly payments.
+      paymentAmountCents: 190_271,
+      paymentCount: 48,
+      paymentFrequency: 'monthly',
+      statedRateBps: 900,
+      balloonCents: 0,
+      country: 'CA',
+      fees: [],
+    });
+    expect(decoded.reconciliation.reconciled).toBe(true);
+    expect(decoded.reconciliation.convention).toBe('nominal_semiannual');
+    expect(decoded.realRateAllInBps).toBe(1_167);
+    const benchmark = matchBenchmark(benchmarks, {
+      amountCents: decoded.totals.amountFinancedCents,
+      termMonths: 48,
+      rateKind: 'fixed',
+      country: 'CA',
+    });
+    expect(benchmark).toBeNull();
+    const verdict = decideVerdict({
+      realRateAllInBps: decoded.realRateAllInBps,
+      reconciled: decoded.reconciliation.reconciled,
+      benchmark,
+      hasUnknownFee: decoded.totals.hasUnknownFee,
+    });
+    expect(verdict.verdict).toBe('none');
+    expect(verdict.noVerdictReason).toBe('no_matched_benchmark');
+  });
 });

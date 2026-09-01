@@ -1904,8 +1904,9 @@ export default {
   fetch: app.fetch,
 
   // Both crons log on every fire, wired or not. A cron that silently does
-  // nothing and a cron that silently fails look identical in the dashboard,
-  // and the reaper is what keeps the photo-deletion promise.
+  // nothing and a cron that silently fails look identical in the dashboard.
+  // The reaper slot logs the truth: photos are never written down, so there
+  // is nothing to reap, and the R2 lifecycle rule is the backstop.
   scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext) {
     switch (event.cron) {
       case REAPER_CRON:

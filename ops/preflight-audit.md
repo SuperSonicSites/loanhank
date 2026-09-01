@@ -53,12 +53,14 @@ Scan git history for leaked secrets (`git log -p | grep -iE 'sk-|api[_-]?key|sec
 
 ## KNOWN HOLES — expected, not findings
 
-These are on the owner's list. Report their state, do not count them as failures:
-- META_CAPI_TOKEN and META_DATASET_ID unset (Meta setup pending, and the dataset id stays unset until the privacy surface is live, spec §14)
+These are on the owner's list. Report their state, do not count them as failures (refreshed 2026-09-01):
+- META_CAPI_TOKEN unset (Meta setup pending; META_DATASET_ID is now versioned in wrangler.jsonc and the token is the only switch, spec §14)
 - /whos-behind-this unfinished (owner's face and name pending)
 - equip_category not yet captured → cohorts empty, day-30 correctly silent
-- Custom domain not cut over (still workers.dev)
-- /notes/ route empty (four papers pending from owner side)
+- workers.dev host still live and Turnstile-allowed; the custom domain cut over 2026-08-18 and the two retirement moves happen together (spec §14)
+- The September AgDirect card: `ops/agdirect-2026-09.template.sql` awaits verified rates; until it ships as migration 0011, every decode abstains with benchmark_lapsed, which is the staleness gate working
+- OPENAI_DATA_CONTROLS_VERIFIED still false (owner console screenshot pending)
+- Backup restore never exercised against a real bucket
 
 ## THE REPORT
 

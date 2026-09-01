@@ -14,7 +14,8 @@ Keep these true in package.json; if you rename a script, update this file in the
 
 - `pnpm dev` — wrangler dev, local worker + D1
 - `pnpm test` — vitest, full suite
-- `pnpm test:eval` — extraction eval against golden fixtures (must pass before deploy)
+- `pnpm test:eval` — the extraction gate: prompt-law contract tests plus abstention flows through the injected-client seam (must pass before deploy)
+- `pnpm test:eval:live` — the paid layer: the real model against the fixture photographs; runs in deploy when `OPENAI_API_KEY` is present, and never from `pnpm test`
 - `pnpm typecheck` — tsc --noEmit
 - `pnpm deploy` — wrangler deploy via `ops/deploy.mjs`, which stamps the running worker with the git sha; only from main with tests green
 - `pnpm infra:r2` — apply the R2 lifecycle rules from `infra/*.json` and read them back
@@ -23,7 +24,7 @@ Keep these true in package.json; if you rename a script, update this file in the
 ## Architecture
 
 - `src/finance/` — THE ENGINE. Pure functions only: no fetch, no DB, no Date.now inside math. Every money figure a user ever sees is computed here and nowhere else.
-- `src/api/` — Hono routes, thin, call the engine. `security.ts` gates uploads; `reaper.ts` enforces retention.
+- `src/api/` — Hono routes, thin, call the engine. `security.ts` gates uploads. Photos are never written down, so retention needs no reaper; the `loanhank-quotes` lifecycle rule is the backstop.
 - `src/shared/schema.ts` — types and validation, single source of truth for field shapes.
 - `src/web/` — the one public page. No login. UI does ZERO arithmetic; it renders engine output.
 - `migrations/` — D1 SQL migrations, append-only. Never edit a shipped migration; add a new one.
