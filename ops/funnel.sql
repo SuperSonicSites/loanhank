@@ -11,6 +11,12 @@ SELECT
      different fixes. */
   (SELECT COUNT(*) FROM windowed WHERE event = 'decode_rejected')    AS decodes_rejected,
   (SELECT COUNT(*) FROM windowed WHERE event = 'decode_unpriceable') AS decodes_unpriceable,
+  /* The two failure modes that kill the funnel silently. A reader that
+     started failing every photo, or a mail provider refusing every send,
+     used to look like a soft ad day from here. */
+  (SELECT COUNT(*) FROM windowed WHERE event = 'extract_failed')     AS extracts_failed,
+  (SELECT COUNT(*) FROM windowed
+    WHERE event IN ('email_failed', 'day4_failed', 'day30_failed'))  AS emails_failed,
   (SELECT COUNT(*) FROM windowed WHERE event = 'email')              AS emails,
   (SELECT COUNT(*) FROM windowed WHERE event = 'interest_yes')       AS interest_yes,
   ROUND(100.0
