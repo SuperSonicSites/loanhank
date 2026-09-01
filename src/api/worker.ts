@@ -534,40 +534,91 @@ function sqlLiteral(value: unknown): string {
  * and it can be read with an eye, which matters at three in the morning when
  * the clever format turns out to need the tool that is also broken.
  */
+/** One page of rows per query, one multipart part per ~8 MB of SQL text. */
+const BACKUP_PAGE_ROWS = 5_000;
+const BACKUP_PART_BYTES = 8 * 1024 * 1024;
+/**
+ * Events older than this are deleted by the nightly cron, and only after that
+ * night's backup has been written, so every pruned row survives in at least
+ * ninety days of backups (spec.md section 5). decodes, emails, and benchmarks
+ * are never pruned: the pile is the company; events is its access log.
+ */
+const EVENTS_RETENTION_DAYS = 180;
+
 export async function backupToR2(env: Env, stamp: string): Promise<{ key: string; rows: number; bytes: number }> {
-  const parts: string[] = [
+  const key = `d1/loanhank-${stamp}.sql`;
+  // Multipart, so memory holds one page of rows and one part of text however
+  // large the pile grows. The old single-put built the whole dump in the
+  // isolate twice, which fails at exactly the traffic ad spend is buying.
+  // ponytail: single-pass multipart, no resume; if a nightly ever exceeds the
+  // cron budget, split per-table objects.
+  const upload = await env.BACKUPS.createMultipartUpload(key, {
+    httpMetadata: { contentType: 'application/sql' },
+  });
+  const uploadedParts: Awaited<ReturnType<typeof upload.uploadPart>>[] = [];
+  let buffer = [
     `-- LoanHank pile export ${stamp}`,
     '-- Restore: wrangler d1 execute <database> --file <this file>',
     '-- Schema is NOT included. Apply migrations first, then replay this.',
     'PRAGMA defer_foreign_keys = true;',
-  ];
+    '',
+  ].join(String.fromCharCode(10));
+  let bytes = 0;
   let rows = 0;
 
-  for (const table of BACKUP_TABLES) {
-    const result = await env.DB.prepare(`SELECT * FROM ${table}`).all<Record<string, unknown>>();
-    if (result.results.length === 0) {
-      parts.push(`-- ${table}: empty`);
-      continue;
+  const flushPart = async () => {
+    uploadedParts.push(await upload.uploadPart(uploadedParts.length + 1, buffer));
+    bytes += buffer.length;
+    buffer = '';
+  };
+
+  try {
+    for (const table of BACKUP_TABLES) {
+      // Keyset pagination on rowid: stable however many rows land mid-backup.
+      let cursor = -9_007_199_254_740_991;
+      let first = true;
+      for (;;) {
+        const page = await env.DB.prepare(
+          `SELECT rowid AS __rowid, * FROM ${table} WHERE rowid > ? ORDER BY rowid LIMIT ${BACKUP_PAGE_ROWS}`,
+        ).bind(cursor).all<Record<string, unknown>>();
+        if (page.results.length === 0) {
+          if (first) buffer += `-- ${table}: empty${String.fromCharCode(10)}`;
+          break;
+        }
+        const columns = Object.keys(page.results[0] as Record<string, unknown>)
+          .filter((column) => column !== '__rowid');
+        if (first) {
+          buffer += `DELETE FROM ${table};${String.fromCharCode(10)}`;
+          first = false;
+        }
+        for (const row of page.results) {
+          const values = columns.map((column) => sqlLiteral(row[column])).join(', ');
+          buffer += `INSERT INTO ${table} (${columns.join(', ')}) VALUES (${values});${String.fromCharCode(10)}`;
+          rows += 1;
+          if (buffer.length >= BACKUP_PART_BYTES) await flushPart();
+        }
+        cursor = Number(page.results[page.results.length - 1]?.__rowid);
+      }
     }
-    const columns = Object.keys(result.results[0] as Record<string, unknown>);
-    parts.push(`DELETE FROM ${table};`);
-    for (const row of result.results) {
-      const values = columns.map((column) => sqlLiteral(row[column])).join(', ');
-      parts.push(`INSERT INTO ${table} (${columns.join(', ')}) VALUES (${values});`);
-      rows += 1;
-    }
+    if (buffer.length > 0) await flushPart();
+    await upload.complete(uploadedParts);
+  } catch (error) {
+    // Leave nothing half-written, and prune nothing: retention only runs
+    // behind a landed backup.
+    await upload.abort();
+    throw error;
   }
 
-  const key = `d1/loanhank-${stamp}.sql`;
-  const dump = parts.join(String.fromCharCode(10));
-  await env.BACKUPS.put(key, dump, { httpMetadata: { contentType: 'application/sql' } });
+  const pruned = await env.DB.prepare(
+    `DELETE FROM events WHERE ts < datetime('now', '-${EVENTS_RETENTION_DAYS} days')`,
+  ).run();
 
   // A row, not just a log line. console.log is invisible to the morning ritual,
   // and a cron that quietly stopped looks exactly like one that ran. This is
   // what lets ops/funnel.sql print days since the last successful backup, so a
   // dead cron shows up within a day instead of on the day it is needed.
-  await recordEvent(env, 'backup_completed', null, { key, rows, bytes: dump.length });
-  return { key, rows, bytes: dump.length };
+  await recordEvent(env, 'backup_completed', null, { key, rows, bytes, pruned: pruned.meta.changes });
+  return { key, rows, bytes };
 }
 
 

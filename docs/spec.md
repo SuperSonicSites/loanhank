@@ -223,7 +223,7 @@ Stamp law is a table constraint, not a convention: `CHECK (verdict = 'none' OR (
 
 The band columns come in pairs: the label is what the farmer reads, the bounds are what the matcher compares. `rate_kind` exists because a fixed dealer promo compared against a variable benchmark is a wrong comparison, not a close one.
 
-`events` — `id`, `event`, `decode_id` nullable, `ts`, `meta_json`. Event types include `decode`, `email`, `interest_yes`.
+`events` — `id`, `event`, `decode_id` nullable, `ts`, `meta_json`. Event types include `decode`, `email`, `interest_yes`. Events older than 180 days are deleted by the nightly backup cron, and only after that night's backup has been written to R2, so every pruned row survives in at least ninety days of backups; decodes, emails, and benchmarks are never pruned (retention added 2026-09-01, because a row per page view with no ceiling breaks the backup at exactly the traffic ad spend buys).
 
 Migrations are append-only. Never edit a shipped migration; add a new one.
 
