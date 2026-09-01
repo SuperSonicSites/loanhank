@@ -597,6 +597,7 @@ export interface FormValues {
   paymentCount: string;
   payment: string;
   paymentFrequency: string;
+  balloon: string;
 }
 
 const EMPTY_FORM: FormValues = {
@@ -605,6 +606,7 @@ const EMPTY_FORM: FormValues = {
   paymentCount: '',
   payment: '',
   paymentFrequency: 'monthly',
+  balloon: '',
 };
 
 const FREQUENCIES: Array<[string, string]> = [
@@ -678,6 +680,11 @@ function typedForm(
     <div class="field">
       <label for="paymentCount">How many payments</label>
       <input type="text" id="paymentCount" name="paymentCount" inputmode="numeric" value="${escapeHtml(values.paymentCount)}" required>
+    </div>
+    <div class="field">
+      <label for="balloon">Balloon at the end</label>
+      <input type="text" id="balloon" name="balloon" inputmode="decimal" value="${escapeHtml(values.balloon)}">
+      <p class="note">One big payment due after the regular ones. Leave it empty if there is none.</p>
     </div>
     <input type="hidden" name="standalone" value="">
     <input type="hidden" name="entry" value="${entry}">

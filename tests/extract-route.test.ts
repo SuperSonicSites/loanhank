@@ -133,7 +133,7 @@ async function decodeHarness() {
     const row = db.prepare("SELECT meta_json FROM events WHERE event = 'decode'").get() as { meta_json: string };
     return JSON.parse(row.meta_json) as Record<string, unknown>;
   };
-  return { post, decodeMeta };
+  return { db, post, decodeMeta };
 }
 
 const QUICK = {
@@ -171,6 +171,27 @@ describe('the decode shows the farmer the number', () => {
     const body = await response.text();
     expect(body).not.toMatch(RATE_RENDERED);
     expect(body).not.toContain('class="headline-rate">');
+  });
+});
+
+describe('a balloon rides the quick path whole', () => {
+  // spec.md 2.2: balloon is a ledger field, and the quick path asks for it too
+  // because a balloon deal priced without its balloon is a confidently wrong
+  // number, the one fatal bug class.
+  it('prices the balloon, stores it, and shows it on the ticket', async () => {
+    const { db, post } = await decodeHarness();
+    const response = await post({ ...QUICK, balloon: '12,000', entry: 'typed' });
+    expect(response.status).toBe(200);
+    const body = await response.text();
+    expect(body).toContain('Balloon at the end');
+    const row = db.prepare('SELECT balloon_cents FROM decodes').get() as { balloon_cents: number };
+    expect(row.balloon_cents).toBe(1_200_000);
+  });
+
+  it('shows no balloon line when there is none', async () => {
+    const { post } = await decodeHarness();
+    const response = await post({ ...QUICK, entry: 'typed' });
+    expect(await response.text()).not.toContain('Balloon at the end');
   });
 });
 

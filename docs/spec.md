@@ -73,7 +73,7 @@ Formally: the periodic IRR of the DIFFERENCE between the all-in cash-purchase ca
 Fields: cash price · finance price · cash discount/rebate · trade allowance · trade payoff (negative equity) · down payment/due at signing · taxes (per-alternative capable) · delivery/setup · mandatory finance-only fees · amount financed if stated · payment amount · **payment frequency (monthly/quarterly/semiannual/annual — ag pays annual, this is not optional)** · payment count · balloon.
 
 **Reconciliation gate:** if the ledger and scheduled payments don't reconcile, no verdict. Say:
-> "We found a difference between the quoted total and scheduled payments. A trade, down payment, tax, fee, or add-on may be missing. Confirm it before we rate this deal."
+> "We found a difference between the quoted total and scheduled payments. A trade, down payment, tax, fee, balloon, or add-on may be missing. Confirm it before we rate this deal."
 
 An unexplained gap between `payment × periods` and the financed ledger = an **unexplained amount** flag. Never call it a junk fee until the farmer confirms what it is. Confirmed ones feed the junk-fee index honestly.
 

@@ -95,6 +95,14 @@ describe('Hank voice holds on every page', () => {
   });
 });
 
+describe('the typed path asks the whole deal shape', () => {
+  it('offers the balloon box', () => {
+    // A balloon deal typed without its balloon prices confidently wrong,
+    // which is the fatal bug class. The box is optional; empty means none.
+    expect(renderForm(undefined, [], { turnstileSiteKey: '' })).toContain('name="balloon"');
+  });
+});
+
 describe('privacy says what the machinery actually does', () => {
   const html = prose(renderPrivacy());
 

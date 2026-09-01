@@ -447,6 +447,8 @@ export const quickPathFormSchema = z.object({
   }),
   payment: moneyCentsSchema,
   paymentFrequency: regularPaymentFrequencySchema,
+  /** One large final payment after the regular ones. Empty means none. */
+  balloon: optionalMoneyCentsSchema,
 });
 
 export type QuickPathForm = z.infer<typeof quickPathFormSchema>;
@@ -688,6 +690,7 @@ export const ledgerFormSchema = z.object({
   downPayment: ledgerMoney,
   tradeAllowance: ledgerMoney,
   tradePayoff: ledgerMoney,
+  balloon: ledgerMoney,
   deliverySetup: ledgerMoney,
   taxCash: ledgerMoney,
   taxFinance: ledgerMoney,

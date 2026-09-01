@@ -104,6 +104,8 @@ All money is integer cents. A price printed as $84,500 is 8450000. A rate printe
 
 cash_discount means a discount offered for paying cash instead of taking the financing, however the paper labels it: cash price difference, cash rebate, finance rebate forfeited, or a lower cash price shown beside the finance price. If the paper shows only one price and no such alternative, return null, not zero.
 
+balloon means one large final payment scheduled after the regular payments, however the paper labels it: balloon, residual, buyout, or final payment. Return null if none is printed.
+
 payment_count is how many payments are scheduled. payment_frequency is how often they fall. Agricultural paper is frequently annual or semiannual, so do not assume monthly.
 
 warnings may contain only the schema's warning codes, never free text.`;

@@ -35,6 +35,7 @@ describe('quickPathFormSchema', () => {
       paymentCount: '60',
       payment: '1408.33',
       paymentFrequency: 'monthly',
+      balloon: '',
     });
     expect(parsed).toEqual({
       quotedPrice: 8_450_000,
@@ -42,15 +43,24 @@ describe('quickPathFormSchema', () => {
       paymentCount: 60,
       payment: 140_833,
       paymentFrequency: 'monthly',
+      balloon: 0,
     });
   });
 
   it('treats an empty cash discount as none offered', () => {
     const parsed = quickPathFormSchema.parse({
       quotedPrice: '84500', cashDiscount: '', paymentCount: '60',
-      payment: '1408.33', paymentFrequency: 'monthly',
+      payment: '1408.33', paymentFrequency: 'monthly', balloon: '',
     });
     expect(parsed.cashDiscount).toBe(0);
+  });
+
+  it('reads a balloon into cents and treats an empty box as none', () => {
+    const withBalloon = quickPathFormSchema.parse({
+      quotedPrice: '84500', cashDiscount: '', paymentCount: '60',
+      payment: '1408.33', paymentFrequency: 'monthly', balloon: '12,000.00',
+    });
+    expect(withBalloon.balloon).toBe(1_200_000);
   });
 
   it('rejects a blank price instead of treating it as zero', () => {

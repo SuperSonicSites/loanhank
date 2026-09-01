@@ -238,6 +238,7 @@ function confirmRows(extraction: QuoteExtraction): ConfirmRow[] {
     money('downPayment', 'Due at signing', extraction.down_payment),
     money('tradeAllowance', 'Trade allowance', extraction.trade_allowance),
     money('tradePayoff', 'Still owed on the trade', extraction.trade_payoff),
+    money('balloon', 'Balloon at the end', extraction.balloon, 'One big payment due after the regular ones. Leave it empty if there is none.'),
     money('deliverySetup', 'Delivery and setup', extraction.delivery_setup),
     money('financeOnlyFee', 'Fees you only pay if you finance', { value_cents: null, confidence: 0 }, 'Doc, origination, or required insurance. Leave empty if there are none.'),
     // Read silently, never required. The expiry drives the only honest
@@ -287,8 +288,8 @@ const WARNING_COPY: Record<string, string> = {
  */
 const CONFIRMABLE_FIELDS = new Set([
   'quotedPrice', 'cashDiscount', 'payment', 'paymentCount', 'paymentFrequency',
-  'statedRate', 'downPayment', 'tradeAllowance', 'tradePayoff', 'deliverySetup',
-  'financeOnlyFee', 'quoteDate', 'quoteExpiryDate',
+  'statedRate', 'downPayment', 'tradeAllowance', 'tradePayoff', 'balloon',
+  'deliverySetup', 'financeOnlyFee', 'quoteDate', 'quoteExpiryDate',
 ]);
 
 /**
@@ -892,6 +893,7 @@ app.post('/decode', async (c) => {
     paymentCount: String(body.paymentCount ?? ''),
     payment: String(body.payment ?? ''),
     paymentFrequency: String(body.paymentFrequency ?? 'monthly'),
+    balloon: String(body.balloon ?? ''),
   };
 
   // Shape-checked before it is ever echoed or sent; a tag that is not exactly
@@ -912,6 +914,7 @@ app.post('/decode', async (c) => {
     paymentAmountCents: form.payment,
     paymentCount: form.paymentCount,
     paymentFrequency: form.paymentFrequency,
+    balloonCents: form.balloon,
   });
 
   if (result.promoPriceRateBps === null) {
@@ -939,9 +942,9 @@ app.post('/decode', async (c) => {
     `INSERT INTO decodes (
        id, ts, quarter,
        finance_price_cents, cash_discount_cents, cash_price_cents,
-       payment_amount_cents, payment_frequency, payment_count,
+       payment_amount_cents, payment_frequency, payment_count, balloon_cents,
        promo_price_rate_bps, reconciled, assumptions_json, verdict
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'none')`,
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'none')`,
   )
     .bind(
       decodeId,
@@ -953,6 +956,8 @@ app.post('/decode', async (c) => {
       form.payment,
       form.paymentFrequency,
       form.paymentCount,
+      // Asked on the form, so an empty box is an answer: zero, not null.
+      form.balloon,
       result.promoPriceRateBps,
       JSON.stringify(result.assumptions),
     )
@@ -990,6 +995,7 @@ app.post('/decode', async (c) => {
         { label: 'Cash discount', amount: `− ${formatCurrency(form.cashDiscount)}` },
         { label: 'Cash price today', amount: formatCurrency(result.cashPriceCents) },
         { label: 'Total of payments', amount: formatCurrency(result.totalOfPaymentsCents) },
+        ...(form.balloon > 0 ? [{ label: 'Balloon at the end', amount: formatCurrency(form.balloon) }] : []),
         { label: 'What financing costs', amount: formatCurrency(cost) },
       ],
     }),
@@ -1115,6 +1121,7 @@ async function decodeFullLedger(c: {
     downPayment: String(body.downPayment ?? ''),
     tradeAllowance: String(body.tradeAllowance ?? ''),
     tradePayoff: String(body.tradePayoff ?? ''),
+    balloon: String(body.balloon ?? ''),
     deliverySetup: String(body.deliverySetup ?? ''),
     taxCash: String(body.taxCash ?? ''),
     taxFinance: String(body.taxFinance ?? ''),
@@ -1170,8 +1177,7 @@ async function decodeFullLedger(c: {
     paymentCount: form.paymentCount,
     paymentFrequency: form.paymentFrequency,
     statedRateBps: form.statedRate,
-    // The form does not carry a balloon yet; zero until the ledger form does.
-    balloonCents: 0,
+    balloonCents: form.balloon,
     country: form.country,
     fees,
   };
@@ -1249,22 +1255,25 @@ async function decodeFullLedger(c: {
        finance_price_cents, cash_discount_cents, cash_price_cents,
        down_payment_cents, trade_allowance_cents, trade_payoff_cents,
        delivery_setup_cents, tax_cash_cents, tax_finance_cents,
-       amount_financed_cents, payment_amount_cents, payment_frequency, payment_count,
+       amount_financed_cents, payment_amount_cents, payment_frequency, payment_count, balloon_cents,
        term_months, stated_rate_bps, fees_json,
-       real_rate_all_in_bps, reconciled, assumptions_json, verdict, verdict_ref_id,
+       real_rate_all_in_bps, reconciled, rate_convention, assumptions_json, verdict, verdict_ref_id,
        benchmark_at_ts, delta_vs_benchmark_bps,
        country, currency, province_or_state, out_of_bounds,
        quote_date, quote_expiry_date, launched_standalone,
        price_band, term_band, referrer, brand
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).bind(
     decodeId, ts, quarterOf(ts),
     form.quotedPrice, form.cashDiscount, decoded.totals.cashOutlayCents,
     form.downPayment, form.tradeAllowance, form.tradePayoff,
     form.deliverySetup, form.taxCash, form.taxFinance,
-    decoded.totals.amountFinancedCents, form.payment, form.paymentFrequency, form.paymentCount,
+    decoded.totals.amountFinancedCents, form.payment, form.paymentFrequency, form.paymentCount, form.balloon,
     termMonths, form.statedRate, JSON.stringify(fees),
     decoded.realRateAllInBps, decoded.reconciliation.reconciled ? 1 : 0,
+    // The receipt for reconciled = 1: which lawful compounding reading held.
+    // Null when nothing reconciled; the best-attempt reading is not a claim.
+    decoded.reconciliation.reconciled ? decoded.reconciliation.convention : null,
     verdict.verdict, verdict.verdict === 'none' ? null : (benchmark as BenchmarkRow).id,
     benchmark === null ? null : benchmark.asOfDate,
     verdict.deltaBps,
@@ -1312,6 +1321,7 @@ async function decodeFullLedger(c: {
     paymentCount: form.paymentCount,
     paymentFrequency: form.paymentFrequency,
     benchmarkRateBps: benchmark.rateBps,
+    balloonCents: form.balloon,
   });
 
   const rateText = decoded.realRateAllInBps === null ? 'no rate yet' : formatRate(decoded.realRateAllInBps);
@@ -1346,6 +1356,7 @@ async function decodeFullLedger(c: {
       { label: 'Cash price today', amount: formatCurrency(decoded.totals.cashOutlayCents) },
       { label: 'Amount financed', amount: formatCurrency(decoded.totals.amountFinancedCents) },
       { label: 'Total of payments', amount: formatCurrency(decoded.totalOfPaymentsCents) },
+      ...(form.balloon > 0 ? [{ label: 'Balloon at the end', amount: formatCurrency(form.balloon) }] : []),
       { label: 'What financing costs', amount: formatCurrency(decoded.costVersusCashCents) },
     ],
   }));
@@ -1361,7 +1372,7 @@ function missingForVerdict(reason: string | null, differenceCents: number, count
   if (reason === 'unreconciled_ledger') {
     return [
       `The quoted total and the scheduled payments differ by ${formatCurrency(differenceCents)} a payment. `
-      + 'A trade, down payment, tax, fee, or add-on may be missing. Confirm it before we rate this deal.',
+      + 'A trade, down payment, tax, fee, balloon, or add-on may be missing. Confirm it before we rate this deal.',
     ];
   }
   if (reason === 'no_matched_benchmark') {
