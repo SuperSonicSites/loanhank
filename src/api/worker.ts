@@ -25,7 +25,7 @@ import {
   renderVerdictTicket, setFooterPostalAddress,
   type ConfirmRow, type FormValues,
 } from '../web/page.js';
-import { assertUploadAllowed, MAX_PHOTOS_PER_DECODE, PublicApiError } from './security.js';
+import { assertUploadBytes, MAX_PHOTOS_PER_DECODE, MAX_TOTAL_UPLOAD_BYTES, PublicApiError } from './security.js';
 import { OpenAIQuoteExtractor } from './extractor.js';
 import { renderTeardownPdf, type TeardownLine } from './teardown-pdf.js';
 import { FOLLOWUP_TEXT_VERSION } from '../web/page.js';
@@ -1052,17 +1052,29 @@ app.post('/extract', async (c) => {
   }
 
   // The per-image size law is unchanged: each photo passes the same guard one
-  // always did, and one oversized page refuses the lot.
+  // always did, and one oversized page refuses the lot. The summed cap is the
+  // isolate's law: every page is buffered and base64-doubled in memory, so
+  // the decode is refused before buffering past the line, not after the OOM.
   const pages: Array<{ dataUrl: string; contentType: string }> = [];
+  let totalBytes = 0;
   for (const file of files) {
     const bytes = new Uint8Array(await file.arrayBuffer());
+    totalBytes += bytes.byteLength;
+    if (totalBytes > MAX_TOTAL_UPLOAD_BYTES) {
+      c.executionCtx.waitUntil(recordEvent(c.env, 'extract_rejected', null, { reason: 'total_too_large' }));
+      return fail('Those photos add up to more than we can take in one upload. Send fewer pages, or type the numbers.', 413);
+    }
     try {
-      assertUploadAllowed(file.type, bytes.byteLength);
+      // Type, size, and the magic bytes: a file is what its first bytes say
+      // it is, not what the browser labeled it.
+      assertUploadBytes(file.type, bytes, bytes.byteLength);
     } catch (error) {
       const message = error instanceof PublicApiError
         ? 'One of those files is either too large or not a photo we can read. Send JPGs, PNGs, or PDFs under 20 MB each.'
         : 'We could not read one of those files.';
-      c.executionCtx.waitUntil(recordEvent(c.env, 'extract_rejected', null, { reason: 'upload_guard' }));
+      c.executionCtx.waitUntil(recordEvent(c.env, 'extract_rejected', null, {
+        reason: error instanceof PublicApiError ? error.code : 'unreadable',
+      }));
       return fail(message, error instanceof PublicApiError && error.status === 413 ? 413 : 422);
     }
     pages.push({ dataUrl: `data:${file.type};base64,${Buffer.from(bytes).toString('base64')}`, contentType: file.type });

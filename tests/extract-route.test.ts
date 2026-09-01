@@ -76,6 +76,50 @@ describe('the four-image ceiling', () => {
   });
 });
 
+describe('the upload ceilings', () => {
+  const bigJpeg = (name: string, sizeBytes: number): File => {
+    const bytes = new Uint8Array(sizeBytes);
+    bytes.set([0xff, 0xd8, 0xff]);
+    return new File([bytes], name, { type: 'image/jpeg' });
+  };
+
+  it('refuses photos that together top the total cap with 413', async () => {
+    // Four files each under the per-file law, 28 MB summed. Buffered and
+    // base64-doubled that is more than a 128 MB isolate survives, so the cap
+    // is on the decode, not just the file.
+    const { post, restore } = await harness(true);
+    try {
+      const form = new FormData();
+      for (let index = 0; index < 4; index += 1) form.append('photo', bigJpeg(`page-${index + 1}.jpg`, 7 * 1024 * 1024));
+      form.append('cf-turnstile-response', 'token');
+      const response = await post(form);
+      expect(response.status).toBe(413);
+      const body = await response.text();
+      expect(body).toContain('Those photos add up to more than we can take in one upload.');
+      expect(body).toContain('name="quotedPrice"');
+      expect(body).toContain('value="recovery"');
+    } finally {
+      restore();
+    }
+  });
+
+  it('refuses a file whose bytes are not the type it claims', async () => {
+    const { post, restore } = await harness(true);
+    try {
+      const form = new FormData();
+      form.append('photo', new File([new TextEncoder().encode('GIF89a-not-a-jpeg')], 'sneaky.jpg', { type: 'image/jpeg' }));
+      form.append('cf-turnstile-response', 'token');
+      const response = await post(form);
+      expect(response.status).toBe(422);
+      const body = await response.text();
+      expect(body).toContain('One of those files is either too large or not a photo we can read.');
+      expect(body).toContain('value="recovery"');
+    } finally {
+      restore();
+    }
+  });
+});
+
 describe('no farmer meets a dead end on the photo path', () => {
   it('renders the typed fields beside a turnstile refusal', async () => {
     const { post, restore } = await harness(false);

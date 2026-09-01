@@ -7,6 +7,13 @@ import { calculatePaymentCents, periodsPerYear, projectCurrentLoan } from '../fi
 
 export const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024;
 /**
+ * All pages of one decode, summed. Every page is buffered and base64-encoded
+ * in the same isolate, which roughly doubles it in memory, so four 20 MB
+ * pages would take the worker past what 128 MB survives. The route refuses
+ * the decode before buffering past this line.
+ */
+export const MAX_TOTAL_UPLOAD_BYTES = 25 * 1024 * 1024;
+/**
  * One decode reads up to four photos of the same paper, merged into one
  * extraction call. The per-image size law above is unchanged; this is the
  * ceiling on how many images one decode may carry, and breaching it is a 413.
