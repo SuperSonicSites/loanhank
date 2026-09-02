@@ -69,11 +69,24 @@ execFileSync(
 );
 
 // Then prove it. The stamp is only worth something if somebody reads it back:
-// the running worker must answer with the sha this script just shipped.
-const response = await fetch('https://www.loanhank.com/version', { headers: { 'cache-control': 'no-cache' } });
-const version = await response.text();
-if (!response.ok || !version.includes(stamp)) {
-  console.error(`deploy verification FAILED: /version answered ${response.status} ${version.slice(0, 200)}, expected ${stamp}`);
-  process.exit(1);
+// the running worker must answer with the sha this script just shipped. The
+// edge takes a few seconds to propagate a new version, so this polls for up
+// to two minutes before calling it a failure.
+let verified = false;
+let lastAnswer = '';
+for (let attempt = 0; attempt < 24 && !verified; attempt += 1) {
+  if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 5_000));
+  try {
+    const response = await fetch('https://www.loanhank.com/version', { headers: { 'cache-control': 'no-cache' } });
+    lastAnswer = `${response.status} ${(await response.text()).slice(0, 200)}`;
+    verified = response.ok && lastAnswer.includes(stamp);
+  } catch (error) {
+    lastAnswer = String(error);
+  }
 }
-console.log(`deploy verified: /version reports ${stamp}`);
+if (!verified) {
+  console.error(`deploy verification FAILED: /version answered ${lastAnswer}, expected ${stamp}`);
+  process.exitCode = 1;
+} else {
+  console.log(`deploy verified: /version reports ${stamp}`);
+}
