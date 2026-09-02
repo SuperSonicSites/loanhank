@@ -58,7 +58,11 @@
   // backups, which are the company.
   "r2_buckets": [
     { "binding": "QUOTES", "bucket_name": "loanhank-quotes" },
-    { "binding": "BACKUPS", "bucket_name": "loanhank-backups" }
+    { "binding": "BACKUPS", "bucket_name": "loanhank-backups" },
+    // Every rate card the worker ever writes points at its archived source
+    // page here (spec.md section 4, the snapshot rule). No expiry rule: a
+    // past verdict must stay reproducible after the source page changes.
+    { "binding": "SNAPSHOTS", "bucket_name": "loanhank-snapshots" }
   ],
 
   // Per-IP rate limit (spec.md Decision 7). Every decode writes a row into the
@@ -116,6 +120,11 @@
     // values, so measurement stays off until the token is set with
     // `wrangler secret put`. One thing to flip, and it is the one that is
     // genuinely a secret.
-    "META_DATASET_ID": "1770792024264156"
+    "META_DATASET_ID": "1770792024264156",
+    // Where the nightly ops digest goes: the numbers the morning ritual used
+    // to be asked for, pushed instead, with a loud subject line when one of
+    // them crosses a threshold. A var, not a secret, for the same reason as
+    // POSTAL_ADDRESS: it enforces a promise and belongs in review.
+    "OPS_EMAIL": "supersonicsites.master@gmail.com"
   }
 }

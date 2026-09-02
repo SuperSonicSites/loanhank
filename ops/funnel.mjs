@@ -19,7 +19,10 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const sqlPath = fileURLToPath(new URL('./funnel.sql', import.meta.url));
+// One runner, any query in ops/: `node ops/funnel.mjs corrections` runs
+// ops/corrections.sql the same way. Bare, it runs the funnel.
+const named = process.argv.find((arg) => !arg.startsWith('--') && /^[a-z-]+$/.test(arg) && arg !== 'node');
+const sqlPath = fileURLToPath(new URL(`./${named ?? 'funnel'}.sql`, import.meta.url));
 const query = readFileSync(sqlPath, 'utf8')
   .replace(/\/\*[\s\S]*?\*\//g, ' ')
   .replace(/\s+/g, ' ')

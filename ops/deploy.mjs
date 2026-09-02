@@ -53,8 +53,27 @@ if (!force) {
 }
 
 const stamp = dirty ? `${sha}-dirty` : sha;
+
+// Migrations first, always. Code that expects a column the database lacks is
+// a 500 on every decode, and the deploy is the one moment both move together.
+execFileSync(
+  process.execPath,
+  [wrangler, 'd1', 'migrations', 'apply', 'loanhank', '--remote'],
+  { stdio: 'inherit' },
+);
+
 execFileSync(
   process.execPath,
   [wrangler, 'deploy', '--var', `BUILD_SHA:${stamp}`],
   { stdio: 'inherit' },
 );
+
+// Then prove it. The stamp is only worth something if somebody reads it back:
+// the running worker must answer with the sha this script just shipped.
+const response = await fetch('https://www.loanhank.com/version', { headers: { 'cache-control': 'no-cache' } });
+const version = await response.text();
+if (!response.ok || !version.includes(stamp)) {
+  console.error(`deploy verification FAILED: /version answered ${response.status} ${version.slice(0, 200)}, expected ${stamp}`);
+  process.exit(1);
+}
+console.log(`deploy verified: /version reports ${stamp}`);

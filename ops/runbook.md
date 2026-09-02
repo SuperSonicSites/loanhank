@@ -51,7 +51,9 @@ Wall numbers to read it against are in spec.md §7.1. Round one is judged at cos
 
 ## Benchmarks
 
-AgDirect republishes monthly. Re-read the card, archive the page to `loanhank-snapshots`, and add a migration with the new rows. Never edit a shipped migration, and never change a rate in place: a past verdict has to stay checkable against what the card said on the day.
+AgDirect republishes monthly and the worker reads it itself: the daily 07:00 UTC cron fetches the page, and so does the first ledger decode after a card lapses (once an hour at most). A card that parses, passes the seed guards, and moves no cell more than 300 bps from the card it replaces is archived to `loanhank-snapshots` and appended to `benchmarks`; every outcome lands as a `benchmark_*` event and in the ops digest. Nothing is ever edited in place: a past verdict has to stay checkable against what the card said on the day.
+
+When the digest reports `benchmark_refused`, a person reads `benchmarks/agdirect/refused-<date>.html` in the snapshot bucket. Either the page was redesigned (fix the parser in `src/api/benchmarks.ts`, with the new page as a fixture) or the card genuinely jumped further than the guard allows (confirm it against the printed card, then add the rows as a migration the old way). Until then the verdict path abstains with `benchmark_lapsed`, which is the gate working.
 
 ## Infrastructure
 

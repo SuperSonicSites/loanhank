@@ -12,7 +12,9 @@
     "deploy": "node ops/deploy.mjs",
     "infra:r2": "wrangler r2 bucket lifecycle set loanhank-quotes --file infra/r2-lifecycle-quotes.json && wrangler r2 bucket lifecycle set loanhank-backups --file infra/r2-lifecycle-backups.json && wrangler r2 bucket lifecycle set loanhank-snapshots --file infra/r2-lifecycle-snapshots.json && pnpm infra:verify",
     "infra:verify": "wrangler r2 bucket lifecycle list loanhank-quotes && wrangler r2 bucket lifecycle list loanhank-backups && wrangler r2 bucket lifecycle list loanhank-snapshots",
-    "funnel": "node ops/funnel.mjs"
+    "funnel": "node ops/funnel.mjs",
+    "corrections": "node ops/funnel.mjs corrections",
+    "restore:drill": "node ops/restore-drill.mjs"
   },
   "dependencies": {
     "decimal.js": "10.6.0",

@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 import { app } from '../src/api/worker.js';
 import { migratedDatabase } from './helpers/d1-sqlite.js';
@@ -419,6 +420,85 @@ describe('the typed retry keeps what the farmer gave it', () => {
     const body = await response.text();
     expect(body).toContain('value="84500"');
     expect(body).toContain('do not add up to a deal we can price');
+  });
+});
+
+describe('a lapsed card heals itself on the first decode after month-end', () => {
+  // The seeded card lapsed 2026-08-31. The first ledger decode after that
+  // fetches the source, guards the new card, writes it, and stamps against
+  // it, so no month-end is a manual ritual and no farmer meets a lapsed
+  // card that the source has already replaced.
+  it('fetches, writes, and stamps in one request', async () => {
+    const { db, d1 } = await migratedDatabase();
+    const html = await readFile(new URL('./fixtures/agdirect-rates-2026-09.html', import.meta.url), 'utf8');
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (url: unknown) => {
+      if (String(url).includes('agdirect.com')) return new Response(html, { status: 200 });
+      throw new Error(`no network in tests: ${String(url)}`);
+    }) as never;
+    try {
+      const stored = new Map<string, string>();
+      const response = await app.fetch(
+        new Request('https://loanhank.test/decode', {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams(LEDGER).toString(),
+        }),
+        {
+          DB: d1,
+          SNAPSHOTS: { put: async (key: string, value: string) => { stored.set(key, value); } },
+          DECODE_LIMIT: { limit: async () => ({ success: true }) },
+          RATE_LIMIT_SALT: 'test-salt-16-chars-plus',
+        } as never,
+        { waitUntil: () => {}, passThroughOnException: () => {} } as never,
+      );
+      expect(response.status).toBe(200);
+      const body = await response.text();
+      expect(body).toContain('This deal checks out.');
+      expect(body).toContain('as of 2026-09-01');
+      const september = db.prepare("SELECT COUNT(*) AS n FROM benchmarks WHERE as_of_date = '2026-09-01'").get() as { n: number };
+      expect(september.n).toBe(32);
+      expect(stored.has('benchmarks/agdirect/2026-09-01.html')).toBe(true);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('abstains honestly when the source is down, and does not hammer it', async () => {
+    const { db, d1 } = await migratedDatabase();
+    const originalFetch = globalThis.fetch;
+    let fetches = 0;
+    globalThis.fetch = (async () => {
+      fetches += 1;
+      throw new Error('agdirect is down');
+    }) as never;
+    try {
+      const env = {
+        DB: d1,
+        SNAPSHOTS: { put: async () => {} },
+        DECODE_LIMIT: { limit: async () => ({ success: true }) },
+        RATE_LIMIT_SALT: 'test-salt-16-chars-plus',
+      } as never;
+      const post = () => app.fetch(
+        new Request('https://loanhank.test/decode', {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams(LEDGER).toString(),
+        }),
+        env,
+        { waitUntil: () => {}, passThroughOnException: () => {} } as never,
+      );
+      const first = await post();
+      expect(first.status).toBe(200);
+      expect(await first.text()).toContain('The published card we compare against lapsed');
+      await post();
+      // One fetch for two decodes: the second is inside the hour.
+      expect(fetches).toBe(1);
+      const unreachable = db.prepare("SELECT COUNT(*) AS n FROM events WHERE event = 'benchmark_unreachable'").get() as { n: number };
+      expect(unreachable.n).toBe(1);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });
 

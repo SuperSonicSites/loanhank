@@ -1,0 +1,19 @@
+# Dependencies update themselves, weekly, behind the same CI gate as everything
+# else. A pinned lockfile that nobody bumps is a pinned lockfile with a known
+# CVE in it eventually.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      all:
+        patterns: ["*"]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday

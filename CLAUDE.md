@@ -69,5 +69,5 @@ Keep these true in package.json; if you rename a script, update this file in the
 ## Gotchas
 
 - The engine supports Canadian semi-annual compounding (Interest Act s.6). Benchmarks are US-only v1. Don't strip the Canada math; it's tested and it's the expansion path.
-- The benchmark table is hand-entered quarterly in `migrations/` seed data; sources and dates live with the values. Only tier-1 published equipment rate cards can back a verdict (spec.md §4); Fed survey rates are context lines, never the comparison.
+- The benchmark table refreshes itself: `src/api/benchmarks.ts` fetches the AgDirect card daily (and on the first decode after a lapse), parses it, archives the page to `loanhank-snapshots`, and writes the new card only after it passes the seed guards plus a continuity check against the card it replaces; anything unexpected is refused and reported, never guessed. The seed in `migrations/` is the first card and the fallback; append only, never edit a shipped rate. Only tier-1 published equipment rate cards can back a verdict (spec.md §4); Fed survey rates are context lines, never the comparison.
 - The old app (x-ray repo) is the ancestor. Its portfolio/watch/alert modules are deliberately NOT here — do not port them without a docs change first.

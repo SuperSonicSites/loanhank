@@ -1,0 +1,37 @@
+# The paid eval, weekly. The real model against the synthetic photographs:
+# golden read to the cent, printed injection ignored, unreadable page
+# abstained. A model deprecation or a silent accuracy drift shows up here
+# before a farmer meets it.
+#
+# Needs the OPENAI_API_KEY repository secret. Without it the job says so and
+# passes, because a missing key is an owner setup step, not a regression.
+name: live-eval
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: run the live eval when a key is present
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if [ -z "$OPENAI_API_KEY" ]; then
+            echo "OPENAI_API_KEY is not set as a repository secret; the live eval did not run."
+            echo "Set it with: gh secret set OPENAI_API_KEY"
+            exit 0
+          fi
+          pnpm test:eval:live

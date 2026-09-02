@@ -1,0 +1,34 @@
+# The production heartbeat. Every six hours, a real decode against the live
+# worker, flagged synthetic so it never lands in the pile (spec.md 7.2). The
+# only other heartbeat was GET /version, which proves the worker is up and
+# nothing about whether it can price a deal.
+#
+# No secrets: it speaks to the public site as a farmer would. A failure here is
+# a farmer-visible outage, and GitHub emails the repo owner on a red run.
+name: probe
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+jobs:
+  decode:
+    runs-on: ubuntu-latest
+    steps:
+      - name: the worker answers with a build sha
+        run: |
+          body=$(curl -sS --fail --max-time 20 https://www.loanhank.com/version)
+          echo "$body"
+          echo "$body" | grep -Eq '"sha":"[0-9a-f]{7,}' || { echo "no build sha in /version"; exit 1; }
+
+      - name: a synthetic quick decode prices the golden deal
+        run: |
+          # The $84,500 quote with the $6,000 cash discount at the dealer's 0%
+          # over 60 months: the canonical example, which prices at 2.94%.
+          body=$(curl -sS --fail --max-time 30 \
+            -H 'x-loanhank-synthetic: 1' \
+            -H 'content-type: application/x-www-form-urlencoded' \
+            --data 'quotedPrice=84500&cashDiscount=6000&payment=1408.33&paymentFrequency=monthly&paymentCount=60&balloon=&entry=typed' \
+            https://www.loanhank.com/decode)
+          echo "$body" | grep -q 'class="headline-rate">2.94%' || { echo "the golden deal did not price at 2.94%"; echo "$body" | head -c 2000; exit 1; }

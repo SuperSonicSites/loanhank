@@ -22,6 +22,8 @@ export interface FakeD1 {
   // benchmark lookup does exactly that. An adapter that only worked after
   // bind() made a working route look like a 500, so it mirrors both shapes.
   prepare(sql: string): D1Like & { bind(...args: unknown[]): D1Like };
+  /** Real D1 runs a batch atomically; here it runs inside one transaction. */
+  batch(statements: D1Like[]): Promise<unknown[]>;
 }
 
 export async function migratedDatabase(): Promise<{ db: DatabaseSync; d1: FakeD1 }> {
@@ -61,6 +63,18 @@ export async function migratedDatabase(): Promise<{ db: DatabaseSync; d1: FakeD1
         ...bound(sql, []),
         bind: (...args: unknown[]) => bound(sql, args),
       };
+    },
+    async batch(statements: D1Like[]) {
+      db.exec('BEGIN');
+      try {
+        const results: unknown[] = [];
+        for (const statement of statements) results.push(await statement.run());
+        db.exec('COMMIT');
+        return results;
+      } catch (error) {
+        db.exec('ROLLBACK');
+        throw error;
+      }
     },
   };
   return { db, d1 };

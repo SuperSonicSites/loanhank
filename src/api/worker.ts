@@ -27,6 +27,7 @@ import {
 } from '../web/page.js';
 import { assertUploadBytes, MAX_PHOTOS_PER_DECODE, MAX_TOTAL_UPLOAD_BYTES, PublicApiError } from './security.js';
 import { ExtractionFailedError, OpenAIQuoteExtractor } from './extractor.js';
+import { refreshBenchmarks, refreshDue } from './benchmarks.js';
 import { renderTeardownPdf, type TeardownLine } from './teardown-pdf.js';
 import { FOLLOWUP_TEXT_VERSION } from '../web/page.js';
 import {
@@ -49,6 +50,7 @@ export interface Env {
   DB: D1Database;
   QUOTES: R2Bucket;
   BACKUPS: R2Bucket;
+  SNAPSHOTS: R2Bucket;
   DECODE_LIMIT: RateLimit;
 }
 
@@ -1333,6 +1335,35 @@ app.post('/extract', async (c) => {
   }));
 });
 
+/** Tier-1 rows of the newest card, split by the staleness gate. */
+async function currentBenchmarks(env: Env, today: string): Promise<{ current: BenchmarkRow[]; lapsed: boolean }> {
+  const rows = await env.DB.prepare(
+    `SELECT id, source, source_url, as_of_date, amount_band, amount_min_cents, amount_max_cents,
+            term_band, term_min_months, term_max_months, rate_bps, rate_kind, tier, country, valid_through
+       FROM benchmarks
+      WHERE tier = 1 AND as_of_date = (SELECT MAX(as_of_date) FROM benchmarks WHERE tier = 1)`,
+  ).all<Record<string, string | number | null>>();
+
+  const all: BenchmarkRow[] = rows.results.map((row) => ({
+    id: String(row.id),
+    source: String(row.source),
+    sourceUrl: String(row.source_url),
+    asOfDate: String(row.as_of_date),
+    amountBand: String(row.amount_band),
+    amountMinCents: Number(row.amount_min_cents),
+    amountMaxCents: row.amount_max_cents === null ? null : Number(row.amount_max_cents),
+    termBand: String(row.term_band),
+    termMinMonths: Number(row.term_min_months),
+    termMaxMonths: Number(row.term_max_months),
+    rateBps: Number(row.rate_bps),
+    rateKind: String(row.rate_kind) === 'variable' ? 'variable' : 'fixed',
+    tier: Number(row.tier),
+    country: String(row.country) === 'CA' ? 'CA' : 'US',
+    validThrough: row.valid_through === null ? null : String(row.valid_through),
+  }));
+  return benchmarksCurrentOn(all, today);
+}
+
 /** The verdict path: a complete ledger, a matched reference, and a stamp. */
 async function decodeFullLedger(c: {
   env: Env;
@@ -1433,39 +1464,20 @@ async function decodeFullLedger(c: {
     );
   }
 
-  // Tier-1 rows only, most recent card first. The engine picks the band.
-  const rows = await c.env.DB.prepare(
-    `SELECT id, source, source_url, as_of_date, amount_band, amount_min_cents, amount_max_cents,
-            term_band, term_min_months, term_max_months, rate_bps, rate_kind, tier, country, valid_through
-       FROM benchmarks
-      WHERE tier = 1 AND as_of_date = (SELECT MAX(as_of_date) FROM benchmarks WHERE tier = 1)`,
-  ).all<Record<string, string | number | null>>();
-
-  const allBenchmarks: BenchmarkRow[] = rows.results.map((row) => ({
-    id: String(row.id),
-    source: String(row.source),
-    sourceUrl: String(row.source_url),
-    asOfDate: String(row.as_of_date),
-    amountBand: String(row.amount_band),
-    amountMinCents: Number(row.amount_min_cents),
-    amountMaxCents: row.amount_max_cents === null ? null : Number(row.amount_max_cents),
-    termBand: String(row.term_band),
-    termMinMonths: Number(row.term_min_months),
-    termMaxMonths: Number(row.term_max_months),
-    rateBps: Number(row.rate_bps),
-    rateKind: String(row.rate_kind) === 'variable' ? 'variable' : 'fixed',
-    tier: Number(row.tier),
-    country: String(row.country) === 'CA' ? 'CA' : 'US',
-    validThrough: row.valid_through === null ? null : String(row.valid_through),
-  }));
-
   // The staleness gate (spec.md section 4): a card past its own printed
   // validity is not a benchmark, and the decode abstains rather than stamping
-  // against a rate nobody is offering.
-  const { current: benchmarks, lapsed: benchmarkLapsed } = benchmarksCurrentOn(
-    allBenchmarks,
-    new Date().toISOString().slice(0, 10),
-  );
+  // against a rate nobody is offering. But a lapsed card is also the one
+  // moment the card is worth fetching: the first farmer after month-end
+  // triggers the refresh, once an hour at most, and stamps against the new
+  // card if it passes the guards.
+  const today = new Date().toISOString().slice(0, 10);
+  let { current: benchmarks, lapsed: benchmarkLapsed } = await currentBenchmarks(c.env, today);
+  if (benchmarkLapsed && await refreshDue(c.env)) {
+    const refreshed = await refreshBenchmarks(c.env, today).catch(() => null);
+    if (refreshed?.outcome === 'refreshed') {
+      ({ current: benchmarks, lapsed: benchmarkLapsed } = await currentBenchmarks(c.env, today));
+    }
+  }
 
   const termMonths = Math.round(form.paymentCount * (12 / PERIODS_PER_YEAR[form.paymentFrequency]));
   const country = form.country;
@@ -1922,6 +1934,11 @@ export default {
         // an opt-in that would otherwise be a promise nobody keeps.
         {
           const today = new Date().toISOString().slice(0, 10);
+          // The rate card checks itself daily, so a new month's card is in
+          // the table before the first farmer of the month, not after.
+          ctx.waitUntil(refreshBenchmarks(env, today)
+            .then((r) => console.log(`cron benchmarks: ${JSON.stringify(r)}`))
+            .catch((error) => console.log(`cron benchmarks FAILED: ${String(error)}`)));
           ctx.waitUntil(sendDueReminders(env, today));
           ctx.waitUntil(sendDayFour(env, today)
             .then((r) => console.log(`cron day4: ${r.sent} sent`)));
