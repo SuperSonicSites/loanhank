@@ -58,6 +58,21 @@ describe('the labels parse into the seed’s own forms', () => {
   });
 });
 
+describe('the fixture carries the card and nothing else', () => {
+  // The page as saved carried AgDirect's own scripts and a public Google
+  // Maps key in a widget attribute, which tripped secret scanning the day it
+  // was committed. The parser reads the accordion buttons, the tables, and
+  // one sentence; everything else is stripped before the fixture is saved,
+  // and this is what keeps the next saved page as clean.
+  it('holds no scripts, styles, or key-shaped strings', async () => {
+    const html = await page();
+    expect(html).not.toMatch(/<script\b/i);
+    expect(html).not.toMatch(/<style\b/i);
+    expect(html).not.toMatch(/AIza[0-9A-Za-z_-]{30,}/);
+    expect(html).not.toMatch(/data-google-maps-key/);
+  });
+});
+
 describe('the AgDirect page parses into a card', () => {
   it('reads the September card whole', async () => {
     const card = parseAgDirectCard(await page());
