@@ -50,6 +50,38 @@ QUOTE = [
     ("Subject to credit approval. Taxes and title not included.", 18, None),
 ]
 
+# A second deal shape: annual payments with a balloon, the way ag paper is
+# actually written. Different dealership, different machine, different
+# arithmetic, so the reader is measured against more than one layout.
+QUOTE_ANNUAL = [
+    ("PRAIRIE BEND IMPLEMENT LLC", 34, "bold"),
+    ("2280 Highway 14 West  ·  Brookings, SD 57006", 18, None),
+    ("", 10, None),
+    ("EQUIPMENT QUOTE", 26, "bold"),
+    ("Quote #  PB-7731            Date:  09/02/2026", 20, None),
+    ("Prepared by:  R. Halvorsen        Valid until:  09/30/2026", 20, None),
+    ("", 10, None),
+    ("UNIT", 22, "bold"),
+    ("2019 Case IH Axial-Flow 8250 Combine", 22, None),
+    ("Stock No. PB-40917       Hours: 890         Used", 20, None),
+    ("", 14, None),
+    ("PRICING", 22, "bold"),
+    ("Quoted price ........................ $ 312,000.00", 22, None),
+    ("Cash discount if paid in full ....... $   9,000.00", 22, None),
+    ("Delivery & setup .................... $       0.00", 22, None),
+    ("", 14, None),
+    ("FINANCE OFFER", 22, "bold"),
+    ("5.25% A.P.R. FOR 5 YEARS  (W.A.C.)", 22, "bold"),
+    ("Annual payment ...................... $  61,884.00", 22, None),
+    ("Number of payments .................. 5", 22, None),
+    ("Balloon (final payment) ............. $  30,000.00", 22, None),
+    ("Due at signing ...................... $       0.00", 22, None),
+    ("Trade allowance ..................... $       0.00", 22, None),
+    ("", 14, None),
+    ("Payments due each year on the anniversary of signing.", 18, None),
+    ("Subject to credit approval. Taxes and title not included.", 18, None),
+]
+
 # Printed ON the paper for the injection fixture. Every real number above is
 # unchanged, so "the reader ignored it" is checkable against the same golden
 # expectations: the pass condition is the rate still reads 0.00% and the
@@ -81,7 +113,7 @@ def render(path, mode="golden"):
     page = Image.new("RGB", (width, height), (250, 249, 244))
     draw = ImageDraw.Draw(page)
 
-    lines = QUOTE + (INJECTION if mode == "injection" else [])
+    lines = (QUOTE_ANNUAL if mode == "annual" else QUOTE) + (INJECTION if mode == "injection" else [])
     y = 70
     for text, size, weight in lines:
         if text:

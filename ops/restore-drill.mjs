@@ -32,14 +32,23 @@ const scratch = `loanhank-restore-${Date.now()}`;
 const dir = mkdtempSync(join(tmpdir(), 'loanhank-restore-'));
 let created = false;
 try {
-  // 1. The newest dump.
-  const listed = JSON.parse(run(['r2', 'object', 'list', 'loanhank-backups', '--prefix', 'd1/', '--remote']) || '{}');
-  const objects = (listed.objects ?? listed ?? []).map((object) => object.key ?? object).filter((key) => /\.sql$/.test(key)).sort();
-  const newest = objects[objects.length - 1];
-  if (!newest) throw new Error('no dump found under d1/ in loanhank-backups');
-  console.log(`restoring ${newest}`);
+  // 1. The newest dump. wrangler cannot list objects, but the key is a date,
+  //    so walk back from today until one fetches; a week with no dump is
+  //    itself the finding.
   const dump = join(dir, 'restore.sql');
-  run(['r2', 'object', 'get', `loanhank-backups/${newest}`, '--file', dump, '--remote'], { stdio: 'inherit' });
+  let newest = null;
+  for (let back = 0; back < 7 && newest === null; back += 1) {
+    const day = new Date(Date.now() - back * 86_400_000).toISOString().slice(0, 10);
+    const key = `d1/loanhank-${day}.sql`;
+    try {
+      run(['r2', 'object', 'get', `loanhank-backups/${key}`, '--file', dump, '--remote'], { stdio: ['ignore', 'pipe', 'pipe'] });
+      newest = key;
+    } catch {
+      // not there; try the day before
+    }
+  }
+  if (newest === null) throw new Error('no nightly dump found for the last seven days in loanhank-backups');
+  console.log(`restoring ${newest}`);
 
   // 2. Somewhere to put it. Never the live database.
   run(['d1', 'create', scratch], { stdio: 'inherit' });

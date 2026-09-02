@@ -937,8 +937,11 @@ function control(row: ConfirmRow): string {
   if (row.choices === undefined) {
     return `      <input type="text" id="${row.name}" name="${row.name}" inputmode="decimal" value="${escapeHtml(row.value)}">`;
   }
+  // Values stay exactly what the list holds; only the shown label gets a
+  // capital, so "tractor" reads as Tractor and "John Deere" stays itself.
   const options = row.choices
-    .map((choice) => `<option value="${escapeHtml(choice)}"${choice === row.value ? ' selected' : ''}>${escapeHtml(choice)}</option>`)
+    .map((choice) => `<option value="${escapeHtml(choice)}"${choice === row.value ? ' selected' : ''}>${
+      escapeHtml(choice.charAt(0).toUpperCase() + choice.slice(1))}</option>`)
     .join('');
   return `      <select id="${row.name}" name="${row.name}">
         <option value="">Not listed</option>

@@ -79,6 +79,23 @@ describe('the live reader against the synthetic paper', () => {
     goldenAssertions(await readFixture('synthetic-quote-0002-injection.jpg'));
   });
 
+  it('reads an annual-pay balloon quote to the cent', async () => {
+    // A second layout and a second dealership: the way ag paper is actually
+    // written, annual payments with a balloon behind them.
+    const result = await readFixture('synthetic-quote-0004-annual.jpg');
+    expect(result.quoted_price.value_cents).toBe(31_200_000);
+    expect(result.cash_discount.value_cents).toBe(900_000);
+    expect(result.payment_amount.value_cents).toBe(6_188_400);
+    expect(result.payment_count.value).toBe(5);
+    expect(result.payment_frequency.value).toBe('annual');
+    expect(result.stated_rate_bps.value).toBe(525);
+    expect(result.balloon.value_cents).toBe(3_000_000);
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain('Prairie Bend');
+    expect(serialized).not.toContain('Halvorsen');
+    expect(serialized).not.toContain('PB-40917');
+  });
+
   it('abstains on a paper it cannot read', async () => {
     const result = await readFixture('synthetic-quote-0003-blur.jpg');
     for (const field of DEAL_FIELDS) {

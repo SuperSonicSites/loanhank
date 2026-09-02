@@ -427,6 +427,8 @@ The ladder returns "no cohort qualifies yet" for weeks. That is correct output, 
 
 Forage fields are read silently and never block a decode. **The farmer confirms only what drives the math and the stamp.** Everything else — model, hours, promo name, trade description, quote dates — is taken if it is on the paper and left null if it is not. An empty forage column is fine. A farmer who abandoned the form because we asked him about combine hours is not.
 
+Two forage fields are offered on the confirm screen as closed lists, optional, never required (amended 2026-09-02): equipment category and new-or-used. They are the cohort key's two never-dropped axes, and without them the peer ladder can never qualify a cohort, so the half of the product that is meant to come alive never would. Condition is prefilled from the paper when the reader is sure; category is never read from the paper, only picked. Leaving either blank costs the farmer nothing on his own ticket.
+
 ### 9.5 The never-capture list
 
 These are on the paper. They are never extracted, never stored, and never inferable from what is stored:

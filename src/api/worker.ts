@@ -16,7 +16,7 @@ import {
 } from '../finance/index.js';
 import { hashAccessKey } from './security.js';
 import {
-  centsToInput, confirmableField, confirmFrequency, emailGateSchema, EQUIPMENT_BRANDS, ledgerFormSchema,
+  centsToInput, confirmableField, confirmFrequency, emailGateSchema, EQUIPMENT_BRANDS, EQUIPMENT_CATEGORIES, ledgerFormSchema,
   normalizeBrand, quickPathFormSchema,
   type ConfirmableField, type QuoteExtraction,
 } from '../shared/schema.js';
@@ -284,6 +284,10 @@ const CONFIRM_FIELDS: Array<{ name: string; label: string; hint?: string; choice
   // Offered as a list, never a free box. A name that is not a manufacturer
   // has no path in (spec.md §9.5).
   { name: 'brand', label: 'Make', hint: 'Pick the maker of the machine. Leave it blank if it is not on the list.', choices: EQUIPMENT_BRANDS },
+  // The cohort key's two never-dropped axes (spec.md 9.4). Closed lists,
+  // optional: without them the peer ladder can never qualify a cohort.
+  { name: 'newOrUsed', label: 'New or used', choices: ['new', 'used'] },
+  { name: 'equipCategory', label: 'What kind of machine', hint: 'Pick the closest. It only feeds the peer numbers, never the verdict.', choices: EQUIPMENT_CATEGORIES },
   // Read silently, never required. The expiry drives the only honest deadline
   // this product has, and the quote date keeps stale paper out of a
   // current-quarter median (spec.md 9.4: forage never blocks a decode).
@@ -329,6 +333,15 @@ export function confirmRows(extraction: QuoteExtraction): ConfirmRow[] {
       value: normalizeBrand(extraction.brand.value) ?? '',
       choices: [...EQUIPMENT_BRANDS],
       hint: CONFIRM_FIELD_META.get('brand')?.hint as string,
+    },
+    { ...text('newOrUsed', extraction.new_or_used), choices: ['new', 'used'] },
+    {
+      name: 'equipCategory',
+      label: label('equipCategory'),
+      state: 'unreadable' as const,
+      value: '',
+      choices: [...EQUIPMENT_CATEGORIES],
+      hint: CONFIRM_FIELD_META.get('equipCategory')?.hint as string,
     },
     text('quoteDate', extraction.quote_date),
     text('quoteExpiryDate', extraction.quote_expiry_date),
@@ -382,7 +395,7 @@ const WARNING_COPY: Record<string, string> = {
 const CONFIRMABLE_FIELDS = new Set([
   'quotedPrice', 'cashDiscount', 'payment', 'paymentCount', 'paymentFrequency',
   'statedRate', 'downPayment', 'tradeAllowance', 'tradePayoff', 'balloon',
-  'deliverySetup', 'financeOnlyFee', 'quoteDate', 'quoteExpiryDate',
+  'deliverySetup', 'financeOnlyFee', 'quoteDate', 'quoteExpiryDate', 'newOrUsed',
 ]);
 
 // The value shapes (spec.md 9.5, closed by value as well as by key). The
@@ -398,6 +411,7 @@ const FREQUENCY_VALUES = new Set(['', 'monthly', 'quarterly', 'semiannual', 'ann
 function valueShapeHolds(field: string, value: string): boolean {
   if (field === 'quoteDate' || field === 'quoteExpiryDate') return DATE_VALUE.test(value);
   if (field === 'paymentFrequency') return FREQUENCY_VALUES.has(value);
+  if (field === 'newOrUsed') return value === '' || value === 'new' || value === 'used';
   return NUMERIC_VALUE.test(value);
 }
 
@@ -695,6 +709,68 @@ export async function backupToR2(env: Env, stamp: string): Promise<{ key: string
 
 
 /**
+ * The nightly ops digest: the numbers the morning ritual used to be asked
+ * for, pushed instead. The subject line says whether anything needs a look,
+ * so the quiet nights cost one glance and the loud ones cannot be missed.
+ * Internal mail to the owner, not commercial, so no unsubscribe footer.
+ */
+export async function sendOpsDigest(
+  env: Env,
+  today: string,
+  transport?: MailTransport,
+): Promise<{ sent: boolean; flags: string[] }> {
+  const to = typeof env.OPS_EMAIL === 'string' ? env.OPS_EMAIL : '';
+  if (to === '' || emailSendable(env) === null) return { sent: false, flags: [] };
+
+  const row = await env.DB.prepare(
+    `SELECT
+       (SELECT COUNT(*) FROM events WHERE event = 'page_view' AND synthetic = 0 AND ts >= datetime('now', '-7 days')) AS page_views,
+       (SELECT COUNT(*) FROM events WHERE event = 'decode' AND synthetic = 0 AND ts >= datetime('now', '-7 days')) AS decodes,
+       (SELECT COUNT(*) FROM events WHERE event = 'extract' AND synthetic = 0 AND ts >= datetime('now', '-7 days')) AS extracts,
+       (SELECT COUNT(*) FROM events WHERE event = 'extract_failed' AND synthetic = 0 AND ts >= datetime('now', '-7 days')) AS extracts_failed,
+       (SELECT COUNT(*) FROM events WHERE event IN ('email_failed', 'day4_failed', 'day30_failed') AND synthetic = 0 AND ts >= datetime('now', '-7 days')) AS emails_failed,
+       (SELECT COUNT(*) FROM decodes WHERE synthetic = 0) AS pile_total,
+       (SELECT CAST(julianday('now') - julianday(MAX(ts)) AS INT) FROM events WHERE event = 'backup_completed') AS days_since_backup,
+       (SELECT CAST(julianday(MAX(valid_through)) - julianday('now') AS INT) FROM benchmarks WHERE tier = 1) AS days_until_benchmark_expiry,
+       (SELECT event FROM events WHERE event LIKE 'benchmark_%' ORDER BY ts DESC LIMIT 1) AS last_benchmark_outcome`,
+  ).first<Record<string, number | string | null>>();
+  const n = (key: string): number | null => (row?.[key] === null || row?.[key] === undefined ? null : Number(row[key]));
+
+  const flags: string[] = [];
+  const backup = n('days_since_backup');
+  if (backup === null) flags.push('No backup has ever landed.');
+  else if (backup > 1) flags.push(`The last backup landed ${backup} days ago.`);
+  const card = n('days_until_benchmark_expiry');
+  if (card === null) flags.push('No dated rate card is on file.');
+  else if (card < 0) flags.push('The rate card lapsed and the refresh has not replaced it. Every decode is abstaining.');
+  else if (card <= 5) flags.push(`The rate card lapses in ${card} days.`);
+  const refresh = row?.last_benchmark_outcome;
+  if (refresh === 'benchmark_refused') flags.push('The last card refresh was refused. The page is archived in the snapshot bucket for a look.');
+  if (refresh === 'benchmark_unreachable') flags.push('The last card refresh could not reach the source.');
+  const failed = n('extracts_failed') ?? 0;
+  const read = n('extracts') ?? 0;
+  if (failed > 0 && failed >= read) flags.push(`The reader failed ${failed} of ${failed + read} photo reads this week.`);
+  const mail = n('emails_failed') ?? 0;
+  if (mail > 0) flags.push(`${mail} email sends failed this week.`);
+
+  const response = await sendEmail(env, {
+    to,
+    subject: flags.length === 0 ? `All quiet, ${today}` : `Needs a look, ${today}: ${flags.length} ${flags.length === 1 ? 'thing' : 'things'}`,
+    body: [
+      ...(flags.length === 0 ? ['Nothing crossed a line tonight.'] : flags),
+      '',
+      'The week:',
+      `${n('page_views') ?? 0} page views, ${n('decodes') ?? 0} decodes, ${read} photo reads (${failed} failed), ${mail} email failures.`,
+      `${n('pile_total') ?? 0} real decodes in the pile.`,
+      backup === null ? 'Backup: never.' : `Backup: ${backup} days ago.`,
+      card === null ? 'Rate card: none dated.' : `Rate card: ${card} days of validity left.`,
+      `Last card refresh: ${refresh === null || refresh === undefined ? 'never' : String(refresh).replace('benchmark_', '')}.`,
+    ],
+  }, transport);
+  return { sent: response.ok, flags };
+}
+
+/**
  * Day 4. Did you take the deal, and has anything moved since.
  *
  * Always has something true to say: the deal is restated from the stored row,
@@ -935,7 +1011,8 @@ export interface Outgoing {
   subject: string;
   /** Body without the footer. The unsubscribe line and address are added here. */
   body: string[];
-  unsubscribeUrl: string;
+  /** Absent only for internal ops mail to the owner, which is not commercial. */
+  unsubscribeUrl?: string;
   attachment?: { filename: string; content: string };
 }
 
@@ -952,7 +1029,7 @@ export async function sendEmail(
   const text = [
     ...message.body,
     '',
-    `Unsubscribe: ${message.unsubscribeUrl}`,
+    ...(message.unsubscribeUrl === undefined ? [] : [`Unsubscribe: ${message.unsubscribeUrl}`]),
     sendable.postalAddress,
   ].join('\n');
 
@@ -961,10 +1038,12 @@ export async function sendEmail(
     to: [message.to],
     subject: message.subject,
     text,
-    headers: {
-      'List-Unsubscribe': `<${message.unsubscribeUrl}>`,
-      'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
-    },
+    ...(message.unsubscribeUrl === undefined ? {} : {
+      headers: {
+        'List-Unsubscribe': `<${message.unsubscribeUrl}>`,
+        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+      },
+    }),
   };
   if (message.attachment !== undefined) {
     payload.attachments = [message.attachment];
@@ -1395,6 +1474,8 @@ async function decodeFullLedger(c: {
     region: String(body.region ?? ''),
     quoteDate: String(body.quoteDate ?? ''),
     quoteExpiryDate: String(body.quoteExpiryDate ?? ''),
+    equipCategory: String(body.equipCategory ?? ''),
+    newOrUsed: String(body.newOrUsed ?? ''),
   });
 
   if (!parsed.success) {
@@ -1523,8 +1604,8 @@ async function decodeFullLedger(c: {
        benchmark_at_ts, delta_vs_benchmark_bps,
        country, currency, province_or_state, out_of_bounds,
        quote_date, quote_expiry_date, launched_standalone,
-       price_band, term_band, referrer, brand, synthetic
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       price_band, term_band, referrer, brand, synthetic, equip_category, new_or_used
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).bind(
     decodeId, ts, quarterOf(ts),
     form.quotedPrice, form.cashDiscount, decoded.totals.cashOutlayCents,
@@ -1551,6 +1632,9 @@ async function decodeFullLedger(c: {
     // null rather than as a brand.
     normalizeBrand(String(body.brand ?? '')),
     isSynthetic(c) ? 1 : 0,
+    // Forage: blank is null, never a guess and never a refusal.
+    form.equipCategory === '' ? null : form.equipCategory,
+    form.newOrUsed === '' ? null : form.newOrUsed,
   ).run();
 
   const eventId = await recordEvent(c, 'decode', decodeId, {
@@ -1924,21 +2008,26 @@ export default {
       case REAPER_CRON:
         console.log('cron reaper: nothing to reap, photos are never written down');
         break;
-      case BACKUP_CRON:
-        ctx.waitUntil(
-          backupToR2(env, new Date().toISOString().slice(0, 10))
+      case BACKUP_CRON: {
+        const today = new Date().toISOString().slice(0, 10);
+        // Backup, then the card, then the digest that reports on both, in
+        // that order, so the digest tells the truth about tonight.
+        ctx.waitUntil((async () => {
+          await backupToR2(env, today)
             .then((result) => console.log(`cron backup: ${result.rows} rows, ${result.bytes} bytes, to ${result.key}`))
-            .catch((error) => console.log(`cron backup FAILED: ${String(error)}`)),
-        );
+            .catch((error) => console.log(`cron backup FAILED: ${String(error)}`));
+          // The rate card checks itself daily, so a new month's card is in
+          // the table before the first farmer of the month, not after.
+          await refreshBenchmarks(env, today)
+            .then((r) => console.log(`cron benchmarks: ${JSON.stringify(r)}`))
+            .catch((error) => console.log(`cron benchmarks FAILED: ${String(error)}`));
+          await sendOpsDigest(env, today)
+            .then((r) => console.log(`cron digest: sent=${r.sent} flags=${r.flags.length}`))
+            .catch((error) => console.log(`cron digest FAILED: ${String(error)}`));
+        })());
         // The reminder sweep rides the daily cron. It is the delivery half of
         // an opt-in that would otherwise be a promise nobody keeps.
         {
-          const today = new Date().toISOString().slice(0, 10);
-          // The rate card checks itself daily, so a new month's card is in
-          // the table before the first farmer of the month, not after.
-          ctx.waitUntil(refreshBenchmarks(env, today)
-            .then((r) => console.log(`cron benchmarks: ${JSON.stringify(r)}`))
-            .catch((error) => console.log(`cron benchmarks FAILED: ${String(error)}`)));
           ctx.waitUntil(sendDueReminders(env, today));
           ctx.waitUntil(sendDayFour(env, today)
             .then((r) => console.log(`cron day4: ${r.sent} sent`)));
@@ -1946,6 +2035,7 @@ export default {
             .then((r) => console.log(`cron day30: ${r.sent} sent, ${r.skipped} had no cohort yet`)));
         }
         break;
+      }
       default:
         console.log(`cron unrecognized: ${event.cron}, nothing ran`);
     }

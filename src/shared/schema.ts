@@ -523,6 +523,16 @@ const extractedDate = z.object({
  * cost of a missing brand is a null in a forage column; the cost of an open
  * field is a dealership name in the pile, and only one of those is reversible.
  */
+/**
+ * The cohort key's category axis (spec.md 9.4), offered as a closed list on
+ * the confirm screen. Never read from the paper, only picked, and never
+ * required: a blank costs the farmer nothing on his own ticket.
+ */
+export const EQUIPMENT_CATEGORIES = [
+  'tractor', 'combine', 'sprayer', 'planter', 'tillage', 'hay and forage',
+  'skid steer', 'truck', 'other',
+] as const;
+
 export const EQUIPMENT_BRANDS = [
   'John Deere', 'Case IH', 'New Holland', 'Kubota', 'AGCO', 'Massey Ferguson',
   'Fendt', 'Challenger', 'Claas', 'Valtra', 'Deutz-Fahr', 'McCormick',
@@ -714,6 +724,12 @@ export const ledgerFormSchema = z.object({
   unexplainedAmount: z.string().optional().transform((value) => value === 'on'),
   quoteDate: z.string().transform((value) => (/^\d{4}-\d{2}-\d{2}$/.test(value.trim()) ? value.trim() : '')),
   quoteExpiryDate: z.string().transform((value) => (/^\d{4}-\d{2}-\d{2}$/.test(value.trim()) ? value.trim() : '')),
+  // Forage, closed lists, never required (spec.md 9.4). Anything not on the
+  // list is blank, never an error.
+  equipCategory: z.string().transform((value) =>
+    ((EQUIPMENT_CATEGORIES as readonly string[]).includes(value.trim()) ? value.trim() : '')),
+  newOrUsed: z.string().transform((value) =>
+    (value.trim() === 'new' || value.trim() === 'used' ? value.trim() : '')),
   region: z.string().transform((value, context) => {
     const region = value.trim().toUpperCase();
     if (countryForRegion(region) === null) {

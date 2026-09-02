@@ -396,6 +396,29 @@ describe('a refused ledger keeps the farmer’s numbers on the screen', () => {
   });
 });
 
+describe('the cohort axes ride the confirm screen as forage', () => {
+  // spec.md 9.4: category and condition are closed lists, optional, and the
+  // two never-dropped axes of the cohort key. Without them the peer ladder
+  // could never qualify a cohort.
+  it('stores a picked category and condition on the decode row', async () => {
+    const { db, post } = await decodeHarness();
+    const response = await post({ ...LEDGER, equipCategory: 'tractor', newOrUsed: 'used' });
+    expect(response.status).toBe(200);
+    const row = db.prepare('SELECT equip_category, new_or_used FROM decodes').get() as Record<string, unknown>;
+    expect(row.equip_category).toBe('tractor');
+    expect(row.new_or_used).toBe('used');
+  });
+
+  it('stores null for a blank or off-list value, and never refuses over it', async () => {
+    const { db, post } = await decodeHarness();
+    const response = await post({ ...LEDGER, equipCategory: 'Valley Ridge Equipment', newOrUsed: 'refurbished' });
+    expect(response.status).toBe(200);
+    const row = db.prepare('SELECT equip_category, new_or_used FROM decodes').get() as Record<string, unknown>;
+    expect(row.equip_category).toBeNull();
+    expect(row.new_or_used).toBeNull();
+  });
+});
+
 describe('the typed retry keeps what the farmer gave it', () => {
   it('keeps the campaign labels on a validation retry', async () => {
     // The same defect the codebase fixed for fbc and for refuseDecode and
