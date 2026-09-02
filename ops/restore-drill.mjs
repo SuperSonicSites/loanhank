@@ -21,11 +21,14 @@ const run = (args, options = {}) =>
 
 const COUNTS = "SELECT (SELECT COUNT(*) FROM benchmarks) AS b, (SELECT COUNT(*) FROM decodes) AS d, (SELECT COUNT(*) FROM emails) AS e, (SELECT COUNT(*) FROM events) AS v";
 
-/** wrangler prints a table; pull the four numbers out of it. */
+/** wrangler prints the result row as JSON after its banner; read the four numbers out of it. */
 const counts = (output) => {
-  const numbers = output.match(/│\s*(\d+)\s*│\s*(\d+)\s*│\s*(\d+)\s*│\s*(\d+)\s*│/);
-  if (!numbers) throw new Error(`could not read counts from:\n${output}`);
-  return numbers.slice(1, 5).map(Number);
+  const numbers = ['b', 'd', 'e', 'v'].map((column) => {
+    const match = new RegExp(`"${column}":\\s*(\\d+)`).exec(output);
+    return match ? Number(match[1]) : null;
+  });
+  if (numbers.some((value) => value === null)) throw new Error(`could not read counts from:\n${output}`);
+  return numbers;
 };
 
 const scratch = `loanhank-restore-${Date.now()}`;
